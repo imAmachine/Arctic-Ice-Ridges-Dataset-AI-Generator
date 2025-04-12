@@ -1,131 +1,138 @@
 import torch
 import torch.nn as nn
 
-
 class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1, use_bn=True, activation=None):
+    def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1, use_instancenorm=True, activation='leaky'):
         super(ConvBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=not use_bn)
-        self.bn = nn.BatchNorm2d(out_channels) if use_bn else None
-        self.activation = activation
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=not use_instancenorm)
+        self.norm = nn.InstanceNorm2d(out_channels, affine=True) if use_instancenorm else None
         
+        if activation == 'leaky':
+            self.activation = nn.LeakyReLU(0.2, inplace=True)
+        elif activation == 'relu':
+            self.activation = nn.ReLU(inplace=True)
+        elif activation == 'tanh':
+            self.activation = nn.Tanh()
+        else:
+            self.activation = None
+
     def forward(self, x):
         x = self.conv(x)
-        if self.bn:
-            x = self.bn(x)
+        if self.norm:
+            x = self.norm(x)
         if self.activation:
             x = self.activation(x)
         return x
+
+class UpConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, dropout=False):
+        super(UpConvBlock, self).__init__()
+        layers = [
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(out_channels, affine=True),
+            nn.ReLU(inplace=True)
+        ]
+        if dropout:
+            layers.append(nn.Dropout(0.5))
+        self.block = nn.Sequential(*layers)
+        
+    def forward(self, x):
+        return self.block(x)
 
 
 class GanGenerator(nn.Module):
     def __init__(self, input_channels=2, feature_maps=64):
         super(GanGenerator, self).__init__()
         
-        # --- Энкодер ---
-        self.enc1 = ConvBlock(input_channels, feature_maps, use_bn=False, activation=nn.LeakyReLU(0.2))
-        self.enc2 = ConvBlock(feature_maps, feature_maps * 2, activation=nn.LeakyReLU(0.2))
-        self.enc3 = ConvBlock(feature_maps * 2, feature_maps * 4, activation=nn.LeakyReLU(0.2))
-        self.enc4 = ConvBlock(feature_maps * 4, feature_maps * 8, activation=nn.LeakyReLU(0.2))
+        self.enc1 = ConvBlock(input_channels, feature_maps, use_instancenorm=False, activation='leaky')
+        self.enc2 = ConvBlock(feature_maps, feature_maps * 2, activation='leaky')
+        self.enc3 = ConvBlock(feature_maps * 2, feature_maps * 4, activation='leaky')
+        self.enc4 = ConvBlock(feature_maps * 4, feature_maps * 8, activation='leaky')
+        self.enc5 = ConvBlock(feature_maps * 8, feature_maps * 8, activation='leaky')
         
-        # --- Bottleneck ---
         self.bottleneck = nn.Sequential(
             nn.Conv2d(feature_maps * 8, feature_maps * 8, kernel_size=3, padding=1),
-            nn.BatchNorm2d(feature_maps * 8),
+            nn.InstanceNorm2d(feature_maps * 8, affine=True),
             nn.ReLU(inplace=True),
-            
             nn.Conv2d(feature_maps * 8, feature_maps * 8, kernel_size=3, padding=1),
-            nn.BatchNorm2d(feature_maps * 8),
-            nn.ReLU(inplace=True),
-            
-            nn.Conv2d(feature_maps * 8, feature_maps * 8, kernel_size=3, padding=1),
-            nn.BatchNorm2d(feature_maps * 8),
-            nn.ReLU(inplace=True),
-        )
-        
-        # --- Декодер с учетом concat ---
-        self.dec1 = nn.Sequential(
-            nn.ConvTranspose2d(feature_maps * 8, feature_maps * 4, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(feature_maps * 4),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5)
-        )
-        
-        self.dec2 = nn.Sequential(
-            nn.ConvTranspose2d(feature_maps * 8, feature_maps * 2, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(feature_maps * 2),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5)
-        )
-        
-        self.dec3 = nn.Sequential(
-            nn.ConvTranspose2d(feature_maps * 4, feature_maps, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(feature_maps),
+            nn.InstanceNorm2d(feature_maps * 8, affine=True),
             nn.ReLU(inplace=True)
         )
         
-        self.dec4 = nn.Sequential(
-            nn.ConvTranspose2d(feature_maps * 2, feature_maps // 2, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(feature_maps // 2),
+        self.dec5 = UpConvBlock(feature_maps * 8, feature_maps * 8, dropout=True)
+        self.dec4 = UpConvBlock(feature_maps * 16, feature_maps * 4, dropout=True)
+        self.dec3 = UpConvBlock(feature_maps * 8, feature_maps * 2, dropout=False)
+        self.dec2 = UpConvBlock(feature_maps * 4, feature_maps, dropout=False)
+        self.dec1 = nn.Sequential(
+            nn.ConvTranspose2d(feature_maps * 2, feature_maps, kernel_size=4, stride=2, padding=1),
+            nn.InstanceNorm2d(feature_maps, affine=True),
             nn.ReLU(inplace=True)
         )
         
         self.final = nn.Sequential(
-            nn.Conv2d(feature_maps // 2, 1, kernel_size=3, padding=1),
+            nn.Conv2d(feature_maps, 1, kernel_size=3, padding=1),
             nn.Sigmoid()
         )
         
     def forward(self, x, mask):
-        x_combined = torch.cat([x, mask], dim=1)
+        x_in = torch.cat([x, mask], dim=1)
         
-        # --- Кодирование ---
-        e1 = self.enc1(x_combined)
+        e1 = self.enc1(x_in)
         e2 = self.enc2(e1)
         e3 = self.enc3(e2)
         e4 = self.enc4(e3)
+        e5 = self.enc5(e4)
         
-        # --- Bottleneck ---
-        bn = self.bottleneck(e4)
+        bn = self.bottleneck(e5)
         
-        # --- Декодирование с пропусками ---
-        d1 = self.dec1(bn)
-        d1 = torch.cat([d1, e3], dim=1)
+        d5 = self.dec5(bn)
+        d5 = torch.cat([d5, e4], dim=1)
         
-        d2 = self.dec2(d1)
-        d2 = torch.cat([d2, e2], dim=1)
+        d4 = self.dec4(d5)
+        d4 = torch.cat([d4, e3], dim=1)
         
-        d3 = self.dec3(d2)
-        d3 = torch.cat([d3, e1], dim=1)
+        d3 = self.dec3(d4)
+        d3 = torch.cat([d3, e2], dim=1)
         
-        d4 = self.dec4(d3)
+        d2 = self.dec2(d3)
+        d2 = torch.cat([d2, e1], dim=1)
+        d1 = self.dec1(d2)
         
-        output = self.final(d4)
+        output = self.final(d1)
         return output
 
 
 class GanDiscriminator(nn.Module):
     def __init__(self, input_channels=1, feature_maps=64):
-        super().__init__()
-
-        self.layers = nn.Sequential(
-            nn.Conv2d(input_channels, feature_maps, 4, 2, 1, bias=False),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(feature_maps, feature_maps*2, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(feature_maps*2),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(feature_maps*2, feature_maps*4, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(feature_maps*4),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(feature_maps*4, feature_maps*8, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(feature_maps*8),
-            nn.LeakyReLU(0.2, inplace=True),
-
-            nn.Conv2d(feature_maps*8, 1, 4, 1, 0, bias=False),
+        super(GanDiscriminator, self).__init__()
+        self.layer1 = nn.Sequential(
+            nn.Conv2d(input_channels, feature_maps, kernel_size=4, stride=2, padding=1),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.layer2 = nn.Sequential(
+            nn.Conv2d(feature_maps, feature_maps * 2, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.InstanceNorm2d(feature_maps * 2, affine=True),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.layer3 = nn.Sequential(
+            nn.Conv2d(feature_maps * 2, feature_maps * 4, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.InstanceNorm2d(feature_maps * 4, affine=True),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.layer4 = nn.Sequential(
+            nn.Conv2d(feature_maps * 4, feature_maps * 8, kernel_size=4, stride=1, padding=1, bias=False),
+            nn.InstanceNorm2d(feature_maps * 8, affine=True),
+            nn.LeakyReLU(0.2, inplace=True)
+        )
+        self.final = nn.Sequential(
+            nn.Conv2d(feature_maps * 8, 1, kernel_size=4, stride=1, padding=1),
             nn.Sigmoid()
         )
-
+        
     def forward(self, x):
-        return self.layers(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.final(x)
+        return x

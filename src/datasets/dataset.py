@@ -31,22 +31,23 @@ class IceRidgeDataset(Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Возвращает тройку (input, target, damage_mask) для индекса idx"""
         
-        image = self._read_image(self.image_keys[idx]) # чтение итерируемой картинки
-        binary_image = ImageProcess.img_to_binary_format(image) # приведение в бинарный формат
+        image = self._read_bin_image(self.image_keys[idx])  # чтение итерируемой картинки
+        damaged, mask = self._get_processed_pair(input_img=image, masked=True, noised=False)
+        triplet = (damaged, image, mask)
+        transformed_tensors = self.apply_transforms(triplet)
+        binarized_tensors = [(im > 0.1).float() for im in transformed_tensors] # возврат к бинарному формату после трансформаций
         
-        damaged, mask = self._get_processed_pair(input_img=binary_image, masked=True, noised=False) # обработка с помощью процессора
-        
-        transformed_tensors = self.apply_transforms((damaged, binary_image, mask)) # применение конечных трансформаций
-        
-        return transformed_tensors
+        return binarized_tensors
     
-    def _read_image(self, metadata_key) -> np.ndarray:
+    def _read_bin_image(self, metadata_key) -> np.ndarray:
         orig_meta = self.metadata[metadata_key]
         orig_path = orig_meta.get('path')
-        return cv2.imread(orig_path, cv2.IMREAD_GRAYSCALE)
+        img = ImageProcess.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
+        bin_img = ImageProcess.binarize_by_threshold(img)
+        return bin_img.astype(np.float32)
     
     def _get_processed_pair(self, input_img, masked, noised):
-        return self.processor.process(input_img, masked, noised)
+        return self.processor.process(input_img.astype(np.float32), masked, noised)
     
     def apply_transforms(self, objects: List):
         return [self.transforms(obj) for obj in objects]
@@ -154,7 +155,7 @@ class DatasetCreator:
         # === Init ===
         self.preprocessor = IceRidgeDatasetPreprocessor(preprocessors)
         self.dataset_generator = IceRidgeDatasetGenerator(augmentations_pipeline)
-        self.dataset_processor = ShiftProcessor(shift_percent=0.10)
+        self.dataset_processor = ShiftProcessor(shift_percent=0.20)
         self.device = device
         self.input_data_path = original_data_path
         

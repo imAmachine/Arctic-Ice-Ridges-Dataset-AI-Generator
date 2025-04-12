@@ -69,11 +69,9 @@ class RotationAnalyze:
             angle_deg = np.degrees(theta)
             angles.append(angle_deg)
             
-        # Кластеризация углов и выбор наиболее представительного
         from sklearn.cluster import KMeans
         if len(angles) > 5:
             kmeans = KMeans(n_clusters=3).fit(np.array(angles).reshape(-1, 1))
-            # Выбираем кластер с наибольшим числом линий
             counts = np.bincount(kmeans.labels_)
             dominant_cluster = np.argmax(counts)
             dominant_angles = [angles[i] for i in range(len(angles)) if kmeans.labels_[i] == dominant_cluster]

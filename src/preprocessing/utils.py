@@ -44,7 +44,6 @@ class ImageProcess:
     
     @staticmethod
     def auto_adjust(img: np.ndarray) -> np.ndarray:
-        # Получаем размеры изображения
         h, w = img.shape
         
         if h == w:
@@ -59,10 +58,3 @@ class ImageProcess:
             left_crop = diff // 2
             right_crop = diff - left_crop
             return img[:, left_crop:w-right_crop]
-    
-    @staticmethod
-    def img_to_binary_format(img: np.ndarray) -> np.ndarray:
-        if np.isin(img, [0, 1]).all():
-            return img.astype(np.float32)
-        _, binary = cv2.threshold(img, 128, 1, cv2.THRESH_BINARY)
-        return binary.astype(np.float32)
