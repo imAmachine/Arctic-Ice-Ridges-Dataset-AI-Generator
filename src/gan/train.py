@@ -33,7 +33,7 @@ class GANTrainer:
         self.c_scheduler = self.model.c_trainer.scheduler
         
         self.epoch_g_losses = defaultdict(float)
-        self.epoch_c_losses = defaultdict(float)
+        self.epoch_d_losses = defaultdict(float)
         
         os.makedirs(self.output_path, exist_ok=True)
         
@@ -46,6 +46,10 @@ class GANTrainer:
             for epoch in range(self.epochs):
                 self._epoch_run(train_loader, training=True, epoch=epoch)
                 self._epoch_run(val_loader, training=False, epoch=epoch)
+                
+                self.model.g_metrics.print_average_metrics(epoch=epoch, phase="train")
+                self.model.g_metrics.reset_running_stats()
+                
                 self.model._save_models(self.output_path)
 
     def _epoch_run(self, loader, training=True, epoch=0):
@@ -65,6 +69,9 @@ class GANTrainer:
         
         with torch.no_grad():
             generated = self.model.generator(inputs, masks)
+
+            self.model.g_metrics.calculate_metrics(generated, targets, masks)
+            self.model.g_metrics.print_metrics(phase="train")
             
         return {
             'inputs': inputs, 
@@ -76,7 +83,7 @@ class GANTrainer:
         for key in losses['g_losses']:
             self.epoch_g_losses[key] = self.epoch_g_losses.get(key, 0.0) + losses['g_losses'][key]
         for key in losses['d_losses']:
-            self.epoch_c_losses[key] = self.epoch_c_losses.get(key, 0.0) + losses['d_losses'][key]
+            self.epoch_d_losses[key] = self.epoch_d_losses.get(key, 0.0) + losses['d_losses'][key]
 
     def _visualize_batch(self, inputs, generated, targets, epoch, phase='train'):
         plt.figure(figsize=(15, 6))
