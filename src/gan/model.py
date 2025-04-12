@@ -6,7 +6,7 @@ from torchvision.transforms import transforms, InterpolationMode
 
 from src.common.analyze_tools import FractalAnalyzerGPU
 from src.common.interfaces import IModelTrainer
-from src.gan.gan_arch import GanDiscriminator, GanGenerator
+from gan.arch import GanDiscriminator, GanGenerator
 
 class GenerativeModel:
     def __init__(self, target_image_size=448, g_feature_maps=64, d_feature_maps=16, device='cpu'):
@@ -21,7 +21,7 @@ class GenerativeModel:
     def get_transforms(self):
         return transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((self.target_image_size, self.target_image_size), interpolation=InterpolationMode.NEAREST_EXACT),
+            transforms.Resize((self.target_image_size, self.target_image_size), interpolation=InterpolationMode.NEAREST),
             transforms.ToTensor()
         ])
     

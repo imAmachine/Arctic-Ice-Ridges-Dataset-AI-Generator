@@ -108,7 +108,6 @@ class GanDiscriminator(nn.Module):
     def __init__(self, input_channels=1, feature_maps=64):
         super(GanDiscriminator, self).__init__()
         
-        # Using spectral_norm directly in the layer definitions
         self.layer1 = nn.Sequential(
             spectral_norm(nn.Conv2d(input_channels, feature_maps, kernel_size=4, stride=2, padding=1)),
             nn.LeakyReLU(0.2, inplace=True)
