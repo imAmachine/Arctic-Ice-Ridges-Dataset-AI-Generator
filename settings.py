@@ -38,7 +38,7 @@ PREPROCESSORS = [
             # EnchanceProcessor(kernel_size=3),
             Unbinarize(),
             RotateMaskProcessor(),
-            CropToContentProcessor(),
+            # CropToContentProcessor(),
             # AutoAdjust(),
         ]
 

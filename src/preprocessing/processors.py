@@ -116,7 +116,8 @@ class RotateMaskProcessor(IProcessor):
     def process_image(self, image: np.ndarray) -> np.ndarray:
         points = self._find_farthest_points(image)
         angle = self._calculate_rotate_angle(points, image.shape)
-        rotated_image = self._rotate_image(image, angle)
+        center = self._calculate_center(points)
+        rotated_image = self._rotate_image(image, angle, center)
         
         self._result_value = angle
         
@@ -166,9 +167,13 @@ class RotateMaskProcessor(IProcessor):
         angle_deg = np.degrees(angle_rad)
         return (angle_deg + 90) % 180 - 90
     
-    def _rotate_image(self, img: np.ndarray, angle: float) -> np.ndarray:
+    def _calculate_center(self, points):
+        p1, p2 = points
+        center = ((int(p1[0])+int(p2[0])) // 2, (int(p1[1])+int(p2[1])) // 2)
+        return center
+    
+    def _rotate_image(self, img: np.ndarray, angle: float, center) -> np.ndarray:
         h, w = img.shape
-        center = (w // 2, h // 2)
         M = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated_img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, 
                                     borderMode=cv2.BORDER_CONSTANT, borderValue=0)
