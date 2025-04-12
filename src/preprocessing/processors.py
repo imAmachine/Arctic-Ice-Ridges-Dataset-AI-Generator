@@ -106,10 +106,6 @@ class CropToContentProcessor(IProcessor):
 class RotateMaskProcessor(IProcessor):
     """Процессор для выравнивания маски по максимальной диагонали выпуклой оболочки."""
     
-    @property
-    def PROCESSORS_NEEDED(self):
-        return [Unbinarize]
-    
     def __init__(self, processor_name: str = None):
         super().__init__(processor_name)
     
@@ -126,7 +122,7 @@ class RotateMaskProcessor(IProcessor):
     def _find_farthest_points(self, image):
         """Находит 2 наиболее удалённые белые точки"""
         # Получаем координаты всех белых пикселей
-        yx = np.column_stack(np.where(image == 255))  # (y, x) → для OpenCV меняем на (x, y) позже
+        yx = np.column_stack(np.where(image > 0))  # (y, x) → для OpenCV меняем на (x, y) позже
 
         if len(yx) < 2:
             return None

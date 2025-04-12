@@ -35,11 +35,10 @@ AUGMENTATIONS = A.Compose([
 
 PREPROCESSORS = [
             Binarize(),
-            # EnchanceProcessor(kernel_size=3),
-            Unbinarize(),
             RotateMaskProcessor(),
-            # CropToContentProcessor(),
-            # AutoAdjust(),
+            CropToContentProcessor(),
+            AutoAdjust(),
+            Unbinarize()
         ]
 
 MASKS_FILE_EXTENSIONS = ['.png']
