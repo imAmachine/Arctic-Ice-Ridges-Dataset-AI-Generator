@@ -1,13 +1,12 @@
 import os
 import torch
 import torch.nn as nn
-from torchvision.transforms import transforms
-from torchvision.transforms import InterpolationMode
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from src.analyzer.fractal_funcs import FractalAnalyzer, FractalAnalyzerGPU
 import torch.nn.functional as F
+from torchvision.transforms import transforms, InterpolationMode
+
+from src.common.analyze_tools import FractalAnalyzerGPU
+from src.common.interfaces import IModelTrainer
 from src.gan.gan_arch import GanDiscriminator, GanGenerator
-from .interfaces import IModelTrainer
 
 class GenerativeModel:
     def __init__(self, target_image_size=448, g_feature_maps=64, d_feature_maps=16, device='cpu'):
@@ -22,10 +21,10 @@ class GenerativeModel:
     def get_transforms(self):
         return transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((self.target_image_size, self.target_image_size), interpolation=InterpolationMode.LANCZOS),
+            transforms.Resize((self.target_image_size, self.target_image_size), interpolation=InterpolationMode.NEAREST_EXACT),
             transforms.ToTensor()
         ])
-
+    
     def _init_trainers(self):
         g_trainer = GeneratorModelTrainer(model=self.generator,discriminator=self.discriminator)
         d_trainer = DiscriminatorModelTrainer(model=self.discriminator)
@@ -58,56 +57,74 @@ class GeneratorModelTrainer(IModelTrainer):
     def __init__(self, model, discriminator):
         self.model = model
         self.discriminator = discriminator
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=0.002, betas=(0.5, 0.999))
+        # Изменяем параметры оптимизатора - меньшая скорость обучения
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=0.0002, betas=(0.5, 0.999))
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.5, patience=10, verbose=True
+        )
 
         # Критерии потерь
         self.adv_criterion = nn.BCELoss()
-        self.bce_criterion = nn.BCEWithLogitsLoss()
+        self.bce_criterion = nn.BCELoss()
         self.l1_criterion = nn.L1Loss()
         self.loss_history = []
         self.loss_history_val = []
 
-        # Весовые коэффициенты для каждой составляющей лосс функции
+        # Сбалансированные веса для различных компонентов функции потерь
         self.adv_loss_weight = 1.0
-        self.l1_loss_weight = 1.2
-        self.bce_loss_weight = 1.2
-        self.mask_loss_weight = 2.0
-        self.fractal_loss_weight = 1.0
-
-    def save_model_state_dict(self, output_path):
-        torch.save(self.model.state_dict(), os.path.join(output_path, "generator.pt"))
+        self.l1_loss_weight = 1.0
+        self.bce_loss_weight = 1.0
+        self.mask_loss_weight = 1.0
+        self.fractal_loss_weight = 0.5
 
     def _calc_adv_loss(self, generated, mask):
+        # Добавляем небольшой шум к меткам для стабилизации обучения
         fake_pred_damaged = self.discriminator(generated * mask)
-        real_label_damaged = torch.ones_like(fake_pred_damaged)
+        real_label_damaged = torch.ones_like(fake_pred_damaged).uniform_(0.8, 1.0)
 
         fake_pred_known = self.discriminator(generated * (1 - mask))
-        real_label_known = torch.ones_like(fake_pred_known)
+        real_label_known = torch.ones_like(fake_pred_known).uniform_(0.8, 1.0)
         
         adv_loss_damaged = self.adv_criterion(fake_pred_damaged, real_label_damaged)
         adv_loss_known = self.adv_criterion(fake_pred_known, real_label_known)
         
-        total_adv_loss = adv_loss_known + 2.0 * adv_loss_damaged
+        total_adv_loss = adv_loss_known + adv_loss_damaged
         return total_adv_loss
 
+    def save_model_state_dict(self, output_path):
+        torch.save(self.model.state_dict(), os.path.join(output_path, "generator.pt"))
+    
     def _calc_fractal_loss(self, generated, mask):
         fd_losses = 0.0
-        batch_size = generated.shape[0]
+        batch_size = min(generated.shape[0], 2)
+        
         for i in range(batch_size):
             img = generated[i].squeeze()
             m = mask[i].squeeze()
-
+            
+            # Уменьшаем размер для ускорения вычислений
+            if img.shape[0] > 128:
+                img = F.interpolate(img.unsqueeze(0).unsqueeze(0), size=(128, 128), 
+                                   mode='bilinear', align_corners=False).squeeze()
+                m = F.interpolate(m.unsqueeze(0).unsqueeze(0), size=(128, 128), 
+                                 mode='nearest').squeeze()
+            
             part_masked = img * m
             part_unmasked = img * (1 - m)
-
-            fd_masked = FractalAnalyzerGPU.calculate_fractal_dimension(
-                *FractalAnalyzerGPU.box_counting(part_masked)
-            )
-            fd_unmasked = FractalAnalyzerGPU.calculate_fractal_dimension(
-                *FractalAnalyzerGPU.box_counting(part_unmasked)
-            )
-
-            fd_losses += abs(fd_masked - fd_unmasked)
+            
+            try:
+                fd_masked = FractalAnalyzerGPU.calculate_fractal_dimension(
+                    *FractalAnalyzerGPU.box_counting(part_masked)
+                )
+                fd_unmasked = FractalAnalyzerGPU.calculate_fractal_dimension(
+                    *FractalAnalyzerGPU.box_counting(part_unmasked)
+                )
+                
+                fd_losses += abs(fd_masked - fd_unmasked)
+            except Exception as e:
+                print(f"Ошибка расчета фракталов: {e}")
+                fd_losses += 0.0
+                
         fd_loss = fd_losses / batch_size
         return fd_loss
 
@@ -116,27 +133,27 @@ class GeneratorModelTrainer(IModelTrainer):
         self.optimizer.zero_grad()
         generated = self.model(input_masked, mask)
         
-        # Вычисляем BCE loss между сгенерированными и целевыми изображениями по всему изображению
+        # Вычисляем BCE loss между сгенерированными и целевыми изображениями
         bce_loss = self.bce_criterion(generated, target)
         
-        # Потеря для известных областей – чтобы сгенерированные значения соответствовали истинным там, где информация есть
+        # Потеря для известных областей
         mask_loss = self.adv_criterion(generated * mask, target * mask)
         
-        # Adversarial loss – заставляет генератор «обманывать» дискриминатор
+        # Adversarial loss
         adv_loss = self._calc_adv_loss(generated, mask)
         
-        # L1 loss – для улучшения схожести по пиксельной разнице в областях, где есть маска
+        # L1 loss для пиксельной разницы в областях с маской
         l1_loss = self.l1_criterion(target * mask, generated * mask)
         
-        # Фрактальный loss – для сохранения структурных особенностей
-        # fd_loss = self._calc_fractal_loss(generated, mask)
+        # Активируем фрактальную потерю
+        fd_loss = self._calc_fractal_loss(generated, mask)
         
         # Суммарный total_loss с учётом весовых коэффициентов
         total_loss = (self.adv_loss_weight * adv_loss +
                       self.l1_loss_weight * l1_loss +
                       self.bce_loss_weight * bce_loss +
-                      self.mask_loss_weight * mask_loss)
-                    #   + self.fractal_loss_weight * fd_loss)
+                      self.mask_loss_weight * mask_loss +
+                      self.fractal_loss_weight * fd_loss)
         
         total_loss.backward()
         self.optimizer.step()
@@ -147,7 +164,7 @@ class GeneratorModelTrainer(IModelTrainer):
             'l1_loss': l1_loss.item(),
             'bce_loss': bce_loss.item(),
             'mask_loss': mask_loss.item(),
-            # 'fractal_loss': fd_loss
+            'fractal_loss': fd_loss
         }
         self.loss_history.append(loss_dict)
         
@@ -157,7 +174,11 @@ class GeneratorModelTrainer(IModelTrainer):
 class DiscriminatorModelTrainer(IModelTrainer):
     def __init__(self, model, optimizer=None):
         self.model = model
-        self.optimizer = optimizer or torch.optim.Adam(model.parameters(), lr=0.002, betas=(0.5, 0.999))
+        # Уменьшаем скорость обучения
+        self.optimizer = optimizer or torch.optim.Adam(model.parameters(), lr=0.0001, betas=(0.5, 0.999))
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.5, patience=10, verbose=True
+        )
         self.criterion = nn.BCELoss()
         self.loss_history = []
     
@@ -166,25 +187,27 @@ class DiscriminatorModelTrainer(IModelTrainer):
     
     def _calc_adv_loss(self, real_target, fake_generated, masks):
         real_pred_known = self.model(real_target * (1 - masks))
-        real_label_known = torch.ones_like(real_pred_known)
+        real_label_known = torch.ones_like(real_pred_known).uniform_(0.8, 1.0)
 
         real_pred_damaged = self.model(real_target * masks)
-        real_label_damaged = torch.ones_like(real_pred_damaged)
+        real_label_damaged = torch.ones_like(real_pred_damaged).uniform_(0.8, 1.0)
 
         fake_pred_known = self.model(fake_generated * (1 - masks))
-        fake_label_known = torch.zeros_like(fake_pred_known)
+        fake_label_known = torch.zeros_like(fake_pred_known).uniform_(0.0, 0.2)
 
         fake_pred_damaged = self.model(fake_generated * masks)
-        fake_label_damaged = torch.zeros_like(fake_pred_damaged)
+        fake_label_damaged = torch.zeros_like(fake_pred_damaged).uniform_(0.0, 0.2)
 
-        real_loss = (self.criterion(real_pred_known, real_label_known) + 
+        weight = 0.8
+        
+        real_loss = weight * (self.criterion(real_pred_known, real_label_known) + 
                      self.criterion(real_pred_damaged, real_label_damaged))
-        fake_loss = (self.criterion(fake_pred_known, fake_label_known) + 
+        fake_loss = weight * (self.criterion(fake_pred_known, fake_label_known) + 
                      self.criterion(fake_pred_damaged, fake_label_damaged))
 
         total_adv_loss = real_loss + fake_loss
         return total_adv_loss
-
+    
     def step(self, real_target, fake_generated, masks):
         self.model.train()
         self.optimizer.zero_grad()

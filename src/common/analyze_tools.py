@@ -1,8 +1,6 @@
-import math
-import numpy as np
+from torch import tensor, log, stack, float32, ones_like, linalg
 from scipy.stats import linregress
-import torch
-import torch.nn.functional as F
+import numpy as np
 
 class FractalAnalyzer:
     @staticmethod
@@ -63,18 +61,18 @@ class FractalAnalyzerGPU:
             sizes.append(size)
             counts.append(count)
         
-        sizes_tensor = torch.tensor(sizes, dtype=torch.float32, device=binary.device).clone().detach()
-        counts_tensor = torch.tensor(counts, dtype=torch.float32, device=binary.device).clone().detach()
+        sizes_tensor = tensor(sizes, dtype=float32, device=binary.device).clone().detach()
+        counts_tensor = tensor(counts, dtype=float32, device=binary.device).clone().detach()
         
         return sizes_tensor, counts_tensor
 
     @staticmethod
     def calculate_fractal_dimension(sizes, counts):
-        log_sizes = torch.log(sizes)
-        log_counts = torch.log(counts + 1e-8)
+        log_sizes = log(sizes)
+        log_counts = log(counts + 1e-8)
         
-        X = torch.stack([log_sizes, torch.ones_like(log_sizes)], dim=1)
+        X = stack([log_sizes, ones_like(log_sizes)], dim=1)
         Y = log_counts.view(-1, 1)
         
-        solution = torch.linalg.lstsq(X, Y).solution
+        solution = linalg.lstsq(X, Y).solution
         return -solution[0].item()

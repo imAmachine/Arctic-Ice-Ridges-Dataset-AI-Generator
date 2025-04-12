@@ -1,11 +1,10 @@
 import os
 from typing import Any, Dict, List
-import cv2
+from cv2 import imwrite, IMREAD_GRAYSCALE
 import numpy as np
 
-from src.preprocessing.utils import ImageProcess
-
-from .interfaces import IProcessor
+from src.common.image_processing import Utils
+from src.common.interfaces import IProcessor
 
 
 class IceRidgeDatasetPreprocessor:    
@@ -40,12 +39,12 @@ class IceRidgeDatasetPreprocessor:
     
     def _write_processed_img(self, image: np.ndarray, output_path: str):
         try:
-            cv2.imwrite(output_path, image)
+            imwrite(output_path, image)
         except Exception as e:
             print(f"Error processing {output_path}: {str(e)}")
     
     def _process_file(self, input_path: str, output_folder: str, filename: str):
-            processing_img = ImageProcess.cv2_load_image(os.path.join(input_path, filename), cv2_read_mode=cv2.IMREAD_GRAYSCALE)
+            processing_img = Utils.cv2_load_image(os.path.join(input_path, filename), cv2_read_mode=IMREAD_GRAYSCALE)
             output_path = self._get_output_path(filename=filename, output_folder_path=output_folder)
             
             processing_img = self._process_image(processing_img, filename, output_path)

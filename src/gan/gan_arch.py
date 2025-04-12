@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from torch.nn.utils import spectral_norm
+
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=4, stride=2, padding=1, use_instancenorm=True, activation='leaky'):
@@ -105,30 +107,36 @@ class GanGenerator(nn.Module):
 class GanDiscriminator(nn.Module):
     def __init__(self, input_channels=1, feature_maps=64):
         super(GanDiscriminator, self).__init__()
+        
+        # Using spectral_norm directly in the layer definitions
         self.layer1 = nn.Sequential(
-            nn.Conv2d(input_channels, feature_maps, kernel_size=4, stride=2, padding=1),
+            spectral_norm(nn.Conv2d(input_channels, feature_maps, kernel_size=4, stride=2, padding=1)),
             nn.LeakyReLU(0.2, inplace=True)
         )
+        
         self.layer2 = nn.Sequential(
-            nn.Conv2d(feature_maps, feature_maps * 2, kernel_size=4, stride=2, padding=1, bias=False),
+            spectral_norm(nn.Conv2d(feature_maps, feature_maps * 2, kernel_size=4, stride=2, padding=1, bias=False)),
             nn.InstanceNorm2d(feature_maps * 2, affine=True),
             nn.LeakyReLU(0.2, inplace=True)
         )
+        
         self.layer3 = nn.Sequential(
-            nn.Conv2d(feature_maps * 2, feature_maps * 4, kernel_size=4, stride=2, padding=1, bias=False),
+            spectral_norm(nn.Conv2d(feature_maps * 2, feature_maps * 4, kernel_size=4, stride=2, padding=1, bias=False)),
             nn.InstanceNorm2d(feature_maps * 4, affine=True),
             nn.LeakyReLU(0.2, inplace=True)
         )
+        
         self.layer4 = nn.Sequential(
-            nn.Conv2d(feature_maps * 4, feature_maps * 8, kernel_size=4, stride=1, padding=1, bias=False),
+            spectral_norm(nn.Conv2d(feature_maps * 4, feature_maps * 8, kernel_size=4, stride=1, padding=1, bias=False)),
             nn.InstanceNorm2d(feature_maps * 8, affine=True),
             nn.LeakyReLU(0.2, inplace=True)
         )
+        
         self.final = nn.Sequential(
-            nn.Conv2d(feature_maps * 8, 1, kernel_size=4, stride=1, padding=1),
+            spectral_norm(nn.Conv2d(feature_maps * 8, 1, kernel_size=4, stride=1, padding=1)),
             nn.Sigmoid()
         )
-        
+             
     def forward(self, x):
         x = self.layer1(x)
         x = self.layer2(x)

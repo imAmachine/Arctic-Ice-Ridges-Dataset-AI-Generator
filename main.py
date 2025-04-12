@@ -19,9 +19,9 @@ def main():
    
    run_all = not (args.preprocess or args.generate or args.train)
    
-   model_gan = GenerativeModel(target_image_size=448, 
-                             g_feature_maps=128, 
-                             d_feature_maps=64,
+   model_gan = GenerativeModel(target_image_size=1024, 
+                             g_feature_maps=32, 
+                             d_feature_maps=32,
                              device=args.device)
    
    ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,

@@ -1,20 +1,10 @@
-from enum import Enum
-from typing import Any, Dict
 import cv2
 import numpy as np
 import torch
 
-from src.analyzer.fractal_funcs import FractalAnalyzer, FractalAnalyzerGPU
-from src.analyzer.rotation_analyze import RotationAnalyze
-from .interfaces import IProcessor
-from .utils import ImageProcess
-
-
-class AngleChooseType(Enum):
-    ABS = RotationAnalyze.get_max_abs_angle
-    WEIGHTED = RotationAnalyze.get_weighted_angle
-    CONSISTENT = RotationAnalyze.get_consistent_angle
-
+from src.common.analyze_tools import FractalAnalyzer, FractalAnalyzerGPU
+from ..common.interfaces import IProcessor
+from ..common.image_processing import Utils
 
 class CropProcessor(IProcessor):
     """Процессор для обрезки изображения"""
@@ -28,25 +18,38 @@ class CropProcessor(IProcessor):
         return []
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        return ImageProcess.crop_image(image, self.crop_percent)
+        return Utils.crop_image(image, self.crop_percent)
 
 
 class AutoAdjust(IProcessor):
-    """Процессор для автоматической настройки изображения"""
+    """Процессор для автоматического постраивания соотношения сторон изображения"""
     
     @property
     def PROCESSORS_NEEDED(self):
         return []
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        return ImageProcess.auto_adjust(image)
+        h, w = image.shape
+        
+        if h == w:
+            return image
+        elif h > w:
+            diff = h - w
+            top_crop = diff // 2
+            bottom_crop = diff - top_crop
+            return image[top_crop:h-bottom_crop, :]
+        else:
+            diff = w - h
+            left_crop = diff // 2
+            right_crop = diff - left_crop
+            return image[:, left_crop:w-right_crop]
 
 
 class Binarize(IProcessor):
     """Процессор для бинаризации изображения"""
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        return ImageProcess.binarize_by_threshold(image, threshold=0.1, max_val=1)
+        return Utils.binarize_by_threshold(image, threshold=0.1, max_val=1)
 
 
 class Unbinarize(IProcessor):
@@ -61,57 +64,57 @@ class Unbinarize(IProcessor):
 class EnchanceProcessor(IProcessor):
     """Процессор для улучшения бинаризованного изображения с помощью морфологических операций"""
     
-    def __init__(self, processor_name: str = None, morph_kernel_size: int = 5):
+    def __init__(self, processor_name: str = None, kernel_size: int = 5):
         super().__init__(processor_name)
-        self.morph_kernel_size = morph_kernel_size
+        self.kernel_size = kernel_size
     
     @property
     def PROCESSORS_NEEDED(self):
         return [Binarize]
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        return ImageProcess.morph_bin_image(image, ksize=self.morph_kernel_size)
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, self.kernel_size))
+        return cv2.morphologyEx(image.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
 
 
-class RotateMaskProcessor(IProcessor):
-    """Процессор для выравнивания изображения"""
-    
-    def __init__(self, processor_name: str = None, angle_choose_type: callable = None):
+class CropToContentProcessor(IProcessor):
+    """Процессор для обрезки пустых краёв до границ контента."""
+
+    def __init__(self, processor_name: str = None):
         super().__init__(processor_name)
-        self.angle_choose_type = angle_choose_type
+    
+    @property
+    def PROCESSORS_NEEDED(self):
+        return [Binarize]
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        cropped_image = ImageProcess.bounding_crop(image)
-        temp_for_angle = ImageProcess.morph_bin_image(cropped_image.copy(), ksize=7)
-        angle = self._calculate_rotation_angle(temp_for_angle)
-        rotated_image = self._rotate_image(cropped_image, angle)
-        final_image = ImageProcess.bounding_crop(rotated_image)
-        
-        self._result_value = angle
-        
-        return final_image
+        return self._crop_to_content(image)
+
+    def _crop_to_content(self, img: np.ndarray) -> np.ndarray:
+        """
+        Подгоняет размер изображения под область с контентом, удаляя пустые края.
+        """
+        coords = np.argwhere(img > 0)
+        if coords.size == 0:
+            return img
+        y_min, x_min = coords.min(axis=0)
+        y_max, x_max = coords.max(axis=0) + 1
+        cropped = img[y_min:y_max, x_min:x_max]
+        return cropped
     
-    def _normalize_angle(self, angle: float) -> float:
-        """Normalize angle to range [-90, 90) degrees"""
-        return ((angle + 90) % 180) - 90
+
+class RotateMaskProcessor(IProcessor):
+    """Процессор для выравнивания маски по максимальной диагонали выпуклой оболочки."""
     
-    def _calculate_rotation_angle(self, image: np.ndarray) -> float:
-        angles = {
-            'pca': RotationAnalyze.get_PCA_rotation_angle(image),
-            'rect': RotationAnalyze.get_rect_rotation_angle(image),
-            'hough': RotationAnalyze.get_hough_rotation_angle(image)
-        }
-        
-        result_angle = self.angle_choose_type(angles)
-        return result_angle
+    @property
+    def PROCESSORS_NEEDED(self):
+        return [Binarize, CropToContentProcessor]
     
-    def _rotate_image(self, img: np.ndarray, angle: float) -> np.ndarray:
-        h, w = img.shape
-        center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, 
-                                    borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-        return rotated_img
+    def __init__(self, processor_name: str = None):
+        super().__init__(processor_name)
+    
+    def process_image(self, image: np.ndarray) -> np.ndarray:
+        pass
 
 
 class TensorConverterProcessor(IProcessor):

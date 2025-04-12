@@ -1,21 +1,19 @@
-import os
-import albumentations as A
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+import albumentations as A
+import numpy as np
+
+import os
 import cv2
 import json
-import numpy as np
-import cv2
-from torch.utils.data import Dataset
-from typing import Dict, List, Tuple
 import random
+from typing import Dict, List, Tuple
 
+from src.common.image_processing import Utils
 from src.datasets.processors import ShiftProcessor
-from src.preprocessing.utils import ImageProcess
 
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.preprocessing.processors import *
-from src.datasets.processors import ShiftProcessor
 
 class IceRidgeDataset(Dataset):
     def __init__(self, metadata: Dict, dataset_processor: ShiftProcessor = None, with_target=False, transforms=None):
@@ -42,8 +40,8 @@ class IceRidgeDataset(Dataset):
     def _read_bin_image(self, metadata_key) -> np.ndarray:
         orig_meta = self.metadata[metadata_key]
         orig_path = orig_meta.get('path')
-        img = ImageProcess.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
-        bin_img = ImageProcess.binarize_by_threshold(img)
+        img = Utils.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
+        bin_img = Utils.binarize_by_threshold(img)
         return bin_img.astype(np.float32)
     
     def _get_processed_pair(self, input_img, masked, noised):
@@ -122,7 +120,7 @@ class IceRidgeDatasetGenerator:
         if not os.path.exists(image_path):
             return {}
             
-        image = ImageProcess.cv2_load_image(image_path)
+        image = Utils.cv2_load_image(image_path)
         
         filename = os.path.basename(image_path)
         base_name, ext = os.path.splitext(filename)
@@ -131,7 +129,7 @@ class IceRidgeDatasetGenerator:
         # Генерация аугментаций
         for i in range(count):
             augmented_image = self.augmentation_pipeline(image=image)['image']
-            binarized = ImageProcess.binarize_by_threshold(augmented_image, 0.4, 1)
+            binarized = Utils.binarize_by_threshold(augmented_image, 0.4, 1)
             
             new_filename = f"{base_name}_aug{i+1}{ext}"
             output_file_path = os.path.join(output_path, new_filename)
