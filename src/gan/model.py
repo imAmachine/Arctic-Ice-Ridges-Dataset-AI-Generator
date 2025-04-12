@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
 
+from src.gan.metrics import Metrics
 from src.common.analyze_tools import FractalAnalyzerGPU
 from src.common.interfaces import IModelTrainer
 from src.gan.arch import WGanDiscriminator, WGanGenerator
@@ -11,7 +12,9 @@ class GenerativeModel:
     def __init__(self, target_image_size=448, g_feature_maps=64, d_feature_maps=16, device='cpu'):
         self.device = device
         self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
-        self.critic = WGanDiscriminator(input_channels=1, feature_maps=d_feature_maps).to(self.device)
+        self.discriminator = WGanDiscriminator(input_channels=1, feature_maps=d_feature_maps).to(self.device)
+        self.g_metrics = Metrics(name="Generator")
+        self.d_metrics = Metrics(name="Discriminator")
         
         # Параметры WGAN
         self.n_train_critic = 5
@@ -29,8 +32,8 @@ class GenerativeModel:
         ])
     
     def _init_trainers(self):
-        g_trainer = WGANGeneratorModelTrainer(model=self.generator, critic=self.critic)
-        c_trainer = WGANCriticModelTrainer(model=self.critic, clip_value=self.critic_clip_value)
+        g_trainer = WGANGeneratorModelTrainer(model=self.generator, critic=self.discriminator)
+        c_trainer = WGANCriticModelTrainer(model=self.discriminator, clip_value=self.critic_clip_value)
         return g_trainer, c_trainer
     
     def train_step(self, inputs, targets, masks):
@@ -59,7 +62,7 @@ class GenerativeModel:
         critic_path = os.path.join(output_path, 'critic.pt')
         if os.path.exists(gen_path) and os.path.exists(critic_path):
             self.generator.load_state_dict(torch.load(gen_path, map_location=self.device, weights_only=True))
-            self.critic.load_state_dict(torch.load(critic_path, map_location=self.device, weights_only=True))
+            self.discriminator.load_state_dict(torch.load(critic_path, map_location=self.device, weights_only=True))
         else:
             raise FileNotFoundError('Ошибка загрузки весов моделей')
 
