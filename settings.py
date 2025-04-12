@@ -35,10 +35,10 @@ AUGMENTATIONS = A.Compose([
 
 PREPROCESSORS = [
             Binarize(),
-            CropToContentProcessor(),
             # EnchanceProcessor(kernel_size=3),
-            # RotateMaskProcessor(),
             Unbinarize(),
+            RotateMaskProcessor(),
+            CropToContentProcessor(),
             # AutoAdjust(),
         ]
 

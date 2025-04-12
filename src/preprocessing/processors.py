@@ -108,13 +108,71 @@ class RotateMaskProcessor(IProcessor):
     
     @property
     def PROCESSORS_NEEDED(self):
-        return [Binarize, CropToContentProcessor]
+        return [Unbinarize]
     
     def __init__(self, processor_name: str = None):
         super().__init__(processor_name)
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        pass
+        points = self._find_farthest_points(image)
+        angle = self._calculate_rotate_angle(points, image.shape)
+        rotated_image = self._rotate_image(image, angle)
+        
+        self._result_value = angle
+        
+        return rotated_image
+    
+    def _find_farthest_points(self, image):
+        """Находит 2 наиболее удалённые белые точки"""
+        # Получаем координаты всех белых пикселей
+        yx = np.column_stack(np.where(image == 255))  # (y, x) → для OpenCV меняем на (x, y) позже
+
+        if len(yx) < 2:
+            return None
+
+        # Меняем порядок на (x, y) для OpenCV
+        points = np.array([[x, y] for y, x in yx], dtype=np.int32)
+
+        # Строим выпуклую оболочку
+        hull = cv2.convexHull(points)
+
+        # Используем rotating calipers для поиска самой дальней пары
+        max_dist = 0
+        farthest_pair = (tuple(hull[0][0]), tuple(hull[1][0]))
+
+        n = len(hull)
+        j = 1
+        for i in range(n):
+            while True:
+                dist1 = np.linalg.norm(hull[i][0] - hull[j % n][0])
+                dist2 = np.linalg.norm(hull[i][0] - hull[(j+1) % n][0])
+                if dist2 > dist1:
+                    j += 1
+                else:
+                    break
+            if dist1 > max_dist:
+                max_dist = dist1
+                farthest_pair = (tuple(hull[i][0]), tuple(hull[j % n][0]))
+
+        return farthest_pair
+    
+    def _calculate_rotate_angle(self, points, img_shape):
+        """Вычисляет угол между линией (p1-p2) и диагональю изображения"""
+        p1, p2 = points
+        line_vec = np.array([p2[0] - p1[0], p2[1] - p1[1]])
+        h, w = img_shape
+        diag_vec = np.array([w, -h])  # левая нижняя -> правая верхняя
+        angle_rad = np.arctan2(line_vec[1], line_vec[0]) - np.arctan2(diag_vec[1], diag_vec[0])
+        angle_deg = np.degrees(angle_rad)
+        return (angle_deg + 90) % 180 - 90
+    
+    def _rotate_image(self, img: np.ndarray, angle: float) -> np.ndarray:
+        h, w = img.shape
+        center = (w // 2, h // 2)
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated_img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, 
+                                    borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+        return rotated_img
 
 
 class TensorConverterProcessor(IProcessor):
