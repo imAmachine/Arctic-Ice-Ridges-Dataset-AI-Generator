@@ -30,9 +30,11 @@ class IceRidgeDataset(Dataset):
         """Возвращает тройку (input, target, damage_mask) для индекса idx"""
         
         image = self._read_bin_image(self.image_keys[idx])  # чтение итерируемой картинки
-        damaged, mask = self._get_processed_pair(input_img=image, masked=True, noised=False)
+        damaged, mask = self._get_processed_pair(input_img=image, masked=True)
+        
         triplet = (damaged, image, mask)
         transformed_tensors = self.apply_transforms(triplet)
+        
         binarized_tensors = [(im > 0.1).float() for im in transformed_tensors] # возврат к бинарному формату после трансформаций
         
         return binarized_tensors
@@ -44,8 +46,8 @@ class IceRidgeDataset(Dataset):
         bin_img = Utils.binarize_by_threshold(img)
         return bin_img.astype(np.float32)
     
-    def _get_processed_pair(self, input_img, masked, noised):
-        return self.processor.process(input_img.astype(np.float32), masked, noised)
+    def _get_processed_pair(self, input_img, masked):
+        return self.processor.process(input_img.astype(np.float32), masked)
     
     def apply_transforms(self, objects: List):
         return [self.transforms(obj) for obj in objects]
@@ -53,40 +55,65 @@ class IceRidgeDataset(Dataset):
     @staticmethod
     def split_dataset(metadata: Dict, val_ratio=0.2, seed=42) -> Tuple[Dict, Dict]:
         """Разделяет метаданные на обучающую и валидационную выборки,
-        гарантируя, что аугментации одного изображения не разделяются."""
+        гарантируя что аугментации одного изображения не разделяются.
+        
+        Args:
+            metadata: Словарь метаданных в формате {filename: {info}}
+            val_ratio: Доля данных для валидации (0.0-1.0)
+            seed: Seed для воспроизводимости
+            
+        Returns:
+            Кортеж (train_metadata, val_metadata)
+        """
+        if not metadata:
+            raise ValueError("Передан пустой словарь метаданных")
+        
         random.seed(seed)
         
-        # Группируем файлы по оригинальным изображениям
-        image_groups = {}
-        for key, info in metadata.items():
+        # 1. Собираем уникальные orig_path и группируем по ним файлы
+        orig_to_files = {}
+        for filename, info in metadata.items():
             orig_path = info.get('orig_path')
-            if orig_path not in image_groups:
-                image_groups[orig_path] = []
-            image_groups[orig_path].append(key)
+            if not orig_path:
+                raise ValueError(f"Отсутствует orig_path для файла {filename}")
+            
+            if orig_path not in orig_to_files:
+                orig_to_files[orig_path] = []
+            orig_to_files[orig_path].append(filename)
         
-        # Перемешиваем группы оригинальных изображений
-        orig_images = list(image_groups.keys())
-        random.shuffle(orig_images)
+        unique_origins = list(orig_to_files.keys())
         
-        # Определяем количество оригинальных изображений для валидации
-        val_size = int(len(orig_images) * val_ratio)
+        if len(unique_origins) < 2:
+            raise ValueError(f"Недостаточно оригинальных изображений ({len(unique_origins)}). Нужно минимум 2")
         
-        val_orig_images = orig_images[:val_size]
-        train_orig_images = orig_images[val_size:]
+        # 2. Случайно перемешиваем оригиналы
+        random.shuffle(unique_origins)
         
-        # Формируем тренировочную и валидационную выборки
+        # 3. Определяем размер валидационной выборки (минимум 1 оригинал)
+        val_size = max(1, int(len(unique_origins) * val_ratio))
+        val_origins = unique_origins[:val_size]
+        train_origins = unique_origins[val_size:]
+        
+        # 4. Формируем итоговые выборки
         train_metadata = {}
         val_metadata = {}
         
-        for orig in train_orig_images:
-            for key in image_groups[orig]:
-                train_metadata[key] = metadata[key]
+        for orig in train_origins:
+            for filename in orig_to_files[orig]:
+                train_metadata[filename] = metadata[filename]
         
-        for orig in val_orig_images:
-            for key in image_groups[orig]:
-                val_metadata[key] = metadata[key]
+        for orig in val_origins:
+            for filename in orig_to_files[orig]:
+                val_metadata[filename] = metadata[filename]
         
-        print(f"Разделение данных: {len(train_metadata)} обучающих, {len(val_metadata)} валидационных")
+        # 5. Валидация и логирование
+        if not val_metadata:
+            raise RuntimeError("Валидационный набор пуст после разделения")
+        
+        print(
+            f"Разделение данных: {len(train_metadata)} обучающих ({len(train_origins)} оригиналов), "
+            f"{len(val_metadata)} валидационных ({len(val_origins)} оригиналов)"
+        )
         
         return train_metadata, val_metadata
 
@@ -129,7 +156,7 @@ class IceRidgeDatasetGenerator:
         # Генерация аугментаций
         for i in range(count):
             augmented_image = self.augmentation_pipeline(image=image)['image']
-            binarized = Utils.binarize_by_threshold(augmented_image, 0.4, 1)
+            binarized = Utils.binarize_by_threshold(augmented_image, 0.1, 1)
             
             new_filename = f"{base_name}_aug{i+1}{ext}"
             output_file_path = os.path.join(output_path, new_filename)
@@ -200,6 +227,8 @@ class DatasetCreator:
         dataset_metadata = self.from_json(self.generated_metadata_json_path)
         
         train_metadata, val_metadata = IceRidgeDataset.split_dataset(dataset_metadata, val_ratio=0.2)
+        
+        print(len(train_metadata), len(val_metadata))
         
         train_dataset = IceRidgeDataset(train_metadata, 
                                         dataset_processor=self.dataset_processor, 

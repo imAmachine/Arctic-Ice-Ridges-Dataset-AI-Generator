@@ -102,9 +102,9 @@ class WGanGenerator(nn.Module):
         return output
 
 
-class WGanDiscriminator(nn.Module):
+class WGanCritic(nn.Module):
     def __init__(self, input_channels=1, feature_maps=64):
-        super(WGanDiscriminator, self).__init__()
+        super(WGanCritic, self).__init__()
                 
         self.layer1 = nn.Sequential(
             nn.Conv2d(input_channels, feature_maps, kernel_size=4, stride=2, padding=1),
@@ -129,7 +129,7 @@ class WGanDiscriminator(nn.Module):
             nn.LeakyReLU(0.2, inplace=True)
         )
         
-        self.final = nn.Conv2d(feature_maps * 8, 1, kernel_size=4, stride=1, padding=1)
+        self.final = nn.Conv2d(feature_maps * 8, 1, kernel_size=1, stride=1, padding=0)
              
     def forward(self, x):
         x = self.layer1(x)

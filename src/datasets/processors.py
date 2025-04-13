@@ -2,49 +2,28 @@ import numpy as np
 
 
 class ShiftProcessor:
-    DIRECTIONS = ['top', 'bottom', 'left', 'right']
-    
     def __init__(self, shift_percent=0.15):
         self.shift_percent = shift_percent
     
-    def create_noise_mask(self, damage_mask, noise_level=0.1, inversed=False):
-        noise = np.random.uniform(0, noise_level, size=damage_mask.shape).astype(np.float32)
-        m = damage_mask
-        if inversed:
-            m = (1 - damage_mask)
-        return m * noise
+    def create_center_mask(self, shape):
+        """Создаём маску, которая накрывает центральную область изображения"""
+        h, w = shape
+        bh, bw = int(h * (1 - self.shift_percent)), int(w * (1 - self.shift_percent))
+        top = (h - bh) // 2
+        left = (w - bw) // 2
+        mask = np.ones(shape, dtype=np.float32)
+        mask[top:top + bh, left:left + bw] = 0.0
+        return mask
     
-    def create_damage_mask(self, damage_mask_shape, dmg_size, direction, dmg_val=1.0):
-        damage_mask = np.zeros(damage_mask_shape, dtype=np.float32)
-        
-        if direction == 'top':
-            damage_mask[:dmg_size, :] = dmg_val
-        elif direction == 'bottom':
-            damage_mask[-dmg_size:, :] = dmg_val
-        elif direction == 'left':
-            damage_mask[:, :dmg_size] = dmg_val
-        elif direction == 'right':
-            damage_mask[:, -dmg_size:] = dmg_val
-        
-        return damage_mask
-    
-    def process(self, image: np.ndarray, masked=False, noised=False) -> tuple:
+    def process(self, image: np.ndarray, masked=False) -> tuple:
+        """Применяет повреждения к изображению"""
         img_size = image.shape
-        damage_size = int(max(img_size[0], img_size[1]) * self.shift_percent)
-        
         damaged = image.copy()
-        damage_direction = np.random.choice(self.DIRECTIONS)
         
-        damage_mask = self.create_damage_mask(damage_mask_shape=img_size, 
-                                              dmg_size=damage_size, 
-                                              direction=damage_direction, 
-                                              dmg_val=1.0)
+        damage_mask = self.create_center_mask(shape=img_size)
         
         if masked:
             damaged *= (1 - damage_mask)
-            
-        if noised:
-            damaged += self.create_noise_mask(damage_mask, noise_level=1)
             
         return damaged, damage_mask
     

@@ -30,13 +30,14 @@ AUGMENTATIONS = A.Compose([
                 A.HorizontalFlip(p=0.5),
                 A.VerticalFlip(p=0.5),
             ], p=0.6),
-            A.RandomCrop(height=512, width=512, p=0.5)
+            A.RandomCrop(height=512, width=512, p=0.7),
         ])
 
 PREPROCESSORS = [
             Binarize(),
             RotateMaskProcessor(),
             CropToContentProcessor(),
+            EnchanceProcessor(kernel_size=3),
             AutoAdjust(),
             Unbinarize()
         ]
