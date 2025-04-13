@@ -19,10 +19,16 @@ def main():
    
    run_all = not (args.preprocess or args.generate or args.train)
    
-   model_gan = GenerativeModel(target_image_size=448, 
-                             g_feature_maps=48, 
-                             d_feature_maps=48,
-                             device=args.device)
+   model_gan = GenerativeModel(target_image_size=256, 
+                             g_feature_maps=64, 
+                             d_feature_maps=32,
+                             device=args.device,
+                             lr=0.0005,
+                             n_critic=5,
+                             lambda_w=2.0,
+                             lambda_bce=3.0,
+                             lambda_gp=3.0,
+                             lambda_l1=1.5)
    
    ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
                        original_data_path=MASKS_FOLDER_PATH,
@@ -48,7 +54,9 @@ def main():
                             output_path=WEIGHTS_PATH,
                             epochs=args.epochs,
                             batch_size=args.batch_size,
-                            load_weights=args.load_weights)
+                            load_weights=args.load_weights,
+                            val_ratio=0.1,
+                            checkpoints_ratio=15)
        
        trainer.train()
 

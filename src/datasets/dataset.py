@@ -10,13 +10,13 @@ import random
 from typing import Dict, List, Tuple
 
 from src.common.image_processing import Utils
-from src.datasets.processors import ShiftProcessor
+from src.datasets.processors import MaskingProcessor
 
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.preprocessing.processors import *
 
 class IceRidgeDataset(Dataset):
-    def __init__(self, metadata: Dict, dataset_processor: ShiftProcessor = None, with_target=False, transforms=None):
+    def __init__(self, metadata: Dict, dataset_processor: MaskingProcessor = None, with_target=False, transforms=None):
         self.processor = dataset_processor
         self.with_target = with_target
         self.metadata = metadata
@@ -180,7 +180,7 @@ class DatasetCreator:
         # === Init ===
         self.preprocessor = IceRidgeDatasetPreprocessor(preprocessors)
         self.dataset_generator = IceRidgeDatasetGenerator(augmentations_pipeline)
-        self.dataset_processor = ShiftProcessor(shift_percent=0.20)
+        self.dataset_processor = MaskingProcessor(mask_padding=0.20)
         self.device = device
         self.input_data_path = original_data_path
         
@@ -223,10 +223,10 @@ class DatasetCreator:
         else:
             print('Пайплайн аугментаций не объявлен!')
     
-    def create_dataloaders(self, batch_size, shuffle, workers):
+    def create_dataloaders(self, batch_size, shuffle, workers, val_ratio=0.2):
         dataset_metadata = self.from_json(self.generated_metadata_json_path)
         
-        train_metadata, val_metadata = IceRidgeDataset.split_dataset(dataset_metadata, val_ratio=0.2)
+        train_metadata, val_metadata = IceRidgeDataset.split_dataset(dataset_metadata, val_ratio=val_ratio)
         
         print(len(train_metadata), len(val_metadata))
         

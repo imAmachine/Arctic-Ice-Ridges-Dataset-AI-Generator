@@ -1,9 +1,9 @@
 import numpy as np
 
 
-class ShiftProcessor:
-    def __init__(self, shift_percent=0.15):
-        self.shift_percent = shift_percent
+class MaskingProcessor:
+    def __init__(self, mask_padding=0.15):
+        self.shift_percent = mask_padding
     
     def create_center_mask(self, shape):
         """Создаём маску, которая накрывает центральную область изображения"""
