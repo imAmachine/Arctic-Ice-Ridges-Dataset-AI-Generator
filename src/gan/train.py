@@ -7,13 +7,13 @@ from tqdm import tqdm
 from collections import defaultdict
 
 from src.gan.model import GenerativeModel
-from src.datasets.dataset import DatasetCreator
+from src.gan.dataset import DatasetCreator
 
 
 class GANTrainer:
     def __init__(self, model: GenerativeModel, dataset_processor: DatasetCreator, output_path, 
-                 epochs, batch_size, load_weights=True, val_ratio=0.2, checkpoints_ratio=5):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+                 epochs, batch_size, device, load_weights=True, val_ratio=0.2, checkpoints_ratio=5):
+        self.device = device
         self.model = model
         self.load_weights = load_weights
         self.dataset_processor = dataset_processor
@@ -54,7 +54,7 @@ class GANTrainer:
             
             # Обучение
             self.model.generator.train()
-            for i, batch in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1} Train")):
+            for i, batch in enumerate(tqdm(train_loader, total=len(train_loader), desc=f"Epoch {epoch+1} Train")):
                 inputs, targets, masks = [tensor.to(self.device) for tensor in batch]
                 losses = self.model.train_step(inputs, targets, masks)
                 
