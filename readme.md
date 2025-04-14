@@ -23,3 +23,5 @@
 - --device (позволяет указать устройство для обучения)
 - --infer (запускает модель в режиме инференса)
 - --output_image 'filename' (название файла для записи, запись в корень проекта, расширение указывать не нужно)
+
+Чекпоинт можно [скачать здесь](https://drive.google.com/file/d/1xmheylyamhO-CDPHMzwEOhsW9Em_SrLI/view?usp=sharing)
