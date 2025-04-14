@@ -1,77 +1,65 @@
 import os
 from typing import Any, Dict, List
-import cv2
+from cv2 import imwrite, IMREAD_GRAYSCALE
 import numpy as np
 
-from .interfaces import IProcessor
+from src.common.image_processing import Utils
+from src.common.interfaces import IProcessor
 
 
-class IceRidgeDatasetPreprocessor:
-    """Основной класс для препроцессинга масок"""
-    
-    def __init__(self):
-        self.processors: List[IProcessor] = []
+class IceRidgeDatasetPreprocessor:    
+    def __init__(self, processors: List[IProcessor]=None):
+        self.metadata = {}
+        if processors is None:
+            self.processors: List[IProcessor] = []
+        else:
+            self.processors: List[IProcessor] = processors
     
     def add_processor(self, processor: IProcessor) -> None:
-        """Добавляет процессор в пайплайн обработки"""
         self.processors.append(processor)
     
     def add_processors(self, processors: List[IProcessor]) -> None:
-        """Добавляет процессоры в пайплайн обработки"""
         self.processors.extend(processors)
     
-    def _process_image(self, image: np.ndarray) -> tuple[np.ndarray, Dict[str, Any]]:
-        """Обрабатывает одно изображение через все процессоры"""
-        metadata = {}
-        current_image = image.copy()
+    def _process_image(self, image: np.ndarray, filename: str, output_path: str) -> np.ndarray:
+        processing_img = image
+        current_metadata = {}
         
         for processor in self.processors:
-            current_image, proc_metadata = processor.process(current_image, metadata)
-            metadata.update(proc_metadata)
+            processing_img = processor.process(processing_img, current_metadata)
         
-        return current_image, metadata
+        current_metadata.update({'path': output_path})
+        self.metadata[filename] = current_metadata
+        return processing_img
     
-    def process_file(self, input_path: str, output_folder: str, filename: str) -> Dict[str, Any]:
-        """Обрабатывает один файл и сохраняет результат"""
+    def _get_output_path(self, filename: str, output_folder_path: str):
+        base_name, ext = os.path.splitext(filename)
+        new_filename = f"{base_name}_processed{ext}"
+        return os.path.join(output_folder_path, new_filename)
+    
+    def _write_processed_img(self, image: np.ndarray, output_path: str):
         try:
-            # Загрузка изображения
-            img = cv2.imread(os.path.join(input_path, filename), cv2.IMREAD_GRAYSCALE)
-            if img is None:
-                raise ValueError(f"Failed to load image {filename}")
-            
-            # Обработка изображения
-            processed_img, metadata = self._process_image(img)
-            
-            # Формирование имени файла с метаданными
-            base_name, ext = os.path.splitext(filename)
-            new_filename = f"{base_name}_processed{ext}"
-            
-            # Сохранение результата
-            output_path = os.path.join(output_folder, new_filename)
-            cv2.imwrite(output_path, processed_img)
-            
-            # Добавление информации о пути к выходному файлу
-            metadata['output_path'] = output_path
-            
-            return metadata
+            imwrite(output_path, image)
         except Exception as e:
-            print(f"Error processing {filename}: {str(e)}")
-            return {'error': str(e)}
+            print(f"Error processing {output_path}: {str(e)}")
     
-    def process_folder(self, input_folder: str, output_folder: str, mask_extensions: List[str] = None) -> Dict[str, Dict[str, Any]]:
-        """Обрабатывает все файлы в папке и сохраняет результаты"""
-        if mask_extensions is None:
-            mask_extensions = ['.png', '.jpg', '.jpeg']
+    def _process_file(self, input_path: str, output_folder: str, filename: str):
+            processing_img = Utils.cv2_load_image(os.path.join(input_path, filename), cv2_read_mode=IMREAD_GRAYSCALE)
+            output_path = self._get_output_path(filename=filename, output_folder_path=output_folder)
+            print(f'Обработка {filename}')
+            processing_img = self._process_image(processing_img, filename, output_path)
+            self._write_processed_img(processing_img, output_path)
             
-        # Создание выходной папки, если она не существует
+    
+    def process_folder(self, input_folder: str, output_folder: str, files_extensions: List[str] = None) -> Dict[str, Dict[str, Any]]:
+        if files_extensions is None:
+            raise ValueError('Input files extensions not defined!')
+        
         os.makedirs(output_folder, exist_ok=True)
         
-        results = {}
-        
-        # Обработка всех файлов в папке
         for filename in os.listdir(input_folder):
             ext = os.path.splitext(filename)[1].lower()
-            if ext in mask_extensions:
-                results[filename] = self.process_file(input_folder, output_folder, filename)
+            if ext in files_extensions:
+                self._process_file(input_folder, output_folder, filename)
         
-        return results
+        return self.metadata
