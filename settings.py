@@ -24,13 +24,14 @@ GENERATOR_PATH = os.path.join(WEIGHTS_PATH, 'generator.pth')
 # ================ настройка основных параметров ==================
 DEVICE = 'cuda' if cuda.is_available() else 'cpu'
 AUGMENTATIONS = A.Compose([
-    A.OneOf([
-        A.RandomRotate90(p=1.0),
-        A.HorizontalFlip(p=1.0),
-        A.VerticalFlip(p=1.0),
-    ], p=1.0),
-    A.RandomCrop(height=512, width=512, p=0.8),
-])
+    A.RandomCrop(width=1024, height=1024),
+    A.RandomRotate90(),
+    A.HorizontalFlip(),
+    A.VerticalFlip(),
+    # A.Affine(translate_percent=0.1, scale=3.0, rotate=30, p=0.7)
+], p=1.0)
+
+
 
 PREPROCESSORS = [
             Binarize(),

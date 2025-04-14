@@ -42,38 +42,53 @@ class MaskingProcessor:
         return damaged, damage_mask
     
 
-
 class IceRidgeDataset(Dataset):
-    def __init__(self, metadata: Dict, dataset_processor: MaskingProcessor = None,
-                 augmentations=None, model_transforms=None):
+    def __init__(self, metadata: Dict, dataset_processor, augmentations=None, model_transforms=None, random_select: bool = False):
+        """
+        Args:
+            metadata: словарь с метаданными изображений
+            dataset_processor: экземпляр класса для обработки изображений (например, MaskingProcessor)
+            augmentations: экземпляр A.Compose с аугментациями
+            model_transforms: преобразования для подготовки под модель (например, нормализация, to tensor)
+            random_select: если True – при каждом __getitem__ выбирается случайное изображение из metadata,
+                           что бывает полезно при очень маленьком датасете.
+        """
         self.processor = dataset_processor
         self.metadata = metadata
         self.image_keys = list(metadata.keys())
-        
         self.augmentations = augmentations
         self.model_transforms = model_transforms
-    
+        self.random_select = random_select  # Флаг случайного выбора изображения
+
     def __len__(self) -> int:
         return len(self.image_keys)
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        original = self._read_bin_image(self.image_keys[idx])
-
-        # === Аугментации
-        if self.augmentations:
-            augmented = self.augmentations(image=original)
-
-        damaged, mask = self._get_processed_pair(input_img=augmented['image'], masked=True)
+        # Если датасет очень маленький, можно случайно выбирать изображение, а не по порядку.
+        if self.random_select:
+            rand_idx = random.randint(0, len(self.image_keys) - 1)
+            key = self.image_keys[rand_idx]
+        else:
+            key = self.image_keys[idx]
+            
+        original = self._read_bin_image(key)
+    
+        img = original
+        if self.augmentations is not None:
+            img = self.augmentations(image=original)['image']
+    
+        # Получаем пару: повреждённое изображение и маску (обработка внутри processor)
+        damaged, mask = self._get_processed_pair(input_img=img, masked=True)
         
-        # === Преобразования в тензоры / подготовка под модель
+        # Преобразование изображений под формат модели
         damaged = self.apply_model_transforms(damaged)
-        original = self.apply_model_transforms(augmented['image'])
-        mask = self.apply_model_transforms(mask)
-
-        # === Бинаризация (если нужно)
-        triplet = (damaged, original, mask)
+        original_transformed = self.apply_model_transforms(img)
+        mask_transformed = self.apply_model_transforms(mask)
+    
+        # Бинаризация, если необходимо (например, для маски и иных тензоров)
+        triplet = (damaged, original_transformed, mask_transformed)
         binarized = [(x > 0.1).float() for x in triplet]
-
+        
         return tuple(binarized)
     
     def _read_bin_image(self, metadata_key) -> np.ndarray:
@@ -83,7 +98,7 @@ class IceRidgeDataset(Dataset):
         bin_img = Utils.binarize_by_threshold(img)
         return bin_img.astype(np.float32)
     
-    def _get_processed_pair(self, input_img, masked):
+    def _get_processed_pair(self, input_img, masked: bool):
         return self.processor.process(input_img.astype(np.float32), masked)
     
     def apply_model_transforms(self, img: np.ndarray) -> torch.Tensor:
@@ -92,83 +107,60 @@ class IceRidgeDataset(Dataset):
         return torch.tensor(img, dtype=torch.float32).unsqueeze(0)
         
     @staticmethod
-    def split_dataset(metadata: Dict, val_ratio=0.2, seed=42) -> Tuple[Dict, Dict]:
-        """Разделяет метаданные на обучающую и валидационную выборки,
-        гарантируя что аугментации одного изображения не разделяются.
-        
-        Args:
-            metadata: Словарь метаданных в формате {filename: {info}}
-            val_ratio: Доля данных для валидации (0.0-1.0)
-            seed: Seed для воспроизводимости
-            
-        Returns:
-            Кортеж (train_metadata, val_metadata)
+    def split_dataset(metadata: Dict, val_ratio) -> Tuple[Dict, Dict]:
+        """
+        Разделяет метаданные на обучающую и валидационную выборки,
+        так чтобы данные одного оригинального изображения не оказывались в обеих выборках.
         """
         if not metadata:
             raise ValueError("Передан пустой словарь метаданных")
         
-        random.seed(seed)
-        
         unique_origins = list(metadata.keys())
         random.shuffle(unique_origins)
         
-        # 3. Определяем размер валидационной выборки (минимум 1 оригинал)
-        val_size = max(1, int(len(unique_origins) * val_ratio))
+        val_size = max(0, int(len(unique_origins) * val_ratio))
         val_origins = unique_origins[:val_size]
         train_origins = unique_origins[val_size:]
         
-        # 4. Формируем итоговые выборки
-        train_metadata = {}
-        val_metadata = {}
+        train_metadata = {orig: metadata[orig] for orig in train_origins}
+        val_metadata = {orig: metadata[orig] for orig in val_origins}
         
-        for orig in train_origins:
-            train_metadata[orig] = metadata[orig]
-        
-        for orig in val_origins:
-            val_metadata[orig] = metadata[orig]
-        
-        print(
-            f"Разделение данных: {len(train_metadata)} обучающих, "
-            f"{len(val_metadata)} валидационных"
-        )
+        print(f"Разделение данных: {len(train_metadata)} обучающих, {len(val_metadata)} валидационных")
         
         return train_metadata, val_metadata
 
 
 class DatasetCreator:
     def __init__(self, generated_path, original_data_path, preprocessed_data_path, images_extentions, 
-                 model_transforms, preprocessors: List[IProcessor], augmentations: A.Compose,
+                 model_transforms, preprocessors: List, augmentations: A.Compose,
                  device):
-        # === Init ===
+        # Инициализация
         self.preprocessor = IceRidgeDatasetPreprocessor(preprocessors)
         self.dataset_processor = MaskingProcessor(mask_padding=0.20)
         self.augmentations = augmentations
         self.device = device
         self.input_data_path = original_data_path
         
-        # === Output paths ===
+        # Пути для выходных данных
         self.generated_path = generated_path
         self.preprocessed_data_path = preprocessed_data_path
         self.preprocessed_metadata_json_path = os.path.join(self.preprocessed_data_path, 'metadata.json')
         
-        # === Params ===
         self.images_extentions = images_extentions
         self.model_transforms = model_transforms
         
     def preprocess_data(self):
-        if self.preprocessor.processors is not None or len(self.preprocessor.processors) > 0:
+        if self.preprocessor.processors is not None and len(self.preprocessor.processors) > 0:
             os.makedirs(self.preprocessed_data_path, exist_ok=True)
-            
-            self.preprocessor.process_folder(self.input_data_path, self.preprocessed_data_path,  self.images_extentions)
+            self.preprocessor.process_folder(self.input_data_path, self.preprocessed_data_path, self.images_extentions)
             if len(self.preprocessor.metadata) == 0:
                 print('Метаданные не были получены после предобработки. Файл создан не будет!')
                 return
-            
             self.to_json(self.preprocessor.metadata, self.preprocessed_metadata_json_path)
         else:
             print('Пайплайн предобработки не объявлен!')
     
-    def create_dataloaders(self, batch_size, shuffle, workers, val_ratio=0.2):
+    def create_dataloaders(self, batch_size, shuffle, workers, random_select, val_ratio=0.2, val_augmentations=False, train_augmentations=True):
         if not os.path.exists(self.preprocessed_metadata_json_path):
             self.preprocess_data()
         
@@ -176,15 +168,19 @@ class DatasetCreator:
         
         train_metadata, val_metadata = IceRidgeDataset.split_dataset(dataset_metadata, val_ratio=val_ratio)
         
-        print(len(train_metadata), len(val_metadata))
+        print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(val_metadata)}")
         
+        train_augs = self.augmentations if train_augmentations else None
         train_dataset = IceRidgeDataset(train_metadata, 
                                         dataset_processor=self.dataset_processor, 
-                                        augmentations=self.augmentations,
-                                        model_transforms=self.model_transforms)
+                                        augmentations=train_augs,
+                                        model_transforms=self.model_transforms,
+                                        random_select=random_select)
+        
+        val_augs = self.augmentations if val_augmentations else None
         val_dataset = IceRidgeDataset(val_metadata, 
                                       dataset_processor=self.dataset_processor, 
-                                      augmentations=self.augmentations,
+                                      augmentations=val_augs,
                                       model_transforms=self.model_transforms)
         
         train_loader = DataLoader(

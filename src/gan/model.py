@@ -2,6 +2,7 @@ import os
 import torch
 import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
+from torchvision.utils import save_image
 
 from src.common.interfaces import IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
@@ -38,7 +39,7 @@ class GenerativeModel:
         return transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((self.target_image_size, self.target_image_size), 
-                              interpolation=InterpolationMode.LANCZOS),
+                              interpolation=InterpolationMode.BILINEAR),
             transforms.ToTensor()
         ])
     
@@ -62,7 +63,7 @@ class GenerativeModel:
         for _ in range(self.n_critic):
             with torch.no_grad():
                 fake_images = self.generator(inputs, masks)
-            c_loss_dict = self.c_trainer.step(inputs, fake_images, masks)
+            c_loss_dict = self.c_trainer.step(inputs, fake_images)
         g_loss_dict, fake_images = self.g_trainer.step(inputs, targets, masks)
         
         return {'g_losses': g_loss_dict, 'd_losses': c_loss_dict}
@@ -147,6 +148,31 @@ class GenerativeModel:
         self.c_trainer.save_model_state_dict(output_path)
         self.save_checkpoint(output_path)
 
+
+class GenerativeModelInference:
+    def __init__(self, generative_model: GenerativeModel, device: str = 'cpu'):
+        self.model = generative_model
+        self.device = device
+        self.model.generator.eval()
+        self.model.critic.eval()
+
+    def generate_image(self, input_data, mask=None, save_path=None):
+        input_data = input_data.to(self.device)
+        if mask is not None:
+            mask = mask.to(self.device)
+        
+        with torch.no_grad():
+            generated_image = self.model.generator(input_data, mask) if mask is not None else self.model.generator(input_data)
+        
+        generated_image = torch.clamp(generated_image, 0, 1)
+
+        if save_path is not None:
+            save_image(generated_image, save_path)
+            print(f"Изображение сохранено по пути: {save_path}")
+        
+        return generated_image
+
+
 class WGANGeneratorModelTrainer(IModelTrainer):
     def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lr):
         self.model = model
@@ -211,7 +237,7 @@ class WGANCriticModelTrainer(IModelTrainer):
     def save_model_state_dict(self, output_path):
         torch.save(self.model.state_dict(), os.path.join(output_path, "critic.pt"))
     
-    def _gradient_penalty(self, real_samples, fake_samples):
+    def _calc_gradient_penalty(self, real_samples, fake_samples):
         alpha = torch.rand(real_samples.size(0), 1, 1, 1, device=real_samples.device)
 
         interpolates = alpha * real_samples + ((1 - alpha) * fake_samples)
@@ -230,28 +256,28 @@ class WGANCriticModelTrainer(IModelTrainer):
         gradient_norm = gradients.norm(2, dim=1)
         return ((gradient_norm - 1) ** 2).mean()
     
-    def _calc_wasserstein_loss(self, real_target, fake_generated, masks):
+    def _calc_wasserstein_loss(self, real_target, fake_generated):
         real_pred = self.model(real_target)
-        fake_pred = self.model(fake_generated.detach())
+        fake_pred = self.model(fake_generated)
         wasserstein_loss = -torch.mean(real_pred) + torch.mean(fake_pred)
-        gp = self._gradient_penalty(real_target, fake_generated.detach())
-        return wasserstein_loss + self.lambda_gp * gp
+        return wasserstein_loss
     
-    def step(self, real_target, fake_generated, masks):
+    def step(self, real_target, fake_generated):
         self.model.train()
         self.optimizer.zero_grad()
         
-        wasserstein_loss = self._calc_wasserstein_loss(
-            real_target=real_target, 
-            fake_generated=fake_generated,
-            masks=masks
-        )
+        wasserstein_loss = self._calc_wasserstein_loss(real_target=real_target, fake_generated=fake_generated.detach())
+        grad_penalty = self._calc_gradient_penalty(real_samples=real_target, fake_samples=fake_generated.detach())
         
-        wasserstein_loss.backward()
+        total_loss = wasserstein_loss + grad_penalty * self.lambda_gp
+        
+        total_loss.backward()
         self.optimizer.step()
                 
         loss_dict = {
-            'total_loss': wasserstein_loss.item()
+            'total_loss': total_loss.item(),
+            'wasserstein_loss': wasserstein_loss.item(),
+            'gradient_penalty': grad_penalty.item()
         }
         self.loss_history.append(loss_dict)
         return loss_dict

@@ -1,6 +1,8 @@
 import os
 import torch
 import matplotlib
+
+from src.common.image_processing import Utils
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -28,9 +30,10 @@ class GANTrainer:
         os.makedirs(self.output_path, exist_ok=True)
         
     def train(self):
-        train_loader, val_loader = self.dataset_processor.create_dataloaders(
-            batch_size=self.batch_size, shuffle=True, workers=6, val_ratio=self.val_ratio
-        )
+        train_loader, val_loader = self.dataset_processor.create_dataloaders(batch_size=self.batch_size, 
+                                                                            shuffle=True, 
+                                                                            workers=6, 
+                                                                            val_ratio=self.val_ratio)
 
         best_val_loss = float('inf')
         patience_counter = 0
@@ -54,8 +57,9 @@ class GANTrainer:
             
             # Обучение
             self.model.generator.train()
-            for i, batch in enumerate(tqdm(train_loader, total=len(train_loader), desc=f"Epoch {epoch+1} Train")):
+            for i, batch in enumerate(tqdm(train_loader, desc=f"Epoch {epoch+1} Train")):
                 inputs, targets, masks = [tensor.to(self.device) for tensor in batch]
+                
                 losses = self.model.train_step(inputs, targets, masks)
                 
                 # Обновление потерь

@@ -27,3 +27,20 @@ class Utils:
             crop_size_w, crop_size_h = int(w * (crop_percent / 100)), int(h * (crop_percent / 100))
             return img[crop_size_w:w-crop_size_w, crop_size_h:h-crop_size_h]
         return img
+    
+    @staticmethod
+    def check_binary_format(img: np.ndarray) -> bool:
+        """
+        Проверяет, что изображение является бинарным: содержит **только** значения 0 и 1.
+        
+        Args:
+            img (np.ndarray): Изображение, представленное в виде массива.
+        
+        Returns:
+            bool: True, если изображение бинарное, иначе False.
+        """
+        
+        unique_values = np.unique(img)
+        return np.array_equal(unique_values, [0]) or \
+            np.array_equal(unique_values, [1]) or \
+            np.array_equal(unique_values, [0, 1])
