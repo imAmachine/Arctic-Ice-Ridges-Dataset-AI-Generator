@@ -28,18 +28,54 @@ class MaskingProcessor:
         mask[top:top + bh, left:left + bw] = 0.0
         return mask
     
-    def process(self, image: np.ndarray, masked=False) -> tuple[np.ndarray, np.ndarray]:
+    def process(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Применяет повреждения к изображению"""
         img_size = image.shape
         damaged = image.copy()
         
         damage_mask = self.create_center_mask(shape=img_size)
-        
-        if masked:
-            damaged *= (1 - damage_mask)
+        damaged *= (1 - damage_mask) # применение маски
             
         return (damaged, damage_mask)
-    
+
+
+class InferenceMaskingProcessor:
+    def __init__(self, outpaint_ratio: float = 0.2):
+        """
+        outpaint_ratio: насколько увеличить изображение по ширине и высоте (20% = 0.2)
+        """
+        self.outpaint_ratio = outpaint_ratio
+
+    def create_outpaint_mask(self, original_shape, target_shape) -> np.ndarray:
+        """Создаёт маску для области, которую нужно сгенерировать (края)"""
+        mask = np.ones(target_shape, dtype=np.float32)
+
+        h0, w0 = original_shape
+        h1, w1 = target_shape
+
+        top = (h1 - h0) // 2
+        left = (w1 - w0) // 2
+
+        mask[top:top + h0, left:left + w0] = 0.0
+        return mask
+
+    def process(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Расширяет изображение и создаёт маску генерации на краях
+        """
+        h, w = image.shape[:2]
+        new_h = int(h * (1 + self.outpaint_ratio))
+        new_w = int(w * (1 + self.outpaint_ratio))
+
+        padded_image = np.zeros((new_h, new_w), dtype=image.dtype)
+        top = (new_h - h) // 2
+        left = (new_w - w) // 2
+        padded_image[top:top + h, left:left + w] = image
+
+        outpaint_mask = self.create_outpaint_mask((h, w), (new_h, new_w))
+
+        return (padded_image, outpaint_mask)
+
 
 class IceRidgeDataset(Dataset):
     def __init__(self, metadata: Dict[str, Dict], dataset_processor: 'MaskingProcessor', augmentations: Optional[Callable] = None, model_transforms: Optional[Callable] = None, random_select: bool = False):
@@ -66,7 +102,9 @@ class IceRidgeDataset(Dataset):
         key = random.choice(self.image_keys) if self.random_select else self.image_keys[idx]
         orig_meta = self.metadata[key]
         orig_path = orig_meta.get('path')
-        return IceRidgeDataset.prepare_data(orig_path, self.processor, self.augmentations, self.model_transforms)
+        img = Utils.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
+        
+        return IceRidgeDataset.prepare_data(img, self.processor, self.augmentations, self.model_transforms)
     
     @staticmethod
     def apply_transforms(model_transforms: Optional[Callable], images: List[np.ndarray]) -> torch.Tensor:
@@ -75,11 +113,10 @@ class IceRidgeDataset(Dataset):
         return images
     
     @staticmethod
-    def prepare_data(img_path, processor: 'MaskingProcessor', augmentations: Optional[Callable], model_transforms: Optional[Callable]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        img = Utils.cv2_load_image(img_path, cv2.IMREAD_GRAYSCALE)
+    def prepare_data(img: np.ndarray, processor: 'MaskingProcessor', augmentations: Optional[Callable], model_transforms: Optional[Callable]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         original = Utils.binarize_by_threshold(img).astype(np.float32)
         img_aug = augmentations(image=original)['image'] if augmentations is not None else original
-        damaged, damage_mask = processor.process(image=img_aug, masked=True)
+        damaged, damage_mask = processor.process(image=img_aug)
         
         batch = (damaged, original, damage_mask)
         
@@ -134,7 +171,7 @@ class DatasetCreator:
         
         self.images_extentions = images_extentions
         self.model_transforms = model_transforms
-        
+    
     def preprocess_data(self):
         if self.preprocessor.processors is not None and len(self.preprocessor.processors) > 0:
             os.makedirs(self.preprocessed_data_path, exist_ok=True)

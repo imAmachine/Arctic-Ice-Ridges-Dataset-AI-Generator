@@ -1,9 +1,11 @@
 import os
 from typing import Dict, Literal, Tuple, Type
+import numpy as np
 import torch
 import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
 
+from src.gan.dataset import IceRidgeDataset, InferenceMaskingProcessor
 from src.common.interfaces import IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
 
@@ -35,7 +37,7 @@ class GenerativeModel:
         
         self.g_trainer, self.c_trainer = self._init_trainers()
 
-    def model_transforms(self) -> Type['transforms.Compose']:
+    def get_model_transforms(self) -> Type['transforms.Compose']:
         return transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((self.target_image_size, self.target_image_size), 
@@ -129,34 +131,29 @@ class GenerativeModel:
         else:
             raise FileNotFoundError(f"Checkpoint файл не найден по пути {checkpoint_path}")
 
-    def _load_weights(self, output_path):
-        """Загружает только веса моделей (устаревший метод)"""
-        os.makedirs(output_path, exist_ok=True)
-        
-        # Сначала проверим наличие checkpoint файла
-        checkpoint_path = os.path.join(output_path, 'training_checkpoint.pt')
-        if os.path.exists(checkpoint_path):
-            try:
-                return self.load_checkpoint(output_path)
-            except Exception as e:
-                print(f"Ошибка загрузки checkpoint: {e}. Пробуем загрузить только веса моделей.")
-        
-        # Если checkpoint не найден или не удалось загрузить, пробуем загрузить отдельные файлы с весами
-        gen_path = os.path.join(output_path, 'generator.pt')
-        critic_path = os.path.join(output_path, 'critic.pt')
-        if os.path.exists(gen_path) and os.path.exists(critic_path):
-            self.generator.load_state_dict(torch.load(gen_path, map_location=self.device, weights_only=True))
-            self.critic.load_state_dict(torch.load(critic_path, map_location=self.device, weights_only=True))
-            print("Загружены только веса моделей (без состояния обучения)")
-            return False
-        else:
-            raise FileNotFoundError('Ошибка загрузки весов моделей')
+    def infer_generate(self, preprocessed_img: str, checkpoint_path: str, processor: InferenceMaskingProcessor) -> Tuple[np.ndarray, np.ndarray]:
+        self.switch_mode('eval')
+        self.load_checkpoint(checkpoint_path)
 
-    def _save_models(self, output_path):
-        """Сохраняет только веса моделей (устаревший метод)"""
-        self.g_trainer.save_model_state_dict(output_path)
-        self.c_trainer.save_model_state_dict(output_path)
-        self.save_checkpoint(output_path)
+        # Подготовка данных: возвращает damaged, original, mask (все torch.Tensor)
+        damaged, original, outpaint_mask = IceRidgeDataset.prepare_data(
+            img=preprocessed_img,
+            processor=processor,
+            augmentations=None,
+            model_transforms=self.get_model_transforms()
+        )
+        
+        damaged = damaged.to(self.device)
+        outpaint_mask = outpaint_mask.to(self.device)
+
+        with torch.no_grad():
+            generated = self.generator(damaged.unsqueeze(1), outpaint_mask.unsqueeze(1))
+
+        # Результат в numpy
+        generated_img = generated.detach().cpu().squeeze(0).squeeze(0).numpy() * 255
+        original_img = original.squeeze(0).squeeze(0).numpy() * 255
+
+        return generated_img, original_img
 
 
 class WGANGeneratorModelTrainer(IModelTrainer):

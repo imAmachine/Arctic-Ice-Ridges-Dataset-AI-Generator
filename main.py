@@ -1,15 +1,17 @@
-from src.gan.dataset import DatasetCreator
+from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
+from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel
 from src.gan.train import GANTrainer
 from settings import *
 import argparse
-from torchvision.utils import save_image
 
 
 def main():
     parser = argparse.ArgumentParser(description='GAN модель для генерации ледовых торосов')
     parser.add_argument('--preprocess', action='store_true', help='Препроцессинг исходных данных')
     parser.add_argument('--train', action='store_true', help='Обучение модели')
+    parser.add_argument('--infer', action='store_true', help='Инференс на одном изображении')
+    parser.add_argument('--input_path', type=str, help='Путь к изображению для инференса')
     parser.add_argument('--epochs', type=int, default=20000, help='Количество эпох обучения')
     parser.add_argument('--batch_size', type=int, default=1, help='Размер батча')
     parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
@@ -32,13 +34,13 @@ def main():
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
-                                 original_data_path=MASKS_FOLDER_PATH,
-                                 preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
-                                 images_extentions=MASKS_FILE_EXTENSIONS,
-                                 model_transforms=model_gan.model_transforms(),
-                                 preprocessors=PREPROCESSORS,
-                                 augmentations=AUGMENTATIONS,
-                                 device=DEVICE)
+                                original_data_path=MASKS_FOLDER_PATH,
+                                preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
+                                images_extentions=MASKS_FILE_EXTENSIONS,
+                                model_transforms=model_gan.get_model_transforms(),
+                                preprocessors=PREPROCESSORS,
+                                augmentations=AUGMENTATIONS,
+                                device=DEVICE)
 
     # Препроцессинг данных
     if args.preprocess or run_all:
@@ -59,6 +61,25 @@ def main():
                              checkpoints_ratio=15)
         
         trainer.train()
+
+    # Инференс
+    if args.infer:
+        if not args.input_path:
+            print("Ошибка: для инференса необходимо указать --input_path путь к изображению.")
+            return
+        img = Utils.cv2_load_image(args.input_path, cv2.IMREAD_GRAYSCALE)
+        preprocessor = IceRidgeDatasetPreprocessor(PREPROCESSORS)
+        preprocessed_img = preprocessor.process_image(img)
+        
+        processor = InferenceMaskingProcessor(outpaint_ratio=0.2)
+        generated, original = model_gan.infer_generate(preprocessed_img=preprocessed_img, 
+                                                       checkpoint_path=WEIGHTS_PATH, 
+                                                       processor=processor)
+
+        output_path = './output.png'
+        cv2.imwrite(output_path, generated)
+        print(f"Генерация завершена. Результат сохранён в {output_path}")
+        
 
 if __name__ == "__main__":
     main()

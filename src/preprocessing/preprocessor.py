@@ -21,7 +21,7 @@ class IceRidgeDatasetPreprocessor:
     def add_processors(self, processors: List[IProcessor]) -> None:
         self.processors.extend(processors)
     
-    def _process_image(self, image: np.ndarray, filename: str, output_path: str) -> np.ndarray:
+    def process_image(self, image: np.ndarray, filename: str = '', output_path: str = '') -> np.ndarray:
         processing_img = image
         current_metadata = {}
         
@@ -47,7 +47,7 @@ class IceRidgeDatasetPreprocessor:
             processing_img = Utils.cv2_load_image(os.path.join(input_path, filename), cv2_read_mode=IMREAD_GRAYSCALE)
             output_path = self._get_output_path(filename=filename, output_folder_path=output_folder)
             print(f'Обработка {filename}')
-            processing_img = self._process_image(processing_img, filename, output_path)
+            processing_img = self.process_image(processing_img, filename, output_path)
             self._write_processed_img(processing_img, output_path)
             
     
