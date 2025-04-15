@@ -1,3 +1,4 @@
+import json
 import cv2
 import numpy as np
 
@@ -44,3 +45,13 @@ class Utils:
         return np.array_equal(unique_values, [0]) or \
             np.array_equal(unique_values, [1]) or \
             np.array_equal(unique_values, [0, 1])
+    
+    @staticmethod
+    def to_json(data, path):
+        with open(path, 'w+', encoding='utf8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    
+    @staticmethod
+    def from_json(path):
+        with open(path, 'r', encoding='utf8') as f:
+            return json.load(f)

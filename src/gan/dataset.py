@@ -1,16 +1,15 @@
+import os
+import random
+from typing import Callable, Dict, List, Literal, Optional, Tuple, Type
+
 import torch
 from torch.utils.data import DataLoader, Dataset
 import albumentations as A
+
+import cv2
 import numpy as np
 
-import os
-import cv2
-import json
-import random
-from typing import Dict, List, Tuple
-
-from src.common.image_processing import Utils
-
+from src.common.utils import Utils
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.preprocessing.processors import *
 
@@ -19,7 +18,7 @@ class MaskingProcessor:
     def __init__(self, mask_padding=0.15):
         self.shift_percent = mask_padding
     
-    def create_center_mask(self, shape):
+    def create_center_mask(self, shape) -> np.ndarray:
         """Создаём маску, которая накрывает центральную область изображения"""
         h, w = shape
         bh, bw = int(h * (1 - self.shift_percent)), int(w * (1 - self.shift_percent))
@@ -29,7 +28,7 @@ class MaskingProcessor:
         mask[top:top + bh, left:left + bw] = 0.0
         return mask
     
-    def process(self, image: np.ndarray, masked=False) -> tuple:
+    def process(self, image: np.ndarray, masked=False) -> tuple[np.ndarray, np.ndarray]:
         """Применяет повреждения к изображению"""
         img_size = image.shape
         damaged = image.copy()
@@ -39,11 +38,11 @@ class MaskingProcessor:
         if masked:
             damaged *= (1 - damage_mask)
             
-        return damaged, damage_mask
+        return (damaged, damage_mask)
     
 
 class IceRidgeDataset(Dataset):
-    def __init__(self, metadata: Dict, dataset_processor, augmentations=None, model_transforms=None, random_select: bool = False):
+    def __init__(self, metadata: Dict[str, Dict], dataset_processor: 'MaskingProcessor', augmentations: Optional[Callable] = None, model_transforms: Optional[Callable] = None, random_select: bool = False):
         """
         Args:
             metadata: словарь с метаданными изображений
@@ -64,50 +63,33 @@ class IceRidgeDataset(Dataset):
         return len(self.image_keys)
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        # Если датасет очень маленький, можно случайно выбирать изображение, а не по порядку.
-        if self.random_select:
-            rand_idx = random.randint(0, len(self.image_keys) - 1)
-            key = self.image_keys[rand_idx]
-        else:
-            key = self.image_keys[idx]
-            
-        original = self._read_bin_image(key)
+        key = random.choice(self.image_keys) if self.random_select else self.image_keys[idx]
+        orig_meta = self.metadata[key]
+        orig_path = orig_meta.get('path')
+        return IceRidgeDataset.prepare_data(orig_path, self.processor, self.augmentations, self.model_transforms)
     
-        img = original
-        if self.augmentations is not None:
-            img = self.augmentations(image=original)['image']
+    @staticmethod
+    def apply_transforms(model_transforms: Optional[Callable], images: List[np.ndarray]) -> torch.Tensor:
+        if model_transforms is not None:
+            return  [model_transforms(img) for img in images]
+        return images
     
-        # Получаем пару: повреждённое изображение и маску (обработка внутри processor)
-        damaged, mask = self._get_processed_pair(input_img=img, masked=True)
+    @staticmethod
+    def prepare_data(img_path, processor: 'MaskingProcessor', augmentations: Optional[Callable], model_transforms: Optional[Callable]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        img = Utils.cv2_load_image(img_path, cv2.IMREAD_GRAYSCALE)
+        original = Utils.binarize_by_threshold(img).astype(np.float32)
+        img_aug = augmentations(image=original)['image'] if augmentations is not None else original
+        damaged, damage_mask = processor.process(image=img_aug, masked=True)
         
-        # Преобразование изображений под формат модели
-        damaged = self.apply_model_transforms(damaged)
-        original_transformed = self.apply_model_transforms(img)
-        mask_transformed = self.apply_model_transforms(mask)
-    
-        # Бинаризация, если необходимо (например, для маски и иных тензоров)
-        triplet = (damaged, original_transformed, mask_transformed)
-        binarized = [(x > 0.1).float() for x in triplet]
+        batch = (damaged, original, damage_mask)
+        
+        tensors = IceRidgeDataset.apply_transforms(model_transforms, batch)
+        binarized = [(x > 0.0).float() for x in tensors]
         
         return tuple(binarized)
     
-    def _read_bin_image(self, metadata_key) -> np.ndarray:
-        orig_meta = self.metadata[metadata_key]
-        orig_path = orig_meta.get('path')
-        img = Utils.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
-        bin_img = Utils.binarize_by_threshold(img)
-        return bin_img.astype(np.float32)
-    
-    def _get_processed_pair(self, input_img, masked: bool):
-        return self.processor.process(input_img.astype(np.float32), masked)
-    
-    def apply_model_transforms(self, img: np.ndarray) -> torch.Tensor:
-        if self.model_transforms:
-            return self.model_transforms(img)
-        return torch.tensor(img, dtype=torch.float32).unsqueeze(0)
-        
     @staticmethod
-    def split_dataset(metadata: Dict, val_ratio) -> Tuple[Dict, Dict]:
+    def split_dataset(metadata: Dict[str, Dict], val_ratio: float) -> Dict[str, Optional[Dict[str, Dict]]]:
         """
         Разделяет метаданные на обучающую и валидационную выборки,
         так чтобы данные одного оригинального изображения не оказывались в обеих выборках.
@@ -117,17 +99,21 @@ class IceRidgeDataset(Dataset):
         
         unique_origins = list(metadata.keys())
         random.shuffle(unique_origins)
+        val_size = 0
+        train_origins, val_origins = [], []
         
-        val_size = max(0, int(len(unique_origins) * val_ratio))
-        val_origins = unique_origins[:val_size]
+        if val_ratio > 0.0:
+            val_size = max(1, int(len(unique_origins) * val_ratio))
+
         train_origins = unique_origins[val_size:]
+        val_origins = unique_origins[:val_size]
         
         train_metadata = {orig: metadata[orig] for orig in train_origins}
         val_metadata = {orig: metadata[orig] for orig in val_origins}
         
-        print(f"Разделение данных: {len(train_metadata)} обучающих, {len(val_metadata)} валидационных")
+        print(f"{len(train_origins)} обучающих, {len(val_origins)} валидационных данных")
         
-        return train_metadata, val_metadata
+        return {"train": train_metadata if len(train_origins) > 0 else None, "valid": val_metadata if len(val_origins) > 0 else None}
 
 
 class DatasetCreator:
@@ -156,53 +142,40 @@ class DatasetCreator:
             if len(self.preprocessor.metadata) == 0:
                 print('Метаданные не были получены после предобработки. Файл создан не будет!')
                 return
-            self.to_json(self.preprocessor.metadata, self.preprocessed_metadata_json_path)
+            Utils.to_json(self.preprocessor.metadata, self.preprocessed_metadata_json_path)
         else:
             print('Пайплайн предобработки не объявлен!')
     
-    def create_dataloaders(self, batch_size, shuffle, workers, random_select, val_ratio=0.2, val_augmentations=False, train_augmentations=True):
+    def create_loader(self, metadata, batch_size, shuffle, workers, is_augmentate, random_select):
+        loader = None
+        
+        if metadata is not None:
+            train_augs = self.augmentations if is_augmentate else None
+            train_dataset = IceRidgeDataset(metadata, 
+                                            dataset_processor=self.dataset_processor, 
+                                            augmentations=train_augs,
+                                            model_transforms=self.model_transforms,
+                                            random_select=random_select)
+            loader = DataLoader(
+                train_dataset,
+                batch_size=batch_size,
+                shuffle=shuffle,
+                num_workers=workers
+            )
+            
+            return loader
+    
+    def create_train_dataloaders(self, batch_size, shuffle, workers, random_select=True, val_ratio=0.2, train_augmentations=True, val_augmentations=False) -> Dict[Literal['train', 'valid'], Dict]:
         if not os.path.exists(self.preprocessed_metadata_json_path):
             self.preprocess_data()
         
-        dataset_metadata = self.from_json(self.preprocessed_metadata_json_path)
+        dataset_metadata = Utils.from_json(self.preprocessed_metadata_json_path)
+        splitted = IceRidgeDataset.split_dataset(dataset_metadata, val_ratio=val_ratio)
+        train_metadata, valid_metadata = splitted.get('train'), splitted.get('valid')
         
-        train_metadata, val_metadata = IceRidgeDataset.split_dataset(dataset_metadata, val_ratio=val_ratio)
+        print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
         
-        print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(val_metadata)}")
+        train_loader = self.create_loader(train_metadata, batch_size, shuffle, workers, train_augmentations, random_select)
+        valid_loader = self.create_loader(valid_metadata, batch_size, shuffle, workers, train_augmentations, random_select)
         
-        train_augs = self.augmentations if train_augmentations else None
-        train_dataset = IceRidgeDataset(train_metadata, 
-                                        dataset_processor=self.dataset_processor, 
-                                        augmentations=train_augs,
-                                        model_transforms=self.model_transforms,
-                                        random_select=random_select)
-        
-        val_augs = self.augmentations if val_augmentations else None
-        val_dataset = IceRidgeDataset(val_metadata, 
-                                      dataset_processor=self.dataset_processor, 
-                                      augmentations=val_augs,
-                                      model_transforms=self.model_transforms)
-        
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=workers
-        )
-        
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=workers
-        )
-        
-        return train_loader, val_loader
-
-    def to_json(self, metadata, path):
-        with open(path, 'w+', encoding='utf8') as f:
-            json.dump(metadata, f, indent=4, ensure_ascii=False)
-    
-    def from_json(self, path):
-        with open(path, 'r', encoding='utf8') as f:
-            return json.load(f)
+        return {'train': train_loader, 'valid': valid_loader}

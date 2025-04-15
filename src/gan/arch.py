@@ -18,10 +18,10 @@ class ResidualBlock(nn.Module):
     def __init__(self, channels):
         super(ResidualBlock, self).__init__()
         self.block = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, dilation=1),
             nn.InstanceNorm2d(channels, affine=True),
             nn.ReLU(inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, dilation=1),
             nn.InstanceNorm2d(channels, affine=True)
         )
 
@@ -52,21 +52,17 @@ class WGanGenerator(nn.Module):
         self.enc2 = ConvBlock(feature_maps, feature_maps * 2)
         self.enc3 = ConvBlock(feature_maps * 2, feature_maps * 4)
         self.enc4 = ConvBlock(feature_maps * 4, feature_maps * 8)
-        self.enc5 = ConvBlock(feature_maps * 8, feature_maps * 8)
+        self.enc5 = ConvBlock(feature_maps * 8, feature_maps * 16)
 
         self.bottleneck = nn.Sequential(
-            *[ResidualBlock(feature_maps * 8) for _ in range(3)]
+            *[ResidualBlock(feature_maps * 16) for _ in range(3)]
         )
 
-        self.dec5 = UpConvBlock(feature_maps * 16, feature_maps * 8, dropout=True)  # 512+512 -> 1024
-        self.dec4 = UpConvBlock(feature_maps * 16, feature_maps * 4, dropout=True)  # 512+512 -> 1024
-        self.dec3 = UpConvBlock(feature_maps * 8, feature_maps * 2, dropout=False)  # 256+256 -> 512
-        self.dec2 = UpConvBlock(feature_maps * 4, feature_maps, dropout=False)     # 128+128 -> 256
-        self.dec1 = nn.Sequential(
-            nn.ConvTranspose2d(feature_maps * 2, feature_maps, kernel_size=4, stride=2, padding=1),
-            nn.InstanceNorm2d(feature_maps, affine=True),
-            nn.ReLU(inplace=True)
-        )
+        self.dec5 = UpConvBlock(feature_maps * 16 + feature_maps * 16, feature_maps * 8, dropout=True)
+        self.dec4 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=True)
+        self.dec3 = UpConvBlock(feature_maps * 8 + feature_maps * 4, feature_maps * 4, dropout=False)
+        self.dec2 = UpConvBlock(feature_maps * 4 + feature_maps * 2, feature_maps * 2, dropout=False)
+        self.dec1 = UpConvBlock(feature_maps * 2 + feature_maps, feature_maps, dropout=False)
         
         self.final = nn.Sequential(
             nn.ConvTranspose2d(feature_maps, 1, kernel_size=3, stride=1, padding=1),

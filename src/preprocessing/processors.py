@@ -4,7 +4,7 @@ import torch
 
 from src.common.analyze_tools import FractalAnalyzer, FractalAnalyzerGPU
 from ..common.interfaces import IProcessor
-from ..common.image_processing import Utils
+from ..common.utils import Utils
 
 class CropProcessor(IProcessor):
     """Процессор для обрезки изображения"""

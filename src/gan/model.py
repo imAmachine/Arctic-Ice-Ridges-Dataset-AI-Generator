@@ -1,8 +1,8 @@
 import os
+from typing import Dict, Literal, Tuple, Type
 import torch
 import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
-from torchvision.utils import save_image
 
 from src.common.interfaces import IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
@@ -35,7 +35,7 @@ class GenerativeModel:
         
         self.g_trainer, self.c_trainer = self._init_trainers()
 
-    def get_transforms(self):
+    def model_transforms(self) -> Type['transforms.Compose']:
         return transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((self.target_image_size, self.target_image_size), 
@@ -43,29 +43,39 @@ class GenerativeModel:
             transforms.ToTensor()
         ])
     
-    def _init_trainers(self):
+    def switch_mode(self, mode: Literal['train', 'eval'] = 'train') -> None:
+        if mode == 'train':
+            self.generator.train()
+            self.critic.train()
+        
+        if mode == 'eval':
+            self.generator.eval()
+            self.critic.eval()
+    
+    def _init_trainers(self) -> Tuple[Type['WGANGeneratorModelTrainer'], Type['WGANCriticModelTrainer']]:
         g_trainer = WGANGeneratorModelTrainer(model=self.generator, 
                                               critic=self.critic, 
                                               lr=self.learning_rate,
                                               lambda_w=self.lambda_w,
                                               lambda_l1=self.lambda_l1,
                                               lambda_bce=self.lambda_bce)
+        
         c_trainer = WGANCriticModelTrainer(model=self.critic, 
                                            lambda_gp=self.lambda_gp,
                                            lr=self.learning_rate)
         
         return g_trainer, c_trainer
     
-    def train_step(self, inputs, targets, masks):
+    def train_step(self, damaged, original, damage_mask) -> Dict[Literal['g_losses', 'd_losses'], Dict]:
         self.current_iteration += 1
         
         c_loss_dict = {}
         for _ in range(self.n_critic):
             with torch.no_grad():
-                fake_images = self.generator(inputs, masks)
-            c_loss_dict = self.c_trainer.step(inputs, fake_images)
-        g_loss_dict, fake_images = self.g_trainer.step(inputs, targets, masks)
-        
+                fake_images = self.generator(damaged, damage_mask) # генерация изображения
+
+            c_loss_dict = self.c_trainer.step(original, fake_images) # обучение критика
+        g_loss_dict, fake_images = self.g_trainer.step(damaged, original, damage_mask) # обучение генератора
         return {'g_losses': g_loss_dict, 'd_losses': c_loss_dict}
     
     def save_checkpoint(self, output_path):
@@ -147,30 +157,6 @@ class GenerativeModel:
         self.g_trainer.save_model_state_dict(output_path)
         self.c_trainer.save_model_state_dict(output_path)
         self.save_checkpoint(output_path)
-
-
-class GenerativeModelInference:
-    def __init__(self, generative_model: GenerativeModel, device: str = 'cpu'):
-        self.model = generative_model
-        self.device = device
-        self.model.generator.eval()
-        self.model.critic.eval()
-
-    def generate_image(self, input_data, mask=None, save_path=None):
-        input_data = input_data.to(self.device)
-        if mask is not None:
-            mask = mask.to(self.device)
-        
-        with torch.no_grad():
-            generated_image = self.model.generator(input_data, mask) if mask is not None else self.model.generator(input_data)
-        
-        generated_image = torch.clamp(generated_image, 0, 1)
-
-        if save_path is not None:
-            save_image(generated_image, save_path)
-            print(f"Изображение сохранено по пути: {save_path}")
-        
-        return generated_image
 
 
 class WGANGeneratorModelTrainer(IModelTrainer):
