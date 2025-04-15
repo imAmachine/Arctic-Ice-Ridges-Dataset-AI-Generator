@@ -118,7 +118,7 @@ class IceRidgeDataset(Dataset):
         img_aug = augmentations(image=original)['image'] if augmentations is not None else original
         damaged, damage_mask = processor.process(image=img_aug)
         
-        batch = (damaged, original, damage_mask)
+        batch = (damaged, img_aug, damage_mask)
         
         tensors = IceRidgeDataset.apply_transforms(model_transforms, batch)
         binarized = [(x > 0.0).float() for x in tensors]

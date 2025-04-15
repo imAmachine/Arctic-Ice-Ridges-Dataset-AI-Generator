@@ -21,15 +21,15 @@ def main():
     run_all = not (args.preprocess or args.train or args.infer)
 
     # Инициализация модели
-    model_gan = GenerativeModel(target_image_size=256, 
+    model_gan = GenerativeModel(target_image_size=512, 
                                 g_feature_maps=64, 
                                 d_feature_maps=32,
                                 device=DEVICE,
-                                lr=0.0005,
+                                lr=0.0007,
                                 n_critic=5,
-                                lambda_w=1.0,
+                                lambda_w=1.5,
                                 lambda_bce=2.0,
-                                lambda_gp=5.0,
+                                lambda_gp=10.0,
                                 lambda_l1=1.5)
 
     # Инициализация создателя датасета
