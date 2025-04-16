@@ -19,7 +19,8 @@ class GenerativeModel:
                  lr=0.0002,
                  lambda_w=0.5,
                  lambda_bce=1.2,
-                 lambda_l1=1.0):
+                 lambda_l1=1.0,
+                 lambda_bin_enf=1.0):
         self.device = device
         self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
         self.critic = WGanCritic(input_channels=1, feature_maps=d_feature_maps).to(self.device)
@@ -34,6 +35,7 @@ class GenerativeModel:
         self.lambda_w = lambda_w
         self.lambda_bce = lambda_bce
         self.lambda_l1 = lambda_l1
+        self.lambda_bin_enf = lambda_bin_enf
         
         self.g_trainer, self.c_trainer = self._init_trainers()
 
@@ -60,7 +62,8 @@ class GenerativeModel:
                                               lr=self.learning_rate,
                                               lambda_w=self.lambda_w,
                                               lambda_l1=self.lambda_l1,
-                                              lambda_bce=self.lambda_bce)
+                                              lambda_bce=self.lambda_bce,
+                                              lambda_bin_enf=self.lambda_bin_enf)
         
         c_trainer = WGANCriticModelTrainer(model=self.critic, 
                                            lambda_gp=self.lambda_gp,
@@ -135,7 +138,7 @@ class GenerativeModel:
         self.switch_mode('eval')
         self.load_checkpoint(checkpoint_path)
 
-        # Подготовка данных: возвращает damaged, original, mask (все torch.Tensor)
+        # Подготовка данных: возвращает damaged, original, mask
         damaged, original, outpaint_mask = IceRidgeDataset.prepare_data(
             img=preprocessed_img,
             processor=processor,
@@ -157,7 +160,7 @@ class GenerativeModel:
 
 
 class WGANGeneratorModelTrainer(IModelTrainer):
-    def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lr):
+    def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lambda_bin_enf, lr):
         self.model = model
         self.critic = critic
 
@@ -172,6 +175,7 @@ class WGANGeneratorModelTrainer(IModelTrainer):
         self.lambda_w = lambda_w
         self.lambda_bce = lambda_bce
         self.lambda_l1 = lambda_l1
+        self.lambda_bin_enf = lambda_bin_enf
         
         self.loss_history = []
         self.loss_history_val = []
@@ -179,6 +183,9 @@ class WGANGeneratorModelTrainer(IModelTrainer):
     def _calc_adv_loss(self, generated):
         fake_pred_damaged = self.critic(generated)
         return -torch.mean(fake_pred_damaged)
+    
+    def _binary_enforcement_loss(self, generated):
+        return torch.mean((generated * (1 - generated)))
     
     def save_model_state_dict(self, output_path):
         torch.save(self.model.state_dict(), os.path.join(output_path, "generator.pt"))
@@ -189,9 +196,11 @@ class WGANGeneratorModelTrainer(IModelTrainer):
         generated = self.model(damaged, mask)
         
         w_loss = self._calc_adv_loss(generated)
-        bce_masked = self._BCE(generated, target)
-        l1_context = self._L1(generated, target)
-        total_loss = w_loss * self.lambda_w + bce_masked * self.lambda_bce + l1_context * self.lambda_l1
+        bce = self._BCE(generated, target)
+        l1 = self._L1(generated, target)
+        binary_enf = self._binary_enforcement_loss(generated * mask)
+        
+        total_loss = w_loss * self.lambda_w + bce * self.lambda_bce + l1 * self.lambda_l1 + binary_enf * self.lambda_bin_enf
         
         total_loss.backward()
         self.optimizer.step()
@@ -199,8 +208,9 @@ class WGANGeneratorModelTrainer(IModelTrainer):
         loss_dict = {
             'total_loss': total_loss.item(),
             'w_loss': w_loss.item(),
-            'bce_masked': bce_masked.item(),
-            'l1_context': l1_context.item()
+            'bce': bce.item(),
+            'l1': l1.item(),
+            'be': binary_enf.item()
         }
         self.loss_history.append(loss_dict)
         

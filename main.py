@@ -2,7 +2,7 @@ from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel
 from src.gan.train import GANTrainer
-from interfaces import ImageGenerationApp
+from gui import ImageGenerationApp
 from settings import *
 import argparse
 import tkinter as tk
@@ -24,16 +24,17 @@ def main():
     run_all = not (args.preprocess or args.train or args.infer or args.gui)
 
     # Инициализация модели
-    model_gan = GenerativeModel(target_image_size=512, 
+    model_gan = GenerativeModel(target_image_size=224, 
                                 g_feature_maps=64, 
                                 d_feature_maps=32,
                                 device=DEVICE,
-                                lr=0.0007,
-                                n_critic=5,
-                                lambda_w=2.0,
-                                lambda_bce=3.0,
+                                lr=0.0005,
+                                n_critic=2,
+                                lambda_w=10.0,
+                                lambda_bce=10.0,
                                 lambda_gp=10.0,
-                                lambda_l1=1.5)
+                                lambda_l1=1.5,
+                                lambda_bin_enf=0.1)
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
@@ -60,7 +61,7 @@ def main():
                              device=DEVICE,
                              batch_size=args.batch_size,
                              load_weights=args.load_weights,
-                             val_ratio=0.1,
+                             val_ratio=0.2,
                              checkpoints_ratio=15)
         
         trainer.train()

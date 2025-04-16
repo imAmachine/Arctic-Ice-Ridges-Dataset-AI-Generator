@@ -39,13 +39,11 @@ class GANTrainer:
     def _load_checkpoint(self):
         if self.load_weights:
             try:
-                loaded = self.model._load_weights(self.output_path)
-                if loaded:
-                    print(f"Checkpoint загружен успешно. Продолжаем с итерации {self.model.current_iteration}.")
-                else:
-                    print("Загружены только веса моделей. Метрики и состояние оптимизаторов сброшены.")
-            except FileNotFoundError:
-                print("Веса не найдены. Начинаем обучение с нуля.")
+                _ = self.model.load_checkpoint(self.output_path)
+                print(f"Checkpoint загружен успешно. Продолжаем с итерации {self.model.current_iteration}.")
+            except FileNotFoundError as e:
+                print(f"Ошибка при загрузке чекпоинта: {e}")
+                print("Начинаем обучение с нуля.")
     
     def train(self):
         loaders = self.dataset_processor.create_train_dataloaders(batch_size=self.batch_size, shuffle=True, workers=6, val_ratio=self.val_ratio)
@@ -85,52 +83,62 @@ class GANTrainer:
             # Валидация
             if valid_loader is not None:
                 self.model.switch_mode('eval')
+                val_g_losses = defaultdict(float)
+                val_d_losses = defaultdict(float)
+                val_metrics = {'accuracy': [], 'f1': [], 'iou': []}
+                
                 with torch.no_grad():
                     for i, batch in enumerate(tqdm(valid_loader, desc=f"Epoch {epoch+1} Val")):
                         inputs, targets, masks = [tensor.to(self.device) for tensor in batch]
                         generated = self.model.generator(inputs, masks)
                         
+                        # Вычисляем потери для валидации
+                        # Здесь используем критерии из модели, но не делаем шаг оптимизации
+                        w_loss = self.model.g_trainer._calc_adv_loss(generated)
+                        bce = self.model.g_trainer._BCE(generated * masks, targets * masks)
+                        l1 = self.model.g_trainer._L1(generated, targets)
+                        total_loss = w_loss * self.model.lambda_w + bce * self.model.lambda_bce + l1 * self.model.lambda_l1
+                        
+                        # Добавляем в статистику валидации
+                        val_g_losses['total_loss'] += total_loss.item()
+                        val_g_losses['w_loss'] += w_loss.item()
+                        val_g_losses['bce'] += bce.item()
+                        val_g_losses['l1'] += l1.item()
+                        
+                        # Собираем метрики по всему валидационному набору
+                        acc, f1, iou = self.compute_metrics(generated, targets, masks)
+                        val_metrics['accuracy'].append(acc)
+                        val_metrics['f1'].append(f1)
+                        val_metrics['iou'].append(iou)
+                        
                         # Визуализация первого батча валидации
                         if i == 0:
                             self._visualize_batch(inputs, generated, targets, masks, epoch, phase='val')
 
-                # Средние потери за эпоху
+                # Средние потери за эпоху на валидации
+                avg_val_g_loss = {k: v / len(valid_loader) for k, v in val_g_losses.items()}
                 avg_g_loss = {k: v / len(train_loader) for k, v in epoch_g_losses.items()}
                 avg_d_loss = {k: v / len(train_loader) for k, v in epoch_d_losses.items()}
-                acc, f1, iou = self.compute_metrics(generated, targets, masks)
+                
+                # Средние метрики по всему валидационному набору
+                avg_val_acc = np.mean(val_metrics['accuracy'])
+                avg_val_f1 = np.mean(val_metrics['f1'])
+                avg_val_iou = np.mean(val_metrics['iou'])
+                
                 self.metrics_history['gen_losses'].append(avg_g_loss.get('total_loss', 0.0))
                 self.metrics_history['disc_losses'].append(avg_d_loss.get('total_loss', 0.0))
-                self.metrics_history.setdefault('accuracy', []).append(acc)
-                self.metrics_history.setdefault('f1', []).append(f1)
-                self.metrics_history.setdefault('iou', []).append(iou)
-
+                self.metrics_history.setdefault('val_gen_loss', []).append(avg_val_g_loss.get('total_loss', 0.0))
+                self.metrics_history.setdefault('accuracy', []).append(avg_val_acc)
+                self.metrics_history.setdefault('f1', []).append(avg_val_f1)
+                self.metrics_history.setdefault('iou', []).append(avg_val_iou)
+                
                 print(f"\nEpoch {epoch + 1} summary:")
                 print(f"  Generator losses: {avg_g_loss}")
                 print(f"  Critic losses: {avg_d_loss}")
-                print(f"  Metrics: Accuracy={acc}, F1={f1}, IoU={iou}")
-                
-                # Сохранение лучшей модели
-                val_loss = avg_g_loss.get('total_loss')
-                if val_loss < self.best_val_loss:
-                    self.best_val_loss = val_loss
-                    patience_counter = 0
-                    # Сохраняем полный checkpoint состояния обучения
-                    self.model.save_checkpoint(self.output_path)
-                    self.save_loss_plot(suffix='best') 
-                    print("  🔥 Best model updated")
-                else:
-                    patience_counter += 1
-                    print(f"  No improvement epochs: {patience_counter}")
-                    
-                # Сохраняем текущий прогресс каждые 5 эпох для возможности восстановления
-                if (epoch + 1) % self.checkpoints_ratio == 0:
-                    checkpoint_dir = os.path.join(self.output_path, "checkpoints")
-                    os.makedirs(checkpoint_dir, exist_ok=True)
-                    self.model.save_checkpoint(os.path.join(checkpoint_dir, f"checkpoint_epoch"))
-                    self.save_loss_plot(suffix=f'epoch_{epoch+1}')
-                    print(f"  Сохранен промежуточный checkpoint (эпоха {epoch+1})")
+                print(f"  Validation loss: {avg_val_g_loss}")
+                print(f"  Metrics: Accuracy={avg_val_acc}, F1={avg_val_f1}, IoU={avg_val_iou}")
 
-        self.save_loss_plot()
+                self.save_loss_plot()
 
     def _visualize_batch(self, inputs, generated, targets, masks, epoch, phase='train'):
         plt.figure(figsize=(20, 12), dpi=300)
