@@ -2,8 +2,10 @@ from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel
 from src.gan.train import GANTrainer
+from interfaces import ImageGenerationApp
 from settings import *
 import argparse
+import tkinter as tk
 
 
 def main():
@@ -13,12 +15,13 @@ def main():
     parser.add_argument('--infer', action='store_true', help='Инференс на одном изображении')
     parser.add_argument('--input_path', type=str, help='Путь к изображению для инференса')
     parser.add_argument('--epochs', type=int, default=20000, help='Количество эпох обучения')
-    parser.add_argument('--batch_size', type=int, default=1, help='Размер батча')
+    parser.add_argument('--batch_size', type=int, default=3, help='Размер батча')
     parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
+    parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
 
     args = parser.parse_args()
 
-    run_all = not (args.preprocess or args.train or args.infer)
+    run_all = not (args.preprocess or args.train or args.infer or args.gui)
 
     # Инициализация модели
     model_gan = GenerativeModel(target_image_size=512, 
@@ -27,8 +30,8 @@ def main():
                                 device=DEVICE,
                                 lr=0.0007,
                                 n_critic=5,
-                                lambda_w=1.5,
-                                lambda_bce=2.0,
+                                lambda_w=2.0,
+                                lambda_bce=3.0,
                                 lambda_gp=10.0,
                                 lambda_l1=1.5)
 
@@ -76,9 +79,15 @@ def main():
                                                        checkpoint_path=WEIGHTS_PATH, 
                                                        processor=processor)
 
-        output_path = './output.png'
+        output_path = 'D:/h/gacha/toros/suka/arctic-ridges-GAN/data/musor/output.png'
         cv2.imwrite(output_path, generated)
         print(f"Генерация завершена. Результат сохранён в {output_path}")
+
+    if args.gui:
+        root = tk.Tk()
+        app = ImageGenerationApp(root, WEIGHTS_PATH, model_gan, args)
+        root.mainloop()
+        return
         
 
 if __name__ == "__main__":

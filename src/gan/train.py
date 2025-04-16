@@ -7,6 +7,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from collections import defaultdict
+import numpy as np
+from sklearn.metrics import f1_score, accuracy_score, jaccard_score
 
 from src.gan.model import GenerativeModel
 from src.gan.dataset import DatasetCreator
@@ -95,12 +97,17 @@ class GANTrainer:
                 # Средние потери за эпоху
                 avg_g_loss = {k: v / len(train_loader) for k, v in epoch_g_losses.items()}
                 avg_d_loss = {k: v / len(train_loader) for k, v in epoch_d_losses.items()}
+                acc, f1, iou = self.compute_metrics(generated, targets, masks)
                 self.metrics_history['gen_losses'].append(avg_g_loss.get('total_loss', 0.0))
                 self.metrics_history['disc_losses'].append(avg_d_loss.get('total_loss', 0.0))
+                self.metrics_history.setdefault('accuracy', []).append(acc)
+                self.metrics_history.setdefault('f1', []).append(f1)
+                self.metrics_history.setdefault('iou', []).append(iou)
 
                 print(f"\nEpoch {epoch + 1} summary:")
                 print(f"  Generator losses: {avg_g_loss}")
                 print(f"  Critic losses: {avg_d_loss}")
+                print(f"  Metrics: Accuracy={acc}, F1={f1}, IoU={iou}")
                 
                 # Сохранение лучшей модели
                 val_loss = avg_g_loss.get('total_loss')
@@ -109,6 +116,7 @@ class GANTrainer:
                     patience_counter = 0
                     # Сохраняем полный checkpoint состояния обучения
                     self.model.save_checkpoint(self.output_path)
+                    self.save_loss_plot(suffix='best') 
                     print("  🔥 Best model updated")
                 else:
                     patience_counter += 1
@@ -119,7 +127,10 @@ class GANTrainer:
                     checkpoint_dir = os.path.join(self.output_path, "checkpoints")
                     os.makedirs(checkpoint_dir, exist_ok=True)
                     self.model.save_checkpoint(os.path.join(checkpoint_dir, f"checkpoint_epoch"))
+                    self.save_loss_plot(suffix=f'epoch_{epoch+1}')
                     print(f"  Сохранен промежуточный checkpoint (эпоха {epoch+1})")
+
+        self.save_loss_plot()
 
     def _visualize_batch(self, inputs, generated, targets, masks, epoch, phase='train'):
         plt.figure(figsize=(20, 12), dpi=300)
@@ -132,7 +143,7 @@ class GANTrainer:
             
             plt.subplot(3, 4, i*4 + 2)
             plt.imshow(masks[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
-            plt.title(f"Mask {i+1}", fontsize=12, pad=10)
+            plt.title(f"Mask_inpaint {i+1}", fontsize=12, pad=10)
             plt.axis('off')
             
             plt.subplot(3, 4, i*4 + 3)
@@ -151,3 +162,54 @@ class GANTrainer:
         output_file = f"{self.output_path}/{phase}.png"
         plt.savefig(output_file)
         plt.close()
+
+    def save_loss_plot(self, suffix=''):
+        """Сохраняет график истории ошибок"""
+        plt.figure(figsize=(12, 5))
+        plt.plot(self.metrics_history['gen_losses'], label='Generator Loss')
+        plt.plot(self.metrics_history['disc_losses'], label='Discriminator Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Training Loss History')
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+
+        filename = f"training_history{f'_{suffix}' if suffix else ''}.png"
+        filepath = os.path.join(self.output_path, filename)
+        plt.savefig(filepath)
+        plt.close()
+
+    def compute_metrics(self, prediction, target, mask):
+        """
+        prediction, target, mask — torch.Tensor [B, 1, H, W] или [B, H, W]
+        """
+        prediction = prediction.detach().cpu().numpy()
+        target = target.detach().cpu().numpy()
+        mask = mask.detach().cpu().numpy()
+
+        prediction = (prediction > 0.5).astype(np.uint8)
+        target = (target > 0.5).astype(np.uint8)
+        mask = (mask > 0.5).astype(np.uint8)
+
+        scores = {'accuracy': [], 'f1': [], 'iou': []}
+
+        for i in range(prediction.shape[0]):
+            pred = prediction[i].flatten()
+            targ = target[i].flatten()
+            m = mask[i].flatten()
+
+            # Выбираем только пиксели по маске
+            p_masked = pred[m == 1]
+            t_masked = targ[m == 1]
+
+            scores['accuracy'].append(accuracy_score(t_masked, p_masked))
+            scores['f1'].append(f1_score(t_masked, p_masked, zero_division=1))
+            scores['iou'].append(jaccard_score(t_masked, p_masked, zero_division=1))
+
+        # Возвращаем среднее по батчу
+        return (
+            np.mean(scores['accuracy']),
+            np.mean(scores['f1']),
+            np.mean(scores['iou'])
+        )
