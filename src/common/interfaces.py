@@ -87,16 +87,19 @@ class IProcessor(ABC):
 
 class IModelTrainer(ABC):
     @abstractmethod
-    def __init__(self, model, scheduler, optimizer, loss_fn):
+    def __init__(self, model, scheduler, optimizer):
         self.model = model
         self.scheduller = scheduler
         self.optimizer = optimizer
-        self.loss_fn = loss_fn
     
     @abstractmethod
     def save_model_state_dict(self):
         pass
     
     @abstractmethod
-    def step(self):
+    def train_step(self):
+        pass
+    
+    @abstractmethod
+    def eval_step(self):
         pass
