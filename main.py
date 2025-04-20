@@ -1,6 +1,7 @@
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel
+from src.gan.tester import ParamGridTester
 from src.gan.train import GANTrainer
 from gui import ImageGenerationApp
 from settings import *
@@ -18,23 +19,23 @@ def main():
     parser.add_argument('--batch_size', type=int, default=3, help='Размер батча')
     parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
     parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
+    parser.add_argument('--test', action='store_true', help='Запуск тестов параметров')
 
     args = parser.parse_args()
 
-    run_all = not (args.preprocess or args.train or args.infer or args.gui)
+    run_all = not (args.preprocess or args.train or args.infer or args.gui or args.test)
 
     # Инициализация модели
     model_gan = GenerativeModel(target_image_size=224, 
                                 g_feature_maps=64, 
                                 d_feature_maps=32,
                                 device=DEVICE,
-                                lr=0.0005,
-                                n_critic=2,
-                                lambda_w=10.0,
-                                lambda_bce=10.0,
+                                lr=0.0007,
+                                n_critic=5,
+                                lambda_w=2.0,
+                                lambda_bce=3.0,
                                 lambda_gp=10.0,
-                                lambda_l1=1.5,
-                                lambda_bin_enf=0.1)
+                                lambda_l1=1.5)
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
@@ -61,7 +62,7 @@ def main():
                              device=DEVICE,
                              batch_size=args.batch_size,
                              load_weights=args.load_weights,
-                             val_ratio=0.2,
+                             val_ratio=0.20,
                              checkpoints_ratio=15)
         
         trainer.train()
@@ -88,6 +89,26 @@ def main():
         root = tk.Tk()
         app = ImageGenerationApp(root, WEIGHTS_PATH, model_gan, args)
         root.mainloop()
+        return
+    
+    if args.test:
+        param_grid = {
+            'target_image_size': [224],
+            'g_feature_maps': [64],
+            'd_feature_maps': [32],
+            'lr': [0.0007],
+            'lambda_w': [1.0],
+            'lambda_bce': [3.0],
+            'lambda_gp': [10.0],
+            'lambda_l1': [1.0],
+            'n_critic': [3, 5],
+            'epochs': [2],
+            'batch_size': [3],
+            'val_ratio': [0.25],
+        }
+        tester = ParamGridTester(param_grid)
+
+        tester.run()
         return
         
 

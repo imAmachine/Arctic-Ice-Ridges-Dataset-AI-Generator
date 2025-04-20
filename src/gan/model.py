@@ -12,7 +12,7 @@ from src.gan.arch import WGanCritic, WGanGenerator
 
 class GenerativeModel:
     def __init__(self, target_image_size, g_feature_maps, d_feature_maps, device,
-                 n_critic, lambda_gp, lr, lambda_w, lambda_bce, lambda_l1, lambda_bin_enf):
+                 n_critic, lambda_gp, lr, lambda_w, lambda_bce, lambda_l1):
         self.device = device
         self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
         self.critic = WGanCritic(input_channels=1, feature_maps=d_feature_maps).to(self.device)
@@ -26,7 +26,6 @@ class GenerativeModel:
         self.lambda_w = lambda_w
         self.lambda_bce = lambda_bce
         self.lambda_l1 = lambda_l1
-        self.lambda_bin_enf = lambda_bin_enf
 
         self.g_trainer, self.c_trainer = self._init_trainers()
 
@@ -38,7 +37,6 @@ class GenerativeModel:
             lambda_w=self.lambda_w,
             lambda_l1=self.lambda_l1,
             lambda_bce=self.lambda_bce,
-            lambda_bin_enf=self.lambda_bin_enf
         )
         c_trainer = WGANCriticModelTrainer(
             model=self.critic, 
@@ -140,7 +138,7 @@ class GenerativeModel:
 
 
 class WGANGeneratorModelTrainer(IModelTrainer):
-    def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lambda_bin_enf, lr):
+    def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lr):
         self.model = model
         self.critic = critic
 
@@ -156,18 +154,15 @@ class WGANGeneratorModelTrainer(IModelTrainer):
         self.lambda_w = lambda_w
         self.lambda_bce = lambda_bce
         self.lambda_l1 = lambda_l1
-        self.lambda_bin_enf = lambda_bin_enf
         
     def _calc_losses(self, input, target, phase='train'):
         adversarial_loss = -torch.mean(self.critic(input)) * self.lambda_w
-        binary_enforcement_loss = torch.mean((input * (1 - input))) * self.lambda_bin_enf
         bce_loss = nn.BCELoss()(input, target) * self.lambda_bce
         l1_loss = nn.L1Loss()(input, target) * self.lambda_l1
-        total_loss = adversarial_loss + binary_enforcement_loss + bce_loss + l1_loss
+        total_loss = adversarial_loss + bce_loss + l1_loss
         
         self.losses_history[phase].append({
             'adversarial_loss': adversarial_loss.item(),
-            'be_loss': binary_enforcement_loss.item(),
             'bce_loss': bce_loss.item(), 
             'l1_loss': l1_loss.item(),
             'total_loss': total_loss.item()

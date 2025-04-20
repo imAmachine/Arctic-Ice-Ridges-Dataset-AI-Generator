@@ -1,4 +1,5 @@
-from torch import tensor, log, stack, float32, ones_like, linalg
+from torch import log, stack, float32, ones_like, linalg
+import torch
 from scipy.stats import linregress
 import numpy as np
 
@@ -61,8 +62,8 @@ class FractalAnalyzerGPU:
             sizes.append(size)
             counts.append(count)
         
-        sizes_tensor = tensor(sizes, dtype=float32, device=binary.device).clone().detach()
-        counts_tensor = tensor(counts, dtype=float32, device=binary.device).clone().detach()
+        sizes_tensor = torch.tensor(sizes, dtype=float32, device=binary.device).clone().detach()
+        counts_tensor = torch.tensor(counts, dtype=float32, device=binary.device).clone().detach()
         
         return sizes_tensor, counts_tensor
 
