@@ -33,9 +33,9 @@ def main():
                                 lr=0.0007,
                                 n_critic=5,
                                 lambda_w=2.0,
-                                lambda_bce=3.0,
+                                lambda_bce=1.0,
                                 lambda_gp=10.0,
-                                lambda_l1=1.5)
+                                lambda_l1=3.0)
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
@@ -94,17 +94,17 @@ def main():
     if args.test:
         param_grid = {
             'target_image_size': [224],
-            'g_feature_maps': [64],
+            'g_feature_maps': [32, 64],
             'd_feature_maps': [32],
             'lr': [0.0007],
-            'lambda_w': [1.0],
-            'lambda_bce': [3.0],
-            'lambda_gp': [10.0],
-            'lambda_l1': [1.0],
+            'lambda_w': [1.0, 1.5, 2.0],
+            'lambda_bce': [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
+            'lambda_gp': [4.0, 6.0, 8.0, 10.0],
+            'lambda_l1': [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
             'n_critic': [3, 5],
-            'epochs': [2],
+            'epochs': [30],
             'batch_size': [3],
-            'val_ratio': [0.25],
+            'val_ratio': [0.20],
         }
         tester = ParamGridTester(param_grid)
 
