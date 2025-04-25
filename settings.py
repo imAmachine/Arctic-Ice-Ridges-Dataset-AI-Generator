@@ -1,6 +1,7 @@
 import os
+import random
 from torch import cuda
-import albumentations as A
+import torchvision.transforms.v2 as T
 from src.preprocessing.processors import *
 
 # путь к файлу с геоанализом исходных снимков
@@ -23,16 +24,40 @@ GENERATOR_PATH = os.path.join(WEIGHTS_PATH, 'generator.pth')
 
 # ================ настройка основных параметров ==================
 DEVICE = 'cuda' if cuda.is_available() else 'cpu'
-AUGMENTATIONS = A.Compose([
-    A.OneOf([
-        A.RandomCrop(width=1024, height=1024),
-        A.RandomCrop(width=768, height=768),
-        A.RandomCrop(width=512, height=512),
+class OneOf(torch.nn.Module):
+    def __init__(self, transforms, p=1.0):
+        super().__init__()
+        self.transforms = transforms
+        self.p = p
+
+    def forward(self, x):
+        if random.random() < self.p:
+            t = random.choice(self.transforms)
+            return t(x)
+        return x
+    
+class RandomRotate(torch.nn.Module):
+    def __init__(self, angles=(90, 180, 270), p=0.8):
+        super().__init__()
+        self.angles = angles
+        self.p = p
+
+    def forward(self, x):
+        if random.random() < self.p:
+            angle = random.choice(self.angles)
+            return T.functional.rotate(x, angle)
+        return x
+    
+AUGMENTATIONS = T.Compose([
+    OneOf([
+        T.RandomCrop((1024, 1024)),
+        T.RandomCrop((768, 768)),
+        T.RandomCrop((512, 512)),
     ], p=1.0),
-    A.RandomRotate90(p=0.8),
-    A.HorizontalFlip(p=0.8),
-    A.VerticalFlip(p=0.8),
-], p=1.0)
+    RandomRotate(p=0.8),
+    T.RandomHorizontalFlip(p=0.8),
+    T.RandomVerticalFlip(p=0.8),
+])
 
 
 

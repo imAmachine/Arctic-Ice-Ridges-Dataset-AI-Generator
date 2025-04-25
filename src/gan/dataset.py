@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple, Type
 import torch
 from torch.utils.data import DataLoader, Dataset
 import albumentations as A
+from torchvision.transforms.functional import to_tensor
 
 import cv2
 import numpy as np
@@ -115,8 +116,9 @@ class IceRidgeDataset(Dataset):
     @staticmethod
     def prepare_data(img: np.ndarray, processor: 'MaskingProcessor', augmentations: Optional[Callable], model_transforms: Optional[Callable]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         original = Utils.binarize_by_threshold(img).astype(np.float32)
-        img_aug = augmentations(image=original)['image'] if augmentations is not None else original
-        damaged, damage_mask = processor.process(image=img_aug)
+        img_aug = augmentations(to_tensor(original)) if augmentations is not None else original
+        img_aug_np = img_aug.squeeze(0).numpy() 
+        damaged, damage_mask = processor.process(image=img_aug_np)
         
         batch = (damaged, img_aug, damage_mask)
         
