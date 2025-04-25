@@ -96,11 +96,11 @@ class WGanGenerator(nn.Module):
         e1 = self.enc1(x_in)
         e2 = self.enc2(e1)
         e3 = self.enc3(e2)
-        e4 = self.enc5(e3)
+        e4 = self.enc4(e3)
 
         bn = self.bottleneck(e4)
 
-        d4 = self.dec5(torch.cat([bn, e4], dim=1))
+        d4 = self.dec4(torch.cat([bn, e4], dim=1))
         d3 = self.dec3(torch.cat([d4, e3], dim=1))
         d2 = self.dec2(torch.cat([d3, e2], dim=1))
         d1 = self.dec1(torch.cat([d2, e1], dim=1))
