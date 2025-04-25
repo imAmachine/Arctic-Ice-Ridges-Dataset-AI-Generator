@@ -64,8 +64,8 @@ class GANTrainer:
             print(f"\nЭпоха {epoch + 1}/{self.epochs}")
 
             epoch_metrics = {
-                'train': {'precision': [], 'fd': [], 'FID': [], 'f1': [], 'iou': []},
-                'valid': {'precision': [], 'fd': [], 'FID': [], 'f1': [], 'iou': []}
+                'train': {'precision': [], 'fd': [], 'f1': [], 'iou': []},
+                'valid': {'precision': [], 'fd': [], 'f1': [], 'iou': []}
             }
 
             for phase, loader in [('train', train_loader), ('valid', valid_loader)]:
@@ -89,22 +89,12 @@ class GANTrainer:
                     epoch_metrics[phase]['f1'].append(f1)
                     epoch_metrics[phase]['iou'].append(iou)
 
-                if all_real and all_fake:
-                    real = torch.cat(all_real, dim=0)
-                    fake = torch.cat(all_fake, dim=0)
-                    fid = self.calculate_fid(real, fake)
-                    epoch_metrics[phase]['FID'].append(fid)
-                else:
-                    epoch_metrics[phase]['FID'].append(0.0)
-
                 self.metrics_history[phase]['precision'].append(np.mean(epoch_metrics[phase]['precision']))
                 self.metrics_history[phase]['fd'].append(np.mean(epoch_metrics[phase]['fd']))
-                self.metrics_history[phase]['FID'].append(epoch_metrics[phase]['FID'][-1])
                 self.metrics_history[phase]['f1'].append(np.mean(epoch_metrics[phase]['f1']))
                 self.metrics_history[phase]['iou'].append(np.mean(epoch_metrics[phase]['iou']))
 
             self._show_epoch_metrics(epoch_metrics)
-            self.save_metric_plot(target_metric='FID', suffix='FID')
             self.save_metric_plot(target_metric='fd', suffix='fd')
             self.save_metric_plot(target_metric='f1', suffix='f1')
             self.save_metric_plot(target_metric='iou', suffix='iou')
@@ -286,48 +276,6 @@ class GANTrainer:
                 fd_total += 0.0
 
         return fd_total / batch_size
-    
-    def calculate_fid(self, real_images, fake_images):
-        """Вычисляет FID между реальными и сгенерированными изображениями."""
-        real_images = real_images.to(self.device)
-        fake_images = fake_images.to(self.device)
-        
-        # Масштабирование и интерполяция
-        real_image = (real_images > 0.5).float() * 255.0
-        fake_image = (fake_images > 0.5).float() * 255.0
-
-        real_image = F.interpolate(real_image, size=(299, 299), mode='bilinear')
-        fake_image = F.interpolate(fake_image, size=(299, 299), mode='bilinear')
-        
-        # Конвертация в 3 канала
-        real_image = real_image.repeat(1, 3, 1, 1)
-        fake_image = fake_image.repeat(1, 3, 1, 1)
-        
-        # Нормализация для Inception-v3
-        mean = torch.tensor([0.485, 0.456, 0.406], device=self.device).view(1,3,1,1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=self.device).view(1,3,1,1)
-        real_image = (real_image/255.0 - mean)/std
-        fake_image = (fake_image/255.0 - mean)/std
-
-        # Извлечение признаков
-        with torch.no_grad():
-            real_features = self.inception_model(real_image)
-            fake_features = self.inception_model(fake_image)
-        
-        # Переводим в numpy
-        real_features = real_features.cpu().numpy()
-        fake_features = fake_features.cpu().numpy()
-        
-        # Расчет статистик
-        mu_real, sigma_real = np.mean(real_features, axis=0), np.cov(real_features, rowvar=False)
-        mu_fake, sigma_fake = np.mean(fake_features, axis=0), np.cov(fake_features, rowvar=False)
-        
-        # Вычисление FID
-        diff = mu_real - mu_fake
-        covmean = sqrtm(sigma_real.dot(sigma_fake)).real
-        fid = diff.dot(diff) + np.trace(sigma_real + sigma_fake - 2*covmean)
-        
-        return fid
     
     def save_test(self, loaders):
         import json
