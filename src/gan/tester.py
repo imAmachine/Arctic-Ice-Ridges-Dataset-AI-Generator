@@ -28,10 +28,10 @@ class ParamGridTester:
         os.makedirs(self.output_root, exist_ok=True)
         for i, cfg in enumerate(self.combinations):
             print(f"\n=== [{i+1}/{len(self.combinations)}] ===\nParams: {cfg}")
-            self.grid_tester_iter(cfg)
+            self._grid_tester_iter(cfg)
         print(f'Результаты тестов сохранены в {self.results_summary_path}')
     
-    def grid_tester_iter(self, cfg: List[Dict]):
+    def _grid_tester_iter(self, cfg: List[Dict]):
         folder_name, output_path = self._create_output_path(cfg)
         
         trainer = self._get_new_trainer(cfg, output_path)

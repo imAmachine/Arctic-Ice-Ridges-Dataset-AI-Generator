@@ -125,7 +125,7 @@ class GANTrainer:
                     f'GP: {avg_c_losses["gradient_penalty"]} '
                     f'Total: {avg_c_losses["total_loss"]}\n')
 
-            if (epoch + 1) % self.checkpoints_ratio == 0:
+            if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
 
         self.save_test(loader)

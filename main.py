@@ -9,7 +9,7 @@ from src.common.utils import Utils
 import argparse
 import tkinter as tk
 
-from gui import ImageGenerationApp
+from gui.gui import ImageGenerationApp
 from settings import *
 
 
@@ -92,7 +92,7 @@ def main():
 
     if args.gui:
         root = tk.Tk()
-        app = ImageGenerationApp(root, WEIGHTS_PATH, model_gan, args)
+        _ = ImageGenerationApp(root, WEIGHTS_PATH, model_gan, args)
         root.mainloop()
         return
     

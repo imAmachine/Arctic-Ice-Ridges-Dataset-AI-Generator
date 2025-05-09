@@ -4,7 +4,6 @@ from PIL import Image, ImageTk
 import os
 import cv2
 import torch
-from torchvision.transforms import ToPILImage
 from datetime import datetime
 
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
