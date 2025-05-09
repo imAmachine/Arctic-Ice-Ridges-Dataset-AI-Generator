@@ -1,10 +1,9 @@
 import os
 import random
-from typing import Callable, Dict, List, Literal, Optional, Tuple, Type
+from typing import Callable, Dict, List, Literal, Optional, Tuple
 
 import torch
 from torch.utils.data import DataLoader, Dataset
-import albumentations as A
 from torchvision.transforms.functional import to_tensor
 
 import cv2
@@ -42,9 +41,6 @@ class MaskingProcessor:
 
 class InferenceMaskingProcessor:
     def __init__(self, outpaint_ratio: float = 0.2):
-        """
-        outpaint_ratio: насколько увеличить изображение по ширине и высоте (20% = 0.2)
-        """
         self.outpaint_ratio = outpaint_ratio
 
     def create_outpaint_mask(self, original_shape, target_shape) -> np.ndarray:
@@ -157,7 +153,7 @@ class IceRidgeDataset(Dataset):
 
 class DatasetCreator:
     def __init__(self, generated_path, original_data_path, preprocessed_data_path, images_extentions, 
-                 model_transforms, preprocessors: List, augmentations: A.Compose,
+                 model_transforms, preprocessors: List, augmentations,
                  device):
         # Инициализация
         self.preprocessor = IceRidgeDatasetPreprocessor(preprocessors)

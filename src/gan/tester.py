@@ -1,15 +1,17 @@
-import itertools
 import os
-import json
 import random
+import itertools
 import numpy as np
 import torch
 import pandas as pd
 
-from src.gan.model import GenerativeModel
+from settings import *
+from typing import List, Dict
+
+from src.common.utils import Utils
+from src.gan.model import GenerativeModel_GAN
 from src.gan.train import GANTrainer
 from src.gan.dataset import DatasetCreator
-from settings import *
 
 
 class ParamGridTester:
@@ -21,7 +23,25 @@ class ParamGridTester:
         self.results_summary_path = os.path.join(self.output_root, 'results.csv')
         self._fix_seed()
 
-    def _fix_seed(self):
+    def run_grid_tests(self):
+        os.makedirs(self.output_root, exist_ok=True)
+        for i, cfg in enumerate(self.combinations):
+            print(f"\n=== [{i+1}/{len(self.combinations)}] ===\nParams: {cfg}")
+            self.grid_tester_iter(cfg)
+        print(f'Результаты тестов сохранены в {self.results_summary_path}')
+    
+    def grid_tester_iter(self, cfg: List[Dict]):
+        folder_name, output_path = self._create_output_path(cfg)
+        
+        trainer = self._get_new_trainer(cfg, output_path)
+        trainer.train()
+
+        Utils.to_json(data=cfg, path=os.path.join(output_path, "config.json"))
+        Utils.to_json(data=trainer.metrics_history, path=os.path.join(output_path, 'metrics_history.json'))
+        
+        self._append_summary(cfg, trainer, folder_name)
+    
+    def _fix_seed(self) -> None:
         random.seed(self.seed)
         np.random.seed(self.seed)
         torch.manual_seed(self.seed)
@@ -29,11 +49,11 @@ class ParamGridTester:
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    def _generate_combinations(self):
+    def _generate_combinations(self) -> List[Dict]:
         keys, values = zip(*self.param_grid.items())
         return [dict(zip(keys, v)) for v in itertools.product(*values)]
 
-    def _make_folder_name(self, cfg):
+    def _create_output_paths(self, cfg: List[Dict]) -> None:
         return (
             f"g{cfg['g_feature_maps']}_d{cfg['d_feature_maps']}"
             f"_w{cfg['lambda_w']}_bce{cfg['lambda_bce']}"
@@ -41,72 +61,54 @@ class ParamGridTester:
             f"_nc{cfg['n_critic']}_ep{cfg['epochs']}"
         )
 
-    def run(self):
-        os.makedirs(self.output_root, exist_ok=True)
-        for i, cfg in enumerate(self.combinations):
-            folder_name = self._make_folder_name(cfg)
-            output_path = os.path.join(self.output_root, f"grid_{folder_name}")
-            os.makedirs(output_path, exist_ok=True)
+    def _get_new_trainer(self, cfg: List[Dict], output_path: str) -> 'GANTrainer':
+        model = GenerativeModel_GAN(
+            target_image_size=cfg['target_image_size'],
+            g_feature_maps=cfg['g_feature_maps'],
+            d_feature_maps=cfg['d_feature_maps'],
+            device=DEVICE,
+            lr=cfg['lr'],
+            n_critic=cfg['n_critic'],
+            lambda_w=cfg['lambda_w'],
+            lambda_bce=cfg['lambda_bce'],
+            lambda_gp=cfg['lambda_gp'],
+            lambda_l1=cfg['lambda_l1']
+        )
 
-            print(f"\n=== [{i+1}/{len(self.combinations)}] Запуск: {folder_name} ===")
-            print(cfg)
+        ds_creator = DatasetCreator(
+            generated_path=AUGMENTED_DATASET_FOLDER_PATH,
+            original_data_path=MASKS_FOLDER_PATH,
+            preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
+            images_extentions=MASKS_FILE_EXTENSIONS,
+            model_transforms=model.get_model_transforms(),
+            preprocessors=PREPROCESSORS,
+            augmentations=AUGMENTATIONS,
+            device=DEVICE
+        )
 
-            with open(os.path.join(output_path, "config.json"), "w") as f:
-                json.dump(cfg, f, indent=4)
-
-            model = GenerativeModel(
-                target_image_size=cfg['target_image_size'],
-                g_feature_maps=cfg['g_feature_maps'],
-                d_feature_maps=cfg['d_feature_maps'],
-                device=DEVICE,
-                lr=cfg['lr'],
-                n_critic=cfg['n_critic'],
-                lambda_w=cfg['lambda_w'],
-                lambda_bce=cfg['lambda_bce'],
-                lambda_gp=cfg['lambda_gp'],
-                lambda_l1=cfg['lambda_l1']
-            )
-
-            ds_creator = DatasetCreator(
-                generated_path=AUGMENTED_DATASET_FOLDER_PATH,
-                original_data_path=MASKS_FOLDER_PATH,
-                preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
-                images_extentions=MASKS_FILE_EXTENSIONS,
-                model_transforms=model.get_model_transforms(),
-                preprocessors=PREPROCESSORS,
-                augmentations=AUGMENTATIONS,
-                device=DEVICE
-            )
-
-            trainer = GANTrainer(
-                model=model,
-                dataset_processor=ds_creator,
-                output_path=output_path,
-                epochs=cfg['epochs'],
-                batch_size=cfg['batch_size'],
-                device=DEVICE,
-                load_weights=False,
-                val_ratio=cfg['val_ratio'],
-                checkpoints_ratio=5
-            )
-
-            trainer.train()
-
-            with open(os.path.join(output_path, 'metrics_history.json'), 'w') as f:
-                json.dump(trainer.metrics_history, f, indent=4)
-
-            self._append_summary(cfg, trainer, folder_name)
-
-        print(f'Результаты тестов сохранены в {self.results_summary_path}')
-
-    def _append_summary(self, cfg, trainer, folder_name):
-        summary_row = {
-            'folder': folder_name,
-            **cfg,
-            'f1': trainer.metrics_history['valid']['f1'][-1] if trainer.metrics_history['valid']['f1'] else None,
-            'iou': trainer.metrics_history['valid']['iou'][-1] if trainer.metrics_history['valid']['iou'] else None,
-            'fid': trainer.metrics_history['valid']['FID'][-1] if trainer.metrics_history['valid']['FID'] else None
-        }
+        return GANTrainer(
+            model=model,
+            dataset_processor=ds_creator,
+            output_path=output_path,
+            epochs=cfg['epochs'],
+            batch_size=cfg['batch_size'],
+            device=DEVICE,
+            load_weights=False,
+            val_ratio=cfg['val_ratio'],
+            checkpoints_ratio=5
+        )
+    
+    def _create_output_path(self, cfg: List[Dict]) -> tuple[str, str]:
+        folder_name = self._create_output_paths(cfg)
+        output_path = os.path.join(self.output_root, f"grid_{folder_name}")
+        os.makedirs(output_path, exist_ok=True)
+        return folder_name, output_path
+    
+    def _append_summary(self, cfg, trainer: 'GANTrainer', folder_name: str):
+        summary_row = {'folder': folder_name, **cfg}
+        
+        val_metrics_res = {{name, metric[-1]} for name, metric in trainer.metrics_history['valid'].items()}
+        summary_row.update(val_metrics_res)
 
         df = pd.DataFrame([summary_row])
         if os.path.exists(self.results_summary_path):

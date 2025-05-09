@@ -14,13 +14,13 @@ import torch.nn.functional as F
 from scipy.linalg import sqrtm
 import torchvision.models as models
 
-from src.gan.model import GenerativeModel
+from src.gan.model import GenerativeModel_GAN
 from src.gan.dataset import DatasetCreator
 from src.common.analyze_tools import FractalAnalyzerGPU
 
 
 class GANTrainer:
-    def __init__(self, model: GenerativeModel, dataset_processor: DatasetCreator, output_path, 
+    def __init__(self, model: GenerativeModel_GAN, dataset_processor: DatasetCreator, output_path, 
                  epochs, batch_size, device, load_weights=True, val_ratio=0.2, checkpoints_ratio=5):
         self.device = device
         self.model = model
@@ -35,10 +35,6 @@ class GANTrainer:
         self.metrics_history = {'train': defaultdict(list), 'valid': defaultdict(list)}
         self.losses = {'train': defaultdict(list), 'valid': defaultdict(list)}
         self.patience_counter = 0
-        self.inception_model = models.inception_v3(pretrained=True, transform_input=False).to(self.device)
-        self.inception_model.eval()
-        for param in self.inception_model.parameters():
-            param.requires_grad_(False)
 
         self.output_path = output_path
         os.makedirs(self.output_path, exist_ok=True)

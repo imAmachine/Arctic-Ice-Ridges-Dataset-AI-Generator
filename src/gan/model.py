@@ -10,7 +10,7 @@ from src.gan.dataset import IceRidgeDataset, InferenceMaskingProcessor
 from src.common.interfaces import IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
 
-class GenerativeModel:
+class GenerativeModel_GAN:
     def __init__(self, target_image_size, g_feature_maps, d_feature_maps, device,
                  n_critic, lambda_gp, lr, lambda_w, lambda_bce, lambda_l1):
         self.device = device
@@ -136,16 +136,13 @@ class GenerativeModel:
         return generated_img, original_img
 
 
-
 class WGANGeneratorModelTrainer(IModelTrainer):
     def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lr):
         self.model = model
         self.critic = critic
 
         self.optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.5, patience=6, verbose=True
-        )
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=6)
         
         self.criterion = self._calc_losses
         self.losses_history = {'train': [], 'valid': []}
@@ -211,9 +208,7 @@ class WGANCriticModelTrainer(IModelTrainer):
         self.lambda_gp = lambda_gp
 
         self.optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            self.optimizer, mode='min', factor=0.5, patience=6, verbose=True
-        )
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=6)
 
         self.criterion = self._calc_losses
         self.losses_history = {'train': [], 'valid': []}
