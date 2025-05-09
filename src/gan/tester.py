@@ -107,7 +107,7 @@ class ParamGridTester:
     def _append_summary(self, cfg, trainer: 'GANTrainer', folder_name: str):
         summary_row = {'folder': folder_name, **cfg}
         
-        val_metrics_res = {{name, metric[-1]} for name, metric in trainer.metrics_history['valid'].items()}
+        val_metrics_res = {name: metric[-1] for name, metric in trainer.metrics_history['valid'].items() if len(metric) > 0}
         summary_row.update(val_metrics_res)
 
         df = pd.DataFrame([summary_row])
