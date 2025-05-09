@@ -3,10 +3,15 @@ from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel_GAN
 from src.gan.tester import ParamGridTester
 from src.gan.train import GANTrainer
-from gui import ImageGenerationApp
-from settings import *
+from src.gan.arch import AUGMENTATIONS
+from src.common.utils import Utils
+
 import argparse
 import tkinter as tk
+
+from gui import ImageGenerationApp
+from settings import *
+
 
 
 def main():
@@ -77,7 +82,7 @@ def main():
         preprocessed_img = preprocessor.process_image(img)
         
         processor = InferenceMaskingProcessor(outpaint_ratio=0.2)
-        generated, original = model_gan.infer_generate(preprocessed_img=preprocessed_img, 
+        generated, _ = model_gan.infer_generate(preprocessed_img=preprocessed_img, 
                                                        checkpoint_path=WEIGHTS_PATH, 
                                                        processor=processor)
 
@@ -92,21 +97,8 @@ def main():
         return
     
     if args.test:
-        param_grid = {
-            'target_image_size': [224],
-            'g_feature_maps': [32, 64],
-            'd_feature_maps': [32],
-            'lr': [0.0007],
-            'lambda_w': [1.0, 1.5, 2.0],
-            'lambda_bce': [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
-            'lambda_gp': [4.0, 6.0, 8.0, 10.0],
-            'lambda_l1': [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
-            'n_critic': [3, 5],
-            'epochs': [30],
-            'batch_size': [3],
-            'val_ratio': [0.20],
-        }
-        tester = ParamGridTester(param_grid)
+        grid_params = Utils.from_json(GRID_TEST_PARAMS)
+        tester = ParamGridTester(grid_params)
 
         tester.run_grid_tests()
         return

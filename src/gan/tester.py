@@ -12,6 +12,7 @@ from src.common.utils import Utils
 from src.gan.model import GenerativeModel_GAN
 from src.gan.train import GANTrainer
 from src.gan.dataset import DatasetCreator
+from src.gan.arch import AUGMENTATIONS
 
 
 class ParamGridTester:

@@ -1,0 +1,14 @@
+{
+    "target_image_size": [224],
+    "g_feature_maps": [32],
+    "d_feature_maps": [32],
+    "lr": [0.0007, 0.0005],
+    "lambda_w": [1.0, 1.5, 2.0],
+    "lambda_bce": [0.0, 0.5, 1.0],
+    "lambda_gp": [10.0],
+    "lambda_l1": [0.0, 0.5, 1.0],
+    "n_critic": [3, 5],
+    "epochs": [15],
+    "batch_size": [1,2,3],
+    "val_ratio": [0.20]
+}
