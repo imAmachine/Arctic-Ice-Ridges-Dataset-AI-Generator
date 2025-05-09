@@ -1,12 +1,9 @@
-from collections import defaultdict
 import os
-from typing import Dict, Literal, Tuple, Type
-import numpy as np
 import torch
 import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
 
-from src.gan.dataset import IceRidgeDataset, InferenceMaskingProcessor
+from src.gan.dataset import IceRidgeDataset
 from src.common.interfaces import IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
 

@@ -3,16 +3,12 @@ from typing import Dict, List, Literal
 import torch
 import matplotlib
 
-from src.common.utils import Utils
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from collections import defaultdict
 import numpy as np
-from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_score
-import torch.nn.functional as F
-from scipy.linalg import sqrtm
-import torchvision.models as models
+from sklearn.metrics import f1_score, precision_score, jaccard_score
 
 from src.gan.model import GenerativeModel_GAN
 from src.gan.dataset import DatasetCreator
@@ -124,6 +120,8 @@ class GANTrainer:
                 print(f'  Wasserstein: {avg_c_losses["wasserstein_loss"]} '
                     f'GP: {avg_c_losses["gradient_penalty"]} '
                     f'Total: {avg_c_losses["total_loss"]}\n')
+                
+            self.model.step_schedulers(self.metrics_history['valid']['iou'][-1])
 
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
