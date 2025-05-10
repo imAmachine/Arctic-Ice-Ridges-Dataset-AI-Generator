@@ -32,15 +32,15 @@ def main():
 
     # Инициализация модели
     model_gan = GenerativeModel_GAN(target_image_size=224, 
-                                g_feature_maps=64, 
+                                g_feature_maps=32, 
                                 d_feature_maps=32,
                                 device=DEVICE,
-                                lr=0.0007,
+                                lr=0.0005,
                                 n_critic=5,
-                                lambda_w=2.0,
-                                lambda_bce=1.0,
+                                lambda_w=1.5,
+                                lambda_bce=0.5,
                                 lambda_gp=10.0,
-                                lambda_l1=3.0)
+                                lambda_l1=0.5)
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
@@ -68,7 +68,7 @@ def main():
                              batch_size=args.batch_size,
                              load_weights=args.load_weights,
                              val_ratio=0.20,
-                             checkpoints_ratio=15)
+                             checkpoints_ratio=50)
         
         trainer.train()
 

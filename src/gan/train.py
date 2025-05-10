@@ -17,7 +17,7 @@ from src.common.analyze_tools import FractalAnalyzerGPU
 
 class GANTrainer:
     def __init__(self, model: GenerativeModel_GAN, dataset_processor: DatasetCreator, output_path, 
-                 epochs, batch_size, device, load_weights=True, val_ratio=0.2, checkpoints_ratio=5):
+                 epochs, batch_size, device, load_weights=True, val_ratio=0.2, checkpoints_ratio=25):
         self.device = device
         self.model = model
         self.dataset_processor = dataset_processor
