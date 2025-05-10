@@ -7,7 +7,7 @@ from src.gan.dataset import IceRidgeDataset
 from src.common.interfaces import IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
 
-class GenerativeModel_GAN:
+class GenerativeModel:
     def __init__(self, target_image_size, g_feature_maps, d_feature_maps, device,
                  n_critic, lambda_gp, lr, lambda_w, lambda_bce, lambda_l1):
         self.device = device
@@ -135,14 +135,13 @@ class GenerativeModel_GAN:
 
 class WGANGeneratorModelTrainer(IModelTrainer):
     def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lr):
-        self.model = model
+        super().__init__(model)
         self.critic = critic
 
         self.optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=6)
         
         self.criterion = self._calc_losses
-        self.losses_history = {'train': [], 'valid': []}
         
         # losses weights
         self.lambda_w = lambda_w
@@ -181,34 +180,17 @@ class WGANGeneratorModelTrainer(IModelTrainer):
             generated = self.model(input, mask)
             _ = self.criterion(generated, target, phase='valid')
             return generated
-    
-    def save_model_state_dict(self, output_path):
-        torch.save(self.model.state_dict(), os.path.join(output_path, "generator.pt"))
-    
-    def load_model_state_dict(self, checkpoint_path):
-        if os.path.exists(checkpoint_path):
-            self.model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
-            print(f"Загружено состояние генератора из: {checkpoint_path}")
-        else:
-            raise FileNotFoundError(f"Файл {checkpoint_path} не найден.")
-
-    def step_scheduler(self, val_loss):
-        self.scheduler.step(val_loss)
-    
-    def reset_losses(self):
-        self.losses_history = {'train': [], 'valid': []}
 
 
 class WGANCriticModelTrainer(IModelTrainer):
     def __init__(self, model, lambda_gp, lr):
-        self.model = model
+        super().__init__(model)
         self.lambda_gp = lambda_gp
 
         self.optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=6)
 
         self.criterion = self._calc_losses
-        self.losses_history = {'train': [], 'valid': []}
     
     def _calc_gradient_penalty(self, real_samples, fake_samples):
         alpha = torch.rand(real_samples.size(0), 1, 1, 1, device=real_samples.device)
@@ -260,19 +242,3 @@ class WGANCriticModelTrainer(IModelTrainer):
         self.model.eval()
         with torch.no_grad():
             _ = self.criterion(real_target, fake_generated, phase='valid')
-    
-    def step_scheduler(self, val_loss):
-        self.scheduler.step(val_loss)
-    
-    def reset_losses(self):
-        self.losses_history = {'train': [], 'valid': []}
-    
-    def save_model_state_dict(self, output_path):
-        torch.save(self.model.state_dict(), os.path.join(output_path, "critic.pt"))
-
-    def load_model_state_dict(self, checkpoint_path):
-        if os.path.exists(checkpoint_path):
-            self.model.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
-            print(f"Загружено состояние критика из: {checkpoint_path}")
-        else:
-            raise FileNotFoundError(f"Файл {checkpoint_path} не найден.")

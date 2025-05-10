@@ -9,14 +9,15 @@ from tqdm import tqdm
 from collections import defaultdict
 import numpy as np
 from sklearn.metrics import f1_score, precision_score, jaccard_score
+from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_score
 
-from src.gan.model import GenerativeModel_GAN
+from src.gan.model import GenerativeModel
 from src.gan.dataset import DatasetCreator
 from src.common.analyze_tools import FractalAnalyzerGPU
 
 
 class GANTrainer:
-    def __init__(self, model: GenerativeModel_GAN, dataset_processor: DatasetCreator, output_path, 
+    def __init__(self, model: GenerativeModel, dataset_processor: DatasetCreator, output_path, 
                  epochs, batch_size, device, load_weights=True, val_ratio=0.2, checkpoints_ratio=25):
         self.device = device
         self.model = model
@@ -68,7 +69,7 @@ class GANTrainer:
                 all_real, all_fake = [], []
 
                 for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.capitalize()}")):
-                    generated = self._process_batch(mode=phase, batch=batch, visualize_batch=(i == 0))
+                    generated = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
                     mask = batch[2].cpu()
                     real_imgs = batch[1].cpu() * mask
                     fake_imgs = generated.detach().cpu() * mask
@@ -91,56 +92,29 @@ class GANTrainer:
             self.save_metric_plot(target_metric='f1', suffix='f1')
             self.save_metric_plot(target_metric='iou', suffix='iou')
 
-            if self.model.g_trainer.losses_history['train']:
-                # Берем ВСЕ батчи текущей эпохи
-                epoch_g_losses = self.model.g_trainer.losses_history['train'][-len(train_loader):]
-                
-                avg_g_losses = {
-                    k: np.mean([batch[k] for batch in epoch_g_losses])
-                    for k in ['adversarial_loss', 'bce_loss', 'l1_loss', 'total_loss']
-                }
-                
-                print('Generator Average Losses:')
-                print(f'  Adv: {avg_g_losses["adversarial_loss"]} '
-                    f'BCE: {avg_g_losses["bce_loss"]} '
-                    f'L1: {avg_g_losses["l1_loss"]} '
-                    f'Total: {avg_g_losses["total_loss"]}')
-
-            # Для критика
-            if self.model.c_trainer.losses_history['train']:
-                # Берем ВСЕ батчи текущей эпохи
-                epoch_c_losses = self.model.c_trainer.losses_history['train'][-len(train_loader):]
-                
-                avg_c_losses = {
-                    k: np.mean([batch[k] for batch in epoch_c_losses])
-                    for k in ['wasserstein_loss', 'gradient_penalty', 'total_loss']
-                }
-                
-                print('Critic Average Losses:')
-                print(f'  Wasserstein: {avg_c_losses["wasserstein_loss"]} '
-                    f'GP: {avg_c_losses["gradient_penalty"]} '
-                    f'Total: {avg_c_losses["total_loss"]}\n')
-                
+            # расчёт и вывод средних лоссов по эпохе
+            for trainer in [self.model.g_trainer, self.model.c_trainer]:
+                print(trainer.epoch_avg_losses_str('train', len(batch)))
+            
             self.model.step_schedulers(self.metrics_history['valid']['iou'][-1])
 
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
 
         self.save_test(loader)
-
-    def _process_batch(self, mode: Literal['train', 'valid'], batch: List, visualize_batch=False):
+    
+    def _process_batch(self, phase: Literal['train', 'valid'], batch: List, visualize_batch=False):
         inputs, targets, masks = [tensor.to(self.device) for tensor in batch]
 
-        if mode == 'train':
+        if phase == 'train':
             self.model.train_step(inputs, targets, masks)
         else:
             self.model.eval_step(inputs, targets, masks)
 
-        
         with torch.no_grad():
             generated = self.model.generator(inputs, masks)
             if visualize_batch:
-                self._visualize_batch(inputs, generated, targets, masks, phase=mode)
+                self._visualize_batch(inputs, generated, targets, masks, phase=phase)
 
         return generated
 
@@ -284,8 +258,8 @@ class GANTrainer:
 
         if 'train' in loaders:
             final_batch = next(iter(loaders['train']))
-            self._process_batch(mode='train', batch=final_batch, visualize_batch=True)
+            self._process_batch(phase='train', batch=final_batch, visualize_batch=True)
 
         if 'valid' in loaders and loaders['valid'] is not None:
             final_val_batch = next(iter(loaders['valid']))
-            self._process_batch(mode='valid', batch=final_val_batch, visualize_batch=True)
+            self._process_batch(phase='valid', batch=final_val_batch, visualize_batch=True)

@@ -1,6 +1,6 @@
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
-from src.gan.model import GenerativeModel_GAN
+from src.gan.model import GenerativeModel
 from src.gan.tester import ParamGridTester
 from src.gan.train import GANTrainer
 from src.gan.arch import AUGMENTATIONS
@@ -31,7 +31,7 @@ def main():
     run_all = not (args.preprocess or args.train or args.infer or args.gui or args.test)
 
     # Инициализация модели
-    model_gan = GenerativeModel_GAN(target_image_size=224, 
+    model_gan = GenerativeModel(target_image_size=224, 
                                 g_feature_maps=32, 
                                 d_feature_maps=32,
                                 device=DEVICE,

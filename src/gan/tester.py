@@ -9,7 +9,7 @@ from settings import *
 from typing import List, Dict
 
 from src.common.utils import Utils
-from src.gan.model import GenerativeModel_GAN
+from src.gan.model import GenerativeModel
 from src.gan.train import GANTrainer
 from src.gan.dataset import DatasetCreator
 from src.gan.arch import AUGMENTATIONS
@@ -63,7 +63,7 @@ class ParamGridTester:
         )
 
     def _get_new_trainer(self, cfg: List[Dict], output_path: str) -> 'GANTrainer':
-        model = GenerativeModel_GAN(
+        model = GenerativeModel(
             target_image_size=cfg['target_image_size'],
             g_feature_maps=cfg['g_feature_maps'],
             d_feature_maps=cfg['d_feature_maps'],

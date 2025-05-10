@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
+from collections import defaultdict
+import os
 
 import numpy as np
-from typing import Dict, Any, List, Type
+from typing import Dict, Any, List, Literal, Type
+
+import torch
 
 
 class IProcessor(ABC):
@@ -85,16 +89,13 @@ class IProcessor(ABC):
         return processed_image
 
 
+
+
+
 class IModelTrainer(ABC):
-    @abstractmethod
-    def __init__(self, model, scheduler, optimizer):
+    def __init__(self, model):
         self.model = model
-        self.scheduller = scheduler
-        self.optimizer = optimizer
-    
-    @abstractmethod
-    def save_model_state_dict(self):
-        pass
+        self.losses_history = {'train': [], 'valid': []}
     
     @abstractmethod
     def train_step(self):
@@ -103,3 +104,32 @@ class IModelTrainer(ABC):
     @abstractmethod
     def eval_step(self):
         pass
+    
+    def step_scheduler(self, val_loss):
+        self.scheduler.step(val_loss)
+    
+    def reset_losses(self):
+        self.losses_history = {'train': [], 'valid': []}
+    
+    def epoch_avg_losses_str(self, phase: Literal['train', 'valid'], batch_size: int) -> str:
+        losses_history = self.losses_history[phase]
+
+        if losses_history:
+            epoch_losses = losses_history[-batch_size:]
+
+            # сбор значений каждой метрики по каждому батчу
+            aggregated_losses = defaultdict(list)
+            for batch_losses in epoch_losses:
+                for loss_name, loss_value in batch_losses.items():
+                    aggregated_losses[loss_name].append(loss_value)
+
+            # расчёт среднего значения за эпоху
+            avg_trainer_losses = {loss_n: np.mean(loss_v) for loss_n, loss_v in aggregated_losses.items()}
+
+            losses_str = f'Average losses for {self.__class__.__name__}:\n'
+            for loss_n, loss_v in avg_trainer_losses.items():
+                losses_str += f'\t{loss_n}: {loss_v:.4f}\n'
+
+            return losses_str
+
+        return "No loss data available."
