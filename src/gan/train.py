@@ -33,18 +33,18 @@ class GANTrainer:
         
         self.metrics_history = {'train': defaultdict(list), 'valid': defaultdict(list)}
         self.losses = {'train': defaultdict(list), 'valid': defaultdict(list)}
-        
+        self.loaders = None
         self.patience_counter = 0
 
         self.output_path = output_path
         os.makedirs(self.output_path, exist_ok=True)
 
     def train(self):
-        loaders = self.dataset_processor.create_train_dataloaders(
+        self.loaders = self.dataset_processor.create_train_dataloaders(
             batch_size=self.batch_size, shuffle=True, workers=6, val_ratio=self.val_ratio
         )
-        train_loader = loaders.get('train')
-        valid_loader = loaders.get('valid')
+        train_loader = self.loaders.get('train')
+        valid_loader = self.loaders.get('valid')
 
         if train_loader is None:
             print('Обучение без тренировочного загрузчика данных невозможно! Остановка...')
@@ -68,7 +68,7 @@ class GANTrainer:
                 self.model.switch_mode('train' if phase == 'train' else 'eval')
 
                 for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.capitalize()}")):
-                    generated = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
+                    _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
 
                     metrics = self._calc_metrics(batch)
                     epoch_metrics[phase].update(metrics)
@@ -90,8 +90,6 @@ class GANTrainer:
 
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
-        
-        self.save_test(loader)
     
     def _schedulers_step(self, phase: Literal['train', 'valid']) -> None:
         trg_metric_val = self.metrics_history[phase][self.model.optimization_params.get('metric')][-1]
@@ -198,13 +196,13 @@ class GANTrainer:
             iou.append(jaccard_score(t_masked, p_masked, zero_division=1))
 
         accuracy = acc if acc else 0.0
-        fd = self._calc_fractal_loss(generated, target, damage_mask)
+        # fd = self._calc_fractal_loss(generated, target, damage_mask)
         
         return {
             'accuracy': np.mean(accuracy),
             'f1': np.mean(f1),
             'iou': np.mean(iou),
-            'fd': fd
+            # 'fd': fd
         }
 
     def _load_checkpoint(self):
@@ -237,18 +235,3 @@ class GANTrainer:
             fd_total += abs(fd_gen - fd_target)
 
         return fd_total / batch_size
-    
-    def save_test(self, loaders):
-        Utils.to_json(self.metrics_history, os.path.join(self.output_path, 'metrics_history.json'))
-        Utils.to_json({
-            'generator': self.model.g_trainer.losses_history,
-            'critic': self.model.c_trainer.losses_history
-        }, os.path.join(self.output_path, 'losses_history.json'))
-
-        if 'train' in loaders:
-            final_batch = next(iter(loaders['train']))
-            self._process_batch(phase='train', batch=final_batch, visualize_batch=True)
-
-        if 'valid' in loaders and loaders['valid'] is not None:
-            final_val_batch = next(iter(loaders['valid']))
-            self._process_batch(phase='valid', batch=final_val_batch, visualize_batch=True)

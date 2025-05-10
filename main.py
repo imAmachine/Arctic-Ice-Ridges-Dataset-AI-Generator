@@ -87,12 +87,13 @@ def main():
         root.mainloop()
         return
     
-    if args.test:
-        grid_params = configs['tests']
-        tester = ParamGridTester(grid_params)
+    # ДОРАБОТАТЬ ТЕСТЕР
+    # if args.test:
+    #     grid_params = configs['tests']
+    #     tester = ParamGridTester(grid_params)
 
-        tester.run_grid_tests()
-        return
+    #     tester.run_grid_tests()
+    #     return
         
 
 if __name__ == "__main__":

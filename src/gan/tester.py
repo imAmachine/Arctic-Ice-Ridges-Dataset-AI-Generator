@@ -14,7 +14,7 @@ from src.gan.train import GANTrainer
 from src.gan.dataset import DatasetCreator
 from src.gan.arch import AUGMENTATIONS
 
-
+# Нужно доработать класс!
 class ParamGridTester:
     def __init__(self, param_grid, output_root=None, seed=42):
         self.param_grid = param_grid
@@ -26,21 +26,33 @@ class ParamGridTester:
 
     def run_grid_tests(self):
         os.makedirs(self.output_root, exist_ok=True)
-        for i, cfg in enumerate(self.combinations):
-            print(f"\n=== [{i+1}/{len(self.combinations)}] ===\nParams: {cfg}")
-            self._grid_tester_iter(cfg)
+        for i, params in enumerate(self.combinations):
+            print(f"\n=== [{i+1}/{len(self.combinations)}] ===\nParams: {params}")
+            self._grid_tester_iter(params)
         print(f'Результаты тестов сохранены в {self.results_summary_path}')
     
-    def _grid_tester_iter(self, cfg: List[Dict]):
-        folder_name, output_path = self._create_output_path(cfg)
+    def _grid_tester_iter(self, params):
+        folder_name, output_path = self._create_output_path()
         
-        trainer = self._get_new_trainer(cfg, output_path)
+        trainer = self._get_new_trainer(output_path)
         trainer.train()
 
-        Utils.to_json(data=cfg, path=os.path.join(output_path, "config.json"))
+        Utils.to_json(data=params, path=os.path.join(output_path, "config.json"))
         Utils.to_json(data=trainer.metrics_history, path=os.path.join(output_path, 'metrics_history.json'))
         
-        self._append_summary(cfg, trainer, folder_name)
+        self._append_summary(params, trainer, folder_name)
+        self._save_test(trainer.loaders)
+    
+    def _save_test(self, gen_model: 'GenerativeModel', loaders: Dict):
+        Utils.to_json(self.metrics_history, os.path.join(self.output_path, 'metrics_history.json'))
+        Utils.to_json({
+            'generator': gen_model.g_trainer.losses_history,
+            'critic': gen_model.c_trainer.losses_history
+        }, os.path.join(self.output_path, 'losses_history.json'))
+        
+        for phase, loader in loaders.items():
+            final_batch = next(iter(loader))
+            self._process_batch(phase=phase, batch=final_batch, visualize_batch=True)
     
     def _fix_seed(self) -> None:
         random.seed(self.seed)
@@ -54,26 +66,13 @@ class ParamGridTester:
         keys, values = zip(*self.param_grid.items())
         return [dict(zip(keys, v)) for v in itertools.product(*values)]
 
-    def _create_output_paths(self, cfg: List[Dict]) -> None:
-        return (
-            f"g{cfg['g_feature_maps']}_d{cfg['d_feature_maps']}"
-            f"_w{cfg['lambda_w']}_bce{cfg['lambda_bce']}"
-            f"_l1{cfg['lambda_l1']}_gp{cfg['lambda_gp']}"
-            f"_nc{cfg['n_critic']}_ep{cfg['epochs']}"
-        )
+    def _create_output_paths(self) -> None:
+        return '\n'.join([f'{k}_{v}-' for k, v in self.param_grid.get('GenerativeModel').items()])
 
-    def _get_new_trainer(self, cfg: List[Dict], output_path: str) -> 'GANTrainer':
+    def _get_new_trainer(self, output_path: str) -> 'GANTrainer':
         model = GenerativeModel(
-            target_image_size=cfg['target_image_size'],
-            g_feature_maps=cfg['g_feature_maps'],
-            d_feature_maps=cfg['d_feature_maps'],
-            device=DEVICE,
-            lr=cfg['lr'],
-            n_critic=cfg['n_critic'],
-            lambda_w=cfg['lambda_w'],
-            lambda_bce=cfg['lambda_bce'],
-            lambda_gp=cfg['lambda_gp'],
-            lambda_l1=cfg['lambda_l1']
+            **self.param_grid.get('GenerativeModel'),
+            device=DEVICE
         )
 
         ds_creator = DatasetCreator(
@@ -89,24 +88,22 @@ class ParamGridTester:
 
         return GANTrainer(
             model=model,
+            **self.param_grid.get('GANTrainer'),
             dataset_processor=ds_creator,
             output_path=output_path,
-            epochs=cfg['epochs'],
-            batch_size=cfg['batch_size'],
             device=DEVICE,
             load_weights=False,
-            val_ratio=cfg['val_ratio'],
             checkpoints_ratio=5
         )
     
-    def _create_output_path(self, cfg: List[Dict]) -> tuple[str, str]:
-        folder_name = self._create_output_paths(cfg)
+    def _create_output_path(self) -> tuple[str, str]:
+        folder_name = self._create_output_paths()
         output_path = os.path.join(self.output_root, f"grid_{folder_name}")
         os.makedirs(output_path, exist_ok=True)
         return folder_name, output_path
     
-    def _append_summary(self, cfg, trainer: 'GANTrainer', folder_name: str):
-        summary_row = {'folder': folder_name, **cfg}
+    def _append_summary(self, params, trainer: 'GANTrainer', folder_name: str):
+        summary_row = {'folder': folder_name, **params}
         
         val_metrics_res = {name: metric[-1] for name, metric in trainer.metrics_history['valid'].items() if len(metric) > 0}
         summary_row.update(val_metrics_res)
