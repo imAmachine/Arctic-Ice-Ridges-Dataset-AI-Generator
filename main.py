@@ -20,7 +20,7 @@ def main():
     parser.add_argument('--train', action='store_true', help='Обучение модели')
     parser.add_argument('--infer', action='store_true', help='Инференс на одном изображении')
     parser.add_argument('--input_path', type=str, help='Путь к изображению для инференса')
-    parser.add_argument('--epochs', type=int, default=20000, help='Количество эпох обучения')
+    parser.add_argument('--epochs', type=int, default=1000, help='Количество эпох обучения')
     parser.add_argument('--batch_size', type=int, default=3, help='Размер батча')
     parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
     parser.add_argument('--gui', action='store_true', help='Launch GUI interface')

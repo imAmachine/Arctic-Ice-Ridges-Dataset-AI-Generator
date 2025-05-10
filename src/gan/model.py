@@ -5,27 +5,18 @@ import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
 
 from src.gan.dataset import IceRidgeDataset
-from src.common.interfaces import IModelTrainer
+from src.common.interfaces import IGenerativeModel, IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
 
-class GenerativeModel:
-    def __init__(self, target_image_size, g_feature_maps, d_feature_maps, device,
-                 n_critic, lambda_gp, lr, lambda_w, lambda_bce, lambda_l1, optimizer_metric, optimizer_mode):
-        self.device = device
-        
+class GenerativeModel(IGenerativeModel):
+    def __init__(self, g_feature_maps, d_feature_maps, n_critic, lambda_gp, lambda_w, lambda_bce, lambda_l1, 
+                 target_image_size, device, optimization_params):
+        super().__init__(target_image_size, device, optimization_params)
         self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
         self.critic = WGanCritic(input_channels=1, feature_maps=d_feature_maps).to(self.device)
-        
-        self.optimization_params = {
-            'metric': optimizer_metric,
-            'mode': optimizer_mode
-        }
-        
-        self.target_image_size = target_image_size
         self.current_iteration = 0
 
         self.n_critic = n_critic
-        self.learning_rate = lr
 
         self.lambda_gp = lambda_gp
         self.lambda_w = lambda_w
@@ -49,8 +40,8 @@ class GenerativeModel:
         )
         
         for trainer in [g_trainer, c_trainer]:
-            trainer.optimizer = torch.optim.RMSprop(trainer.model.parameters(), lr=self.learning_rate)
-            trainer.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(trainer.optimizer, mode=self.optimization_params['mode'], factor=0.5, patience=6)
+            trainer.optimizer = torch.optim.RMSprop(trainer.model.parameters(), lr=self.optimization_params.get('lr'))
+            trainer.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(trainer.optimizer, mode=self.optimization_params.get('mode'), factor=0.5, patience=6)
         
         return g_trainer, c_trainer
 
@@ -104,8 +95,8 @@ class GenerativeModel:
         torch.save(checkpoint, os.path.join(output_path, 'training_checkpoint.pt'))
         print(f"Checkpoint сохранен в {os.path.join(output_path, 'training_checkpoint.pt')}")
 
-    def load_checkpoint(self, output_path): # НУЖНО РАЗГРЕСТИ ЭТОТ МУСОР
-        checkpoint_path = os.path.join(output_path, 'training_checkpoint.pt')
+    def load_checkpoint(self, path): # НУЖНО РАЗГРЕСТИ ЭТОТ МУСОР
+        checkpoint_path = os.path.join(path, 'training_checkpoint.pt')
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
             self.generator.load_state_dict(checkpoint['generator_state_dict'])

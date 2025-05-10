@@ -59,41 +59,28 @@ class GANTrainer:
         for epoch in range(self.epochs):
             print(f"\nЭпоха {epoch + 1}/{self.epochs}")
 
-            epoch_metrics = {
-                'train': {'precision': [], 'fd': [], 'f1': [], 'iou': []},
-                'valid': {'precision': [], 'fd': [], 'f1': [], 'iou': []}
-            }
+            epoch_metrics = {'train': defaultdict(list), 'valid': defaultdict(list)}
 
             for phase, loader in [('train', train_loader), ('valid', valid_loader)]:
                 if loader is None:
                     continue
 
                 self.model.switch_mode('train' if phase == 'train' else 'eval')
-                all_real, all_fake = [], []
 
                 for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.capitalize()}")):
                     generated = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
-                    mask = batch[2].cpu()
-                    real_imgs = batch[1].cpu() * mask
-                    fake_imgs = generated.detach().cpu() * mask
-                    all_real.append(real_imgs)
-                    all_fake.append(fake_imgs)
 
-                    acc, f1, iou, fd = self._calc_metrics(batch)
-                    epoch_metrics[phase]['precision'].append(acc)
-                    epoch_metrics[phase]['fd'].append(fd)
-                    epoch_metrics[phase]['f1'].append(f1)
-                    epoch_metrics[phase]['iou'].append(iou)
+                    metrics = self._calc_metrics(batch)
+                    epoch_metrics[phase].update(metrics)
 
-                self.metrics_history[phase]['precision'].append(np.mean(epoch_metrics[phase]['precision']))
-                self.metrics_history[phase]['fd'].append(np.mean(epoch_metrics[phase]['fd']))
-                self.metrics_history[phase]['f1'].append(np.mean(epoch_metrics[phase]['f1']))
-                self.metrics_history[phase]['iou'].append(np.mean(epoch_metrics[phase]['iou']))
+                for metric, values in epoch_metrics[phase].items():
+                    self.metrics_history[phase][metric].append(np.mean(values))
 
             self._show_epoch_metrics(epoch_metrics)
-            self.save_metric_plot(target_metric='fd', suffix='fd')
-            self.save_metric_plot(target_metric='f1', suffix='f1')
-            self.save_metric_plot(target_metric='iou', suffix='iou')
+            
+            # сохранение графиков метрик
+            for metric in self.metrics_history['train']:
+                self.save_metric_plot(target_metric=metric, suffix=metric)
 
             # расчёт и вывод средних лоссов по эпохе
             for trainer in [self.model.g_trainer, self.model.c_trainer]:
@@ -103,7 +90,7 @@ class GANTrainer:
 
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
-
+        
         self.save_test(loader)
     
     def _schedulers_step(self, phase: Literal['train', 'valid']) -> None:
@@ -130,22 +117,22 @@ class GANTrainer:
 
         for i in range(min(3, inputs.shape[0])):
             plt.subplot(3, 4, i*4 + 1)
-            plt.imshow(inputs[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(inputs[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Input {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 2)
-            plt.imshow(masks[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(masks[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Mask_inpaint {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 3)
-            plt.imshow(generated[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(generated[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Generated {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 4)
-            plt.imshow(targets[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(targets[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Target {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
@@ -210,12 +197,15 @@ class GANTrainer:
             f1.append(f1_score(t_masked, p_masked, zero_division=1))
             iou.append(jaccard_score(t_masked, p_masked, zero_division=1))
 
-        accuracy = np.mean(acc) if acc else 0.0
-
-        # Fractal loss (структурное отличие)
+        accuracy = acc if acc else 0.0
         fd = self._calc_fractal_loss(generated, target, damage_mask)
-
-        return accuracy, np.mean(f1), np.mean(iou), fd
+        
+        return {
+            'accuracy': np.mean(accuracy),
+            'f1': np.mean(f1),
+            'iou': np.mean(iou),
+            'fd': fd
+        }
 
     def _load_checkpoint(self):
         if self.load_weights:

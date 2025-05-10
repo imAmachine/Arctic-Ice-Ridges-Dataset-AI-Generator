@@ -85,6 +85,36 @@ class IProcessor(ABC):
         return processed_image
 
 
+class IGenerativeModel:
+    def __init__(self, target_image_size, device, optimization_params: Dict):
+        self.target_image_size = target_image_size
+        self.device = device
+        self.optimization_params = optimization_params
+    
+    @abstractmethod
+    def switch_mode(self, mode: Literal['train', 'valid'] = 'train') -> None:
+        pass
+    
+    @abstractmethod
+    def save_checkpoint(self, output_path):
+        pass
+    
+    @abstractmethod
+    def load_checkpoint(self, path: str):
+        pass
+    
+    @abstractmethod
+    def train_step(self, **args):
+        pass
+    
+    @abstractmethod
+    def eval_step(self, **args):
+        pass
+    
+    @abstractmethod
+    def step_schedulers(self, metric: str):
+        pass
+
 class IModelTrainer(ABC):
     def __init__(self, model):
         self.model = model
