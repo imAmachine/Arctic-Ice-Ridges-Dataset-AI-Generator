@@ -1,11 +1,7 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
-import os
-
 import numpy as np
 from typing import Dict, Any, List, Literal, Type
-
-import torch
 
 
 class IProcessor(ABC):
@@ -89,9 +85,6 @@ class IProcessor(ABC):
         return processed_image
 
 
-
-
-
 class IModelTrainer(ABC):
     def __init__(self, model):
         self.model = model
@@ -105,8 +98,9 @@ class IModelTrainer(ABC):
     def eval_step(self):
         pass
     
-    def step_scheduler(self, val_loss):
-        self.scheduler.step(val_loss)
+    def step_scheduler(self, metric, mode):
+        self.scheduler.mode = mode
+        self.scheduler.step(metric)
     
     def reset_losses(self):
         self.losses_history = {'train': [], 'valid': []}

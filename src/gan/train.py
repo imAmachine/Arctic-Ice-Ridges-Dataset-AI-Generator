@@ -3,6 +3,7 @@ from typing import Dict, List, Literal
 import torch
 import matplotlib
 
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -14,6 +15,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_sco
 from src.gan.model import GenerativeModel
 from src.gan.dataset import DatasetCreator
 from src.common.analyze_tools import FractalAnalyzerGPU
+from src.common.utils import Utils
 
 
 class GANTrainer:
@@ -29,8 +31,14 @@ class GANTrainer:
         self.batch_size = batch_size
         self.checkpoints_ratio = checkpoints_ratio
 
+        self.optimization_params = {
+            'metric': 'iou',
+            'mode': 'max'
+        }
+        
         self.metrics_history = {'train': defaultdict(list), 'valid': defaultdict(list)}
         self.losses = {'train': defaultdict(list), 'valid': defaultdict(list)}
+        
         self.patience_counter = 0
 
         self.output_path = output_path
@@ -96,12 +104,16 @@ class GANTrainer:
             for trainer in [self.model.g_trainer, self.model.c_trainer]:
                 print(trainer.epoch_avg_losses_str('train', len(batch)))
             
-            self.model.step_schedulers(self.metrics_history['valid']['iou'][-1])
+            self._schedulers_step('valid')
 
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
 
         self.save_test(loader)
+    
+    def _schedulers_step(self, phase: Literal['train', 'valid']) -> None:
+        trg_metric_val = self.metrics_history[phase][self.optimization_params.get('metric')][-1]
+        self.model.step_schedulers(trg_metric_val, self.optimization_params.get('mode'))
     
     def _process_batch(self, phase: Literal['train', 'valid'], batch: List, visualize_batch=False):
         inputs, targets, masks = [tensor.to(self.device) for tensor in batch]
@@ -230,31 +242,23 @@ class GANTrainer:
             gen_img = generated[i].detach().squeeze()
             tgt_img = target[i].detach().squeeze()
 
-            try:
-                fd_gen = FractalAnalyzerGPU.calculate_fractal_dimension(
-                    *FractalAnalyzerGPU.box_counting(gen_img)
-                )
-                fd_target = FractalAnalyzerGPU.calculate_fractal_dimension(
-                    *FractalAnalyzerGPU.box_counting(tgt_img)
-                )
+            fd_gen = FractalAnalyzerGPU.calculate_fractal_dimension(
+                *FractalAnalyzerGPU.box_counting(gen_img)
+            )
+            fd_target = FractalAnalyzerGPU.calculate_fractal_dimension(
+                *FractalAnalyzerGPU.box_counting(tgt_img)
+            )
 
-                fd_total += abs(fd_gen - fd_target)
-            except Exception as e:
-                print(f"[FD] Ошибка на сэмпле {i}: {e}")
-                fd_total += 0.0
+            fd_total += abs(fd_gen - fd_target)
 
         return fd_total / batch_size
     
     def save_test(self, loaders):
-        import json
-        with open(os.path.join(self.output_path, 'metrics_history.json'), 'w') as f:
-            json.dump(self.metrics_history, f, indent=4)
-
-        with open(os.path.join(self.output_path, 'losses_history.json'), 'w') as f:
-            json.dump({
-                'generator': self.model.g_trainer.losses_history,
-                'critic': self.model.c_trainer.losses_history
-            }, f, indent=4)
+        Utils.to_json(self.metrics_history, os.path.join(self.output_path, 'metrics_history.json'))
+        Utils.to_json({
+            'generator': self.model.g_trainer.losses_history,
+            'critic': self.model.c_trainer.losses_history
+        }, os.path.join(self.output_path, 'losses_history.json'))
 
         if 'train' in loaders:
             final_batch = next(iter(loaders['train']))

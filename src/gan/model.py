@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 import torch
 import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
@@ -26,7 +27,7 @@ class GenerativeModel:
 
         self.g_trainer, self.c_trainer = self._init_trainers()
 
-    def _init_trainers(self):
+    def _init_trainers(self) -> tuple['WGANGeneratorModelTrainer', 'WGANCriticModelTrainer']:
         g_trainer = WGANGeneratorModelTrainer(
             model=self.generator, 
             critic=self.critic, 
@@ -35,25 +36,34 @@ class GenerativeModel:
             lambda_l1=self.lambda_l1,
             lambda_bce=self.lambda_bce,
         )
+        
         c_trainer = WGANCriticModelTrainer(
             model=self.critic, 
             lambda_gp=self.lambda_gp,
             lr=self.learning_rate
         )
+        
         return g_trainer, c_trainer
 
-    def get_model_transforms(self):
+    def get_model_transforms(self) -> 'transforms.Compose':
         return transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((self.target_image_size, self.target_image_size), interpolation=InterpolationMode.BILINEAR),
             transforms.ToTensor()
         ])
 
-    def switch_mode(self, mode='train'):
+    def switch_mode(self, mode: Literal['train', 'valid']='train') -> None:
         self.generator.train() if mode == 'train' else self.generator.eval()
         self.critic.train() if mode == 'train' else self.critic.eval()
 
     def train_step(self, input, target, damage_mask) -> None:
+        """метод выполнят 1 градиентный шаг обучения GAN
+
+        Args:
+            input (torch.tensor): входное повреждённое изображение
+            target (torch.tensor): целевое изображение
+            damage_mask (torch.tensor): маска аутпэинта
+        """
         self.current_iteration += 1
         for _ in range(self.n_critic):
             with torch.no_grad():
@@ -62,19 +72,14 @@ class GenerativeModel:
         self.g_trainer.train_step(input, target, damage_mask)
 
     def eval_step(self, input, target, damage_mask) -> None:
-        with torch.no_grad():
-            generated = self.g_trainer.eval_step(input, target, damage_mask)
-            self.c_trainer.eval_step(target, generated.detach())
+        generated = self.g_trainer.eval_step(input, target, damage_mask)
+        self.c_trainer.eval_step(target, generated.detach())
 
-    def step_schedulers(self, val_loss):
-        self.g_trainer.step_scheduler(val_loss)
-        self.c_trainer.step_scheduler(val_loss)
+    def step_schedulers(self, metric: float, mode: Literal['min', 'max']) -> None:
+        self.g_trainer.step_scheduler(metric, mode)
+        self.c_trainer.step_scheduler(metric, mode)
 
-    def reset_all_losses(self):
-        self.g_trainer.reset_losses()
-        self.c_trainer.reset_losses()
-
-    def save_checkpoint(self, output_path):
+    def save_checkpoint(self, output_path): # НУЖНО РАЗГРЕСТИ ЭТОТ МУСОР
         os.makedirs(output_path, exist_ok=True)
         checkpoint = {
             'current_iteration': self.current_iteration,
@@ -90,7 +95,7 @@ class GenerativeModel:
         torch.save(checkpoint, os.path.join(output_path, 'training_checkpoint.pt'))
         print(f"Checkpoint сохранен в {os.path.join(output_path, 'training_checkpoint.pt')}")
 
-    def load_checkpoint(self, output_path):
+    def load_checkpoint(self, output_path): # НУЖНО РАЗГРЕСТИ ЭТОТ МУСОР
         checkpoint_path = os.path.join(output_path, 'training_checkpoint.pt')
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -111,7 +116,7 @@ class GenerativeModel:
         else:
             raise FileNotFoundError(f"Checkpoint файл не найден по пути {checkpoint_path}")
 
-    def infer_generate(self, preprocessed_img, checkpoint_path, processor):
+    def infer_generate(self, preprocessed_img, checkpoint_path, processor): # НУЖНО РАЗГРЕСТИ ЭТОТ МУСОР
         self.switch_mode('eval')
         self.load_checkpoint(checkpoint_path)
 
@@ -148,7 +153,7 @@ class WGANGeneratorModelTrainer(IModelTrainer):
         self.lambda_bce = lambda_bce
         self.lambda_l1 = lambda_l1
         
-    def _calc_losses(self, input, target, phase='train'):
+    def _calc_losses(self, input, target, phase='train') -> 'float':
         adversarial_loss = -torch.mean(self.critic(input)) * self.lambda_w
         bce_loss = nn.BCELoss()(input, target) * self.lambda_bce
         l1_loss = nn.L1Loss()(input, target) * self.lambda_l1
@@ -185,8 +190,8 @@ class WGANGeneratorModelTrainer(IModelTrainer):
 class WGANCriticModelTrainer(IModelTrainer):
     def __init__(self, model, lambda_gp, lr):
         super().__init__(model)
+        
         self.lambda_gp = lambda_gp
-
         self.optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=6)
 
