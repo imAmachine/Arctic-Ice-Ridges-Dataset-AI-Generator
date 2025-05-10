@@ -3,7 +3,7 @@ from torch import cuda
 from src.preprocessing.processors import *
 
 # путь к файлам с конфигарциями
-GRID_TEST_PARAMS = './grid_test_params.json'
+CONFIG = './config.json'
 
 # путь к файлу с геоанализом исходных снимков
 GEODATA_PATH = "./data/geo_data.csv"

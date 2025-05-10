@@ -12,7 +12,7 @@ import tkinter as tk
 from gui.gui import ImageGenerationApp
 from settings import *
 
-
+configs = Utils.from_json(CONFIG)
 
 def main():
     parser = argparse.ArgumentParser(description='GAN модель для генерации ледовых торосов')
@@ -31,16 +31,7 @@ def main():
     run_all = not (args.preprocess or args.train or args.infer or args.gui or args.test)
 
     # Инициализация модели
-    model_gan = GenerativeModel(target_image_size=224, 
-                                g_feature_maps=32, 
-                                d_feature_maps=32,
-                                device=DEVICE,
-                                lr=0.0005,
-                                n_critic=5,
-                                lambda_w=1.5,
-                                lambda_bce=0.5,
-                                lambda_gp=10.0,
-                                lambda_l1=0.5)
+    model_gan = GenerativeModel(**configs['train'], device=DEVICE)
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
@@ -86,7 +77,7 @@ def main():
                                                        checkpoint_path=WEIGHTS_PATH, 
                                                        processor=processor)
 
-        output_path = 'D:/h/gacha/toros/suka/arctic-ridges-GAN/data/musor/output.png'
+        output_path = './data/inference/output.png'
         cv2.imwrite(output_path, generated)
         print(f"Генерация завершена. Результат сохранён в {output_path}")
 
@@ -97,7 +88,7 @@ def main():
         return
     
     if args.test:
-        grid_params = Utils.from_json(GRID_TEST_PARAMS)
+        grid_params = configs['tests']
         tester = ParamGridTester(grid_params)
 
         tester.run_grid_tests()

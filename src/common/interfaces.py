@@ -88,6 +88,8 @@ class IProcessor(ABC):
 class IModelTrainer(ABC):
     def __init__(self, model):
         self.model = model
+        self.optimizer = None
+        self.scheduler = None
         self.losses_history = {'train': [], 'valid': []}
     
     @abstractmethod
@@ -98,8 +100,7 @@ class IModelTrainer(ABC):
     def eval_step(self):
         pass
     
-    def step_scheduler(self, metric, mode):
-        self.scheduler.mode = mode
+    def step_scheduler(self, metric):
         self.scheduler.step(metric)
     
     def reset_losses(self):

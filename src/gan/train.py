@@ -30,11 +30,6 @@ class GANTrainer:
         self.val_ratio = val_ratio
         self.batch_size = batch_size
         self.checkpoints_ratio = checkpoints_ratio
-
-        self.optimization_params = {
-            'metric': 'iou',
-            'mode': 'max'
-        }
         
         self.metrics_history = {'train': defaultdict(list), 'valid': defaultdict(list)}
         self.losses = {'train': defaultdict(list), 'valid': defaultdict(list)}
@@ -112,8 +107,8 @@ class GANTrainer:
         self.save_test(loader)
     
     def _schedulers_step(self, phase: Literal['train', 'valid']) -> None:
-        trg_metric_val = self.metrics_history[phase][self.optimization_params.get('metric')][-1]
-        self.model.step_schedulers(trg_metric_val, self.optimization_params.get('mode'))
+        trg_metric_val = self.metrics_history[phase][self.model.optimization_params.get('metric')][-1]
+        self.model.step_schedulers(trg_metric_val)
     
     def _process_batch(self, phase: Literal['train', 'valid'], batch: List, visualize_batch=False):
         inputs, targets, masks = [tensor.to(self.device) for tensor in batch]

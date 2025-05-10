@@ -10,10 +10,17 @@ from src.gan.arch import WGanCritic, WGanGenerator
 
 class GenerativeModel:
     def __init__(self, target_image_size, g_feature_maps, d_feature_maps, device,
-                 n_critic, lambda_gp, lr, lambda_w, lambda_bce, lambda_l1):
+                 n_critic, lambda_gp, lr, lambda_w, lambda_bce, lambda_l1, optimizer_metric, optimizer_mode):
         self.device = device
+        
         self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
         self.critic = WGanCritic(input_channels=1, feature_maps=d_feature_maps).to(self.device)
+        
+        self.optimization_params = {
+            'metric': optimizer_metric,
+            'mode': optimizer_mode
+        }
+        
         self.target_image_size = target_image_size
         self.current_iteration = 0
 
@@ -30,8 +37,7 @@ class GenerativeModel:
     def _init_trainers(self) -> tuple['WGANGeneratorModelTrainer', 'WGANCriticModelTrainer']:
         g_trainer = WGANGeneratorModelTrainer(
             model=self.generator, 
-            critic=self.critic, 
-            lr=self.learning_rate,
+            critic=self.critic,
             lambda_w=self.lambda_w,
             lambda_l1=self.lambda_l1,
             lambda_bce=self.lambda_bce,
@@ -39,9 +45,12 @@ class GenerativeModel:
         
         c_trainer = WGANCriticModelTrainer(
             model=self.critic, 
-            lambda_gp=self.lambda_gp,
-            lr=self.learning_rate
+            lambda_gp=self.lambda_gp
         )
+        
+        for trainer in [g_trainer, c_trainer]:
+            trainer.optimizer = torch.optim.RMSprop(trainer.model.parameters(), lr=self.learning_rate)
+            trainer.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(trainer.optimizer, mode=self.optimization_params['mode'], factor=0.5, patience=6)
         
         return g_trainer, c_trainer
 
@@ -75,9 +84,9 @@ class GenerativeModel:
         generated = self.g_trainer.eval_step(input, target, damage_mask)
         self.c_trainer.eval_step(target, generated.detach())
 
-    def step_schedulers(self, metric: float, mode: Literal['min', 'max']) -> None:
-        self.g_trainer.step_scheduler(metric, mode)
-        self.c_trainer.step_scheduler(metric, mode)
+    def step_schedulers(self, metric: float) -> None:
+        self.g_trainer.step_scheduler(metric)
+        self.c_trainer.step_scheduler(metric)
 
     def save_checkpoint(self, output_path): # НУЖНО РАЗГРЕСТИ ЭТОТ МУСОР
         os.makedirs(output_path, exist_ok=True)
@@ -139,20 +148,16 @@ class GenerativeModel:
 
 
 class WGANGeneratorModelTrainer(IModelTrainer):
-    def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1, lr):
+    def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1):
         super().__init__(model)
         self.critic = critic
-
-        self.optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=6)
-        
         self.criterion = self._calc_losses
         
         # losses weights
         self.lambda_w = lambda_w
         self.lambda_bce = lambda_bce
         self.lambda_l1 = lambda_l1
-        
+    
     def _calc_losses(self, input, target, phase='train') -> 'float':
         adversarial_loss = -torch.mean(self.critic(input)) * self.lambda_w
         bce_loss = nn.BCELoss()(input, target) * self.lambda_bce
@@ -188,13 +193,10 @@ class WGANGeneratorModelTrainer(IModelTrainer):
 
 
 class WGANCriticModelTrainer(IModelTrainer):
-    def __init__(self, model, lambda_gp, lr):
+    def __init__(self, model, lambda_gp):
         super().__init__(model)
         
         self.lambda_gp = lambda_gp
-        self.optimizer = torch.optim.RMSprop(model.parameters(), lr=lr)
-        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=6)
-
         self.criterion = self._calc_losses
     
     def _calc_gradient_penalty(self, real_samples, fake_samples):
