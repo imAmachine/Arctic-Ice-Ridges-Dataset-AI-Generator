@@ -71,14 +71,14 @@ class GANTrainer:
                     self.model.switch_mode(phase)
                     _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
                     
-                    self.model.switch_mode('valid')
-                    metrics = self._calc_metrics(batch)
-                    epoch_metrics[phase].update(metrics)
+                    # self.model.switch_mode('valid')
+                    # metrics = self._calc_metrics(batch)
+                    # epoch_metrics[phase].update(metrics)
 
                 for metric, values in epoch_metrics[phase].items():
                     self.metrics_history[phase][metric].append(np.mean(values))
 
-            self._show_epoch_metrics(epoch_metrics)
+            # self._show_epoch_metrics(epoch_metrics)
             
             # сохранение графиков метрик
             # for metric in self.metrics_history['train']:
@@ -175,39 +175,42 @@ class GANTrainer:
 
         print(output_str)
     
-    def _calc_metrics(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor]) -> tuple[float, float, float]:
-        damaged, target, damage_mask = [el.to(self.device).detach() for el in batch]
+    # 
+    # ДОРАБОТАТЬ МЕТРИКИ (НЕ ВЕРНО СЧИТАЕТ)
+    # 
+    # def _calc_metrics(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor]) -> tuple[float, float, float]:
+    #     damaged, target, damage_mask = [el.to(self.device).detach() for el in batch]
         
-        with torch.no_grad():
-            generated = self.model.generator(damaged, damage_mask)
+    #     with torch.no_grad():
+    #         generated = self.model.generator(damaged, damage_mask)
 
-            # Accuracy (по маске)
-            gen_bin = (generated.cpu().numpy() > 0.15).astype(np.uint8)
-            tgt_bin = (target.cpu().numpy() > 0.15).astype(np.uint8)
-            mask_bin = (damage_mask.cpu().numpy() > 0.15).astype(np.uint8)
+    #         # Accuracy (по маске)
+    #         gen_bin = (generated.cpu().numpy() > 0.15).astype(np.uint8)
+    #         tgt_bin = (target.cpu().numpy() > 0.15).astype(np.uint8)
+    #         mask_bin = (damage_mask.cpu().numpy() > 0.15).astype(np.uint8)
 
-            acc, f1, iou = [], [], []
-            for i in range(gen_bin.shape[0]):
-                p = gen_bin[i].flatten()
-                t = tgt_bin[i].flatten()
-                m = mask_bin[i].flatten()
+    #         acc, f1, iou = [], [], []
+    #         for i in range(gen_bin.shape[0]):
+    #             p = gen_bin[i].flatten()
+    #             t = tgt_bin[i].flatten()
+    #             m = mask_bin[i].flatten()
 
-                p_masked = p[m == 1]
-                t_masked = t[m == 1]
+    #             p_masked = p[m == 1]
+    #             t_masked = t[m == 1]
 
-                acc.append(precision_score(t_masked, p_masked, zero_division=1))
-                f1.append(f1_score(t_masked, p_masked, zero_division=1))
-                iou.append(jaccard_score(t_masked, p_masked, zero_division=1))
+    #             acc.append(precision_score(t_masked, p_masked, zero_division=1))
+    #             f1.append(f1_score(t_masked, p_masked, zero_division=1))
+    #             iou.append(jaccard_score(t_masked, p_masked, zero_division=1))
 
-            accuracy = acc if acc else 0.0
-            # fd = self._calc_fractal_loss(generated, target)
+    #         accuracy = acc if acc else 0.0
+    #         # fd = self._calc_fractal_loss(generated, target)
             
-            return {
-                'accuracy': np.mean(accuracy),
-                'f1': np.mean(f1),
-                'iou': np.mean(iou),
-                # 'fd': fd
-            }
+    #         return {
+    #             'accuracy': np.mean(accuracy),
+    #             'f1': np.mean(f1),
+    #             'iou': np.mean(iou),
+    #             # 'fd': fd
+    #         }
 
     def _load_checkpoint(self):
         if self.load_weights:
