@@ -72,14 +72,16 @@ class WGanGenerator(nn.Module):
         self.enc1 = ConvBlock(input_channels, feature_maps, use_batchnorm=False)
         self.enc2 = ConvBlock(feature_maps, feature_maps * 2)
         self.enc3 = ConvBlock(feature_maps * 2, feature_maps * 4)
-        self.enc4 = ConvBlock(feature_maps * 4, feature_maps * 4)
+        self.enc4 = ConvBlock(feature_maps * 4, feature_maps * 8)
+        self.enc5 = ConvBlock(feature_maps * 8, feature_maps * 8)
 
         self.bottleneck = nn.Sequential(
-            *[ResidualBlock(feature_maps * 4) for _ in range(3)]
+            *[ResidualBlock(feature_maps * 8) for _ in range(3)]
         )
 
-        self.dec4 = UpConvBlock(feature_maps * 4 + feature_maps * 4, feature_maps * 4, dropout=True)
-        self.dec3 = UpConvBlock(feature_maps * 4 + feature_maps * 4, feature_maps * 4, dropout=False)
+        self.dec5 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=True)
+        self.dec4 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=True)
+        self.dec3 = UpConvBlock(feature_maps * 8 + feature_maps * 4, feature_maps * 4, dropout=False)
         self.dec2 = UpConvBlock(feature_maps * 4 + feature_maps * 2, feature_maps * 2, dropout=False)
         self.dec1 = UpConvBlock(feature_maps * 2 + feature_maps, feature_maps, dropout=False)
 
@@ -95,10 +97,12 @@ class WGanGenerator(nn.Module):
         e2 = self.enc2(e1)
         e3 = self.enc3(e2)
         e4 = self.enc4(e3)
+        e5 = self.enc5(e4)
 
-        bn = self.bottleneck(e4)
+        bn = self.bottleneck(e5)
 
-        d4 = self.dec4(torch.cat([bn, e4], dim=1))
+        d5 = self.dec5(torch.cat([bn, e5], dim=1))
+        d4 = self.dec4(torch.cat([d5, e4], dim=1))
         d3 = self.dec3(torch.cat([d4, e3], dim=1))
         d2 = self.dec2(torch.cat([d3, e2], dim=1))
         d1 = self.dec1(torch.cat([d2, e1], dim=1))

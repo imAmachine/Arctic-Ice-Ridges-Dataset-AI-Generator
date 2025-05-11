@@ -68,8 +68,10 @@ class GANTrainer:
                 self.model.switch_mode('train' if phase == 'train' else 'eval')
 
                 for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.capitalize()}")):
+                    self.model.switch_mode(phase)
                     _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
-
+                    
+                    self.model.switch_mode('valid')
                     metrics = self._calc_metrics(batch)
                     epoch_metrics[phase].update(metrics)
 
@@ -79,8 +81,8 @@ class GANTrainer:
             self._show_epoch_metrics(epoch_metrics)
             
             # сохранение графиков метрик
-            for metric in self.metrics_history['train']:
-                self.save_metric_plot(target_metric=metric, suffix=metric)
+            # for metric in self.metrics_history['train']:
+            #     self.save_metric_plot(target_metric=metric, suffix=metric)
 
             # расчёт и вывод средних лоссов по эпохе
             for trainer in [self.model.g_trainer, self.model.c_trainer]:
@@ -174,36 +176,38 @@ class GANTrainer:
         print(output_str)
     
     def _calc_metrics(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor]) -> tuple[float, float, float]:
-        damaged, target, damage_mask = [el.to(self.device) for el in batch]
-        generated = self.model.generator(damaged, damage_mask)
-
-        # Accuracy (по маске)
-        gen_bin = (generated.detach().cpu().numpy() > 0.5).astype(np.uint8)
-        tgt_bin = (target.detach().cpu().numpy() > 0.5).astype(np.uint8)
-        mask_bin = (damage_mask.detach().cpu().numpy() > 0.5).astype(np.uint8)
-
-        acc, f1, iou = [], [], []
-        for i in range(gen_bin.shape[0]):
-            p = gen_bin[i].flatten()
-            t = tgt_bin[i].flatten()
-            m = mask_bin[i].flatten()
-
-            p_masked = p[m == 1]
-            t_masked = t[m == 1]
-
-            acc.append(precision_score(t_masked, p_masked, zero_division=1))
-            f1.append(f1_score(t_masked, p_masked, zero_division=1))
-            iou.append(jaccard_score(t_masked, p_masked, zero_division=1))
-
-        accuracy = acc if acc else 0.0
-        # fd = self._calc_fractal_loss(generated, target, damage_mask)
+        damaged, target, damage_mask = [el.to(self.device).detach() for el in batch]
         
-        return {
-            'accuracy': np.mean(accuracy),
-            'f1': np.mean(f1),
-            'iou': np.mean(iou),
-            # 'fd': fd
-        }
+        with torch.no_grad():
+            generated = self.model.generator(damaged, damage_mask)
+
+            # Accuracy (по маске)
+            gen_bin = (generated.cpu().numpy() > 0.15).astype(np.uint8)
+            tgt_bin = (target.cpu().numpy() > 0.15).astype(np.uint8)
+            mask_bin = (damage_mask.cpu().numpy() > 0.15).astype(np.uint8)
+
+            acc, f1, iou = [], [], []
+            for i in range(gen_bin.shape[0]):
+                p = gen_bin[i].flatten()
+                t = tgt_bin[i].flatten()
+                m = mask_bin[i].flatten()
+
+                p_masked = p[m == 1]
+                t_masked = t[m == 1]
+
+                acc.append(precision_score(t_masked, p_masked, zero_division=1))
+                f1.append(f1_score(t_masked, p_masked, zero_division=1))
+                iou.append(jaccard_score(t_masked, p_masked, zero_division=1))
+
+            accuracy = acc if acc else 0.0
+            # fd = self._calc_fractal_loss(generated, target)
+            
+            return {
+                'accuracy': np.mean(accuracy),
+                'f1': np.mean(f1),
+                'iou': np.mean(iou),
+                # 'fd': fd
+            }
 
     def _load_checkpoint(self):
         if self.load_weights:
@@ -214,7 +218,7 @@ class GANTrainer:
                 print(f"Ошибка при загрузке чекпоинта: {e}")
                 print("Начинаем обучение с нуля.")
 
-    def _calc_fractal_loss(self, generated: torch.Tensor, target: torch.Tensor, mask: torch.Tensor) -> float:
+    def _calc_fractal_loss(self, generated: torch.Tensor, target: torch.Tensor) -> float:
         """
         Считает среднюю разницу фрактальной размерности между сгенерированным изображением и ground truth
         """

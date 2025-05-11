@@ -40,7 +40,9 @@ def main():
     parser.add_argument('--infer', action='store_true', help='Инференс на одном изображении')
     parser.add_argument('--input_path', type=str, help='Путь к изображению для инференса')
     parser.add_argument('--epochs', type=int, default=1000, help='Количество эпох обучения')
+    parser.add_argument('--augs', type=int, default=1, help='Количество аугментированных сэмплов на снимок, определяет итоговый размер датасета')
     parser.add_argument('--batch_size', type=int, default=3, help='Размер батча')
+    parser.add_argument('--val_rat', type=float, default=0.2, help='Размер валидационной выборки в процентах')
     parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
     parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
     parser.add_argument('--test', action='store_true', help='Запуск тестов параметров')
@@ -63,6 +65,7 @@ def main():
                                 model_transforms=model_gan.get_model_transforms(),
                                 preprocessors=PREPROCESSORS,
                                 augmentations=AUGMENTATIONS,
+                                augs_per_img=args.augs,
                                 device=DEVICE)
 
     # Препроцессинг данных
@@ -80,7 +83,7 @@ def main():
                              device=DEVICE,
                              batch_size=args.batch_size,
                              load_weights=args.load_weights,
-                             val_ratio=0.20,
+                             val_ratio=args.val_rat,
                              checkpoints_ratio=50)
         
         trainer.train()

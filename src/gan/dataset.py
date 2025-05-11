@@ -75,7 +75,12 @@ class InferenceMaskingProcessor:
 
 
 class IceRidgeDataset(Dataset):
-    def __init__(self, metadata: Dict[str, Dict], dataset_processor: 'MaskingProcessor', augmentations: Optional[Callable] = None, model_transforms: Optional[Callable] = None, random_select: bool = False):
+    def __init__(self, metadata: Dict[str, Dict], 
+                 dataset_processor: 'MaskingProcessor', 
+                 augmentations: Optional[Callable] = None, 
+                 augmentations_per_image: int = 1,
+                 model_transforms: Optional[Callable] = None, 
+                 random_select: bool = False):
         """
         Args:
             metadata: словарь с метаданными изображений
@@ -89,11 +94,12 @@ class IceRidgeDataset(Dataset):
         self.metadata = metadata
         self.image_keys = list(metadata.keys())
         self.augmentations = augmentations
+        self.augmentations_per_image = augmentations_per_image
         self.model_transforms = model_transforms
         self.random_select = random_select  # Флаг случайного выбора изображения
 
     def __len__(self) -> int:
-        return len(self.image_keys)
+        return len(self.image_keys) * self.augmentations_per_image
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         key = random.choice(self.image_keys) if self.random_select else self.image_keys[idx]
@@ -152,13 +158,20 @@ class IceRidgeDataset(Dataset):
 
 
 class DatasetCreator:
-    def __init__(self, generated_path, original_data_path, preprocessed_data_path, images_extentions, 
-                 model_transforms, preprocessors: List, augmentations,
+    def __init__(self, generated_path, 
+                 original_data_path, 
+                 preprocessed_data_path, 
+                 images_extentions, 
+                 model_transforms, 
+                 preprocessors: List, 
+                 augmentations,
+                 augs_per_img,
                  device):
         # Инициализация
         self.preprocessor = IceRidgeDatasetPreprocessor(preprocessors)
         self.dataset_processor = MaskingProcessor(mask_padding=0.20)
         self.augmentations = augmentations
+        self.augs_per_img = augs_per_img
         self.device = device
         self.input_data_path = original_data_path
         
@@ -189,6 +202,7 @@ class DatasetCreator:
             train_dataset = IceRidgeDataset(metadata, 
                                             dataset_processor=self.dataset_processor, 
                                             augmentations=train_augs,
+                                            augmentations_per_image=self.augs_per_img,
                                             model_transforms=self.model_transforms,
                                             random_select=random_select)
             loader = DataLoader(
