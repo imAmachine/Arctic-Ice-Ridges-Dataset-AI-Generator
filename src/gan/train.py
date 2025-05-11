@@ -88,7 +88,7 @@ class GANTrainer:
             for trainer in [self.model.g_trainer, self.model.c_trainer]:
                 print(trainer.epoch_avg_losses_str('train', len(batch)))
             
-            self._schedulers_step('valid')
+            # self._schedulers_step('valid')
 
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)

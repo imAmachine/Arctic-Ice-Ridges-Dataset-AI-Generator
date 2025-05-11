@@ -6,18 +6,23 @@ from src.preprocessing.processors import *
 CONFIG = './config.json'
 DEFAULT_TRAIN_CONF = {
     "target_image_size": 256,
-    "g_feature_maps": 32,
+    "g_feature_maps": 64,
     "d_feature_maps": 32,
     "n_critic": 5,
     "losses_weights": {
         "gen": {
-            "adv": 1.0,
-            "bce": 0.0,
-            "l1": 0.0
+            "adv": 2.0,
+            "bce": 3.0,
+            "l1": 1.5
         },
         "discr": {
             "gp": 10.0
         }
+    },
+    "optimization_params": {
+        "metric": "iou",
+        "mode": "max",
+        "lr": 0.0007
     },
     "optimization_params": {
         "metric": "f1",
