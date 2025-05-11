@@ -1,5 +1,6 @@
 data/
 outputs/
+*.json
 *.idea
 # Byte-compiled / optimized / DLL files
 __pycache__/
