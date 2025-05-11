@@ -116,11 +116,17 @@ class IGenerativeModel:
         pass
 
 class IModelTrainer(ABC):
-    def __init__(self, model):
+    def __init__(self, model, losses_weights: Dict):
         self.model = model
         self.optimizer = None
         self.scheduler = None
+        self.criterion = self._calc_losses
         self.losses_history = {'train': [], 'valid': []}
+        self.losses_weights = losses_weights
+    
+    @abstractmethod
+    def _calc_losses(self):
+        pass
     
     @abstractmethod
     def train_step(self):

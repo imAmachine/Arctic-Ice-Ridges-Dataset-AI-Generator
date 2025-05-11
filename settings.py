@@ -4,6 +4,27 @@ from src.preprocessing.processors import *
 
 # путь к файлам с конфигарциями
 CONFIG = './config.json'
+DEFAULT_TRAIN_CONF = {
+    "target_image_size": 256,
+    "g_feature_maps": 32,
+    "d_feature_maps": 32,
+    "n_critic": 5,
+    "losses_weights": {
+        "gen": {
+            "adv": 1.0,
+            "bce": 0.0,
+            "l1": 0.0
+        },
+        "discr": {
+            "gp": 10.0
+        }
+    },
+    "optimization_params": {
+        "metric": "f1",
+        "mode": "max",
+        "lr": 0.0005
+    }
+}
 
 # путь к файлу с геоанализом исходных снимков
 GEODATA_PATH = "./data/geo_data.csv"

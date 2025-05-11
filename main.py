@@ -1,3 +1,4 @@
+from collections import defaultdict
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel
@@ -12,7 +13,25 @@ import tkinter as tk
 from gui.gui import ImageGenerationApp
 from settings import *
 
-configs = Utils.from_json(CONFIG)
+
+def init_config():
+    if not os.path.exists(CONFIG):
+        print('Файл конфигурации отсутствует, будет создан стандартный')
+        Utils.to_json({"train": DEFAULT_TRAIN_CONF}, CONFIG)
+        return
+
+    config = Utils.from_json(CONFIG)
+    train_cfg = config.get("train")
+
+    expected_keys = set(DEFAULT_TRAIN_CONF.keys())
+    actual_keys = set(train_cfg.keys()) if isinstance(train_cfg, dict) else set()
+
+    if actual_keys != expected_keys:
+        answer = input("Конфигурация 'train' некорректна. Перезаписать стандартными значениями? (Y/N): ")
+        if answer.strip().upper() == "Y":
+            config["train"] = DEFAULT_TRAIN_CONF
+            Utils.to_json(config, CONFIG)
+            
 
 def main():
     parser = argparse.ArgumentParser(description='GAN модель для генерации ледовых торосов')
@@ -30,8 +49,11 @@ def main():
 
     run_all = not (args.preprocess or args.train or args.infer or args.gui or args.test)
 
+    init_config()
+    config = Utils.from_json(CONFIG)
+    
     # Инициализация модели
-    model_gan = GenerativeModel(**configs['train'], device=DEVICE)
+    model_gan = GenerativeModel(**config['train'], device=DEVICE)
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
@@ -88,10 +110,13 @@ def main():
         return
     
     if args.test:
-        grid_params = configs['tests']
-        tester = ParamGridTester(grid_params)
-
-        tester.run_grid_tests()
+        grid_params = config.get('tests')
+        if grid_params:
+            print('запуск тестирования')
+            tester = ParamGridTester(grid_params)
+            tester.run_grid_tests()
+        else:
+            print('проблема чтения параметров тестирования')
         return
         
 

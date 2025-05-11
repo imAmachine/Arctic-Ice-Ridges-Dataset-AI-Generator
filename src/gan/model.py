@@ -1,5 +1,5 @@
 import os
-from typing import Literal
+from typing import Dict, Literal
 import torch
 import torch.nn as nn
 from torchvision.transforms import transforms, InterpolationMode
@@ -9,34 +9,31 @@ from src.common.interfaces import IGenerativeModel, IModelTrainer
 from src.gan.arch import WGanCritic, WGanGenerator
 
 class GenerativeModel(IGenerativeModel):
-    def __init__(self, g_feature_maps, d_feature_maps, n_critic, lambda_gp, lambda_w, lambda_bce, lambda_l1, 
-                 target_image_size, device, optimization_params):
+    def __init__(self, device: str, 
+                 losses_weights: Dict,
+                 optimization_params: Dict,
+                 target_image_size: int = 256,
+                 g_feature_maps: int = 64, 
+                 d_feature_maps: int = 32, 
+                 n_critic: int = 5):
         super().__init__(target_image_size, device, optimization_params)
         self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
         self.critic = WGanCritic(input_channels=1, feature_maps=d_feature_maps).to(self.device)
         self.current_iteration = 0
 
         self.n_critic = n_critic
+        self.g_trainer, self.c_trainer = self._init_trainers(losses_weights.get('gen'), losses_weights.get('discr'))
 
-        self.lambda_gp = lambda_gp
-        self.lambda_w = lambda_w
-        self.lambda_bce = lambda_bce
-        self.lambda_l1 = lambda_l1
-
-        self.g_trainer, self.c_trainer = self._init_trainers()
-
-    def _init_trainers(self) -> tuple['WGANGeneratorModelTrainer', 'WGANCriticModelTrainer']:
+    def _init_trainers(self, g_losses_weights, c_losses_weights) -> tuple['WGANGeneratorModelTrainer', 'WGANCriticModelTrainer']:
         g_trainer = WGANGeneratorModelTrainer(
             model=self.generator, 
             critic=self.critic,
-            lambda_w=self.lambda_w,
-            lambda_l1=self.lambda_l1,
-            lambda_bce=self.lambda_bce,
+            losses_weights=g_losses_weights
         )
         
         c_trainer = WGANCriticModelTrainer(
             model=self.critic, 
-            lambda_gp=self.lambda_gp
+            losses_weights=c_losses_weights
         )
         
         for trainer in [g_trainer, c_trainer]:
@@ -139,29 +136,29 @@ class GenerativeModel(IGenerativeModel):
 
 
 class WGANGeneratorModelTrainer(IModelTrainer):
-    def __init__(self, model, critic, lambda_w, lambda_bce, lambda_l1):
-        super().__init__(model)
+    def __init__(self, model, critic, losses_weights: Dict):
+        super().__init__(model, losses_weights)
         self.critic = critic
         self.criterion = self._calc_losses
-        
-        # losses weights
-        self.lambda_w = lambda_w
-        self.lambda_bce = lambda_bce
-        self.lambda_l1 = lambda_l1
     
     def _calc_losses(self, input, target, phase='train') -> 'float':
-        adversarial_loss = -torch.mean(self.critic(input)) * self.lambda_w
-        bce_loss = nn.BCELoss()(input, target) * self.lambda_bce
-        l1_loss = nn.L1Loss()(input, target) * self.lambda_l1
-        total_loss = adversarial_loss + bce_loss + l1_loss
+        adv_loss = -torch.mean(self.critic(input)) * self.losses_weights.get('adv')
+        self.losses_history[phase].append({'adv_loss': adv_loss})
         
-        self.losses_history[phase].append({
-            'adversarial_loss': adversarial_loss.item(),
-            'bce_loss': bce_loss.item(), 
-            'l1_loss': l1_loss.item(),
-            'total_loss': total_loss.item()
-        })
+        if self.losses_weights.get('bce') > 0.0:
+            bce_loss = nn.BCELoss()(input, target) * self.losses_weights.get('bce')
+            self.losses_history[phase][-1].update({'bce_loss': bce_loss})
         
+        if self.losses_weights.get('l1') > 0.0:
+            l1_loss = nn.L1Loss()(input, target) * self.losses_weights.get('l1')
+            self.losses_history[phase][-1].update({'l1_loss': l1_loss})
+        
+        total_loss = sum(self.losses_history[phase][-1].values())
+        self.losses_history[phase][-1].update({'total_loss': total_loss})
+        
+        for k, v in self.losses_history[phase][-1].items():
+            self.losses_history[phase][-1][k] = v.item()
+
         return total_loss
             
     def train_step(self, input, target, mask):
@@ -184,11 +181,8 @@ class WGANGeneratorModelTrainer(IModelTrainer):
 
 
 class WGANCriticModelTrainer(IModelTrainer):
-    def __init__(self, model, lambda_gp):
-        super().__init__(model)
-        
-        self.lambda_gp = lambda_gp
-        self.criterion = self._calc_losses
+    def __init__(self, model, losses_weights: Dict):
+        super().__init__(model, losses_weights)
     
     def _calc_gradient_penalty(self, real_samples, fake_samples):
         alpha = torch.rand(real_samples.size(0), 1, 1, 1, device=real_samples.device)
@@ -213,15 +207,18 @@ class WGANCriticModelTrainer(IModelTrainer):
         real_pred = self.model(real_target)
         fake_pred = self.model(fake_generated)
 
-        wasserstein_loss = -torch.mean(real_pred) + torch.mean(fake_pred)
-
-        grad_penalty = self._calc_gradient_penalty(real_target, fake_generated) if phase == 'train' else torch.tensor(0.0, device=real_target.device)
-        total_loss = wasserstein_loss + grad_penalty * self.lambda_gp
+        wass_loss = -torch.mean(real_pred) + torch.mean(fake_pred)
+        
+        grad_penalty = torch.tensor(0.0, device=real_target.device)
+        if phase == 'train':
+            grad_penalty = self._calc_gradient_penalty(real_target, fake_generated)
+        
+        total_loss = wass_loss + grad_penalty * self.losses_weights.get('gp')
 
         self.losses_history[phase].append({
-            'total_loss': total_loss.item(),
-            'wasserstein_loss': wasserstein_loss.item(),
-            'gradient_penalty': grad_penalty.item() if phase == 'train' else 0.0
+            'wass_loss': wass_loss.item(),
+            'gradient_penalty': grad_penalty.item() if phase == 'train' else 0.0,
+            'total_loss': total_loss.item()
         })
 
         return total_loss
@@ -232,8 +229,8 @@ class WGANCriticModelTrainer(IModelTrainer):
 
         loss = self.criterion(real_target, fake_generated, phase='train')
         loss.backward()
+        
         self.optimizer.step()
-
         return loss
 
     def eval_step(self, real_target, fake_generated):
