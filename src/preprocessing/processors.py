@@ -3,8 +3,8 @@ import numpy as np
 import torch
 
 from src.common.analyze_tools import FractalAnalyzer, FractalAnalyzerGPU
-from ..common.interfaces import IProcessor
-from ..common.utils import Utils
+from src.common.interfaces import IProcessor
+from src.common.utils import Utils
 
 class CropProcessor(IProcessor):
     """Процессор для обрезки изображения"""

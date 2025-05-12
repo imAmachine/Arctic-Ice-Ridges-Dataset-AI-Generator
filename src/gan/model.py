@@ -1,3 +1,4 @@
+from collections import defaultdict
 import os
 from typing import Dict, Literal
 import torch
@@ -12,10 +13,10 @@ class GenerativeModel(IGenerativeModel):
     def __init__(self, device: str, 
                  losses_weights: Dict,
                  optimization_params: Dict,
-                 target_image_size: int = 256,
-                 g_feature_maps: int = 64, 
-                 d_feature_maps: int = 32, 
-                 n_critic: int = 5):
+                 target_image_size,
+                 g_feature_maps, 
+                 d_feature_maps, 
+                 n_critic):
         super().__init__(target_image_size, device, optimization_params)
         self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
         self.critic = WGanCritic(input_channels=1, feature_maps=d_feature_maps).to(self.device)
@@ -52,21 +53,25 @@ class GenerativeModel(IGenerativeModel):
     def switch_mode(self, mode: Literal['train', 'valid']='train') -> None:
         self.generator.train() if mode == 'train' else self.generator.eval()
         self.critic.train() if mode == 'train' else self.critic.eval()
-
-    def train_step(self, input, target, damage_mask) -> None:
-        """метод выполнят 1 градиентный шаг обучения GAN
-
-        Args:
-            input (torch.tensor): входное повреждённое изображение
-            target (torch.tensor): целевое изображение
-            damage_mask (torch.tensor): маска аутпэинта
-        """
+    
+    def _train_critic_step(self, input_data, target_data, damage_mask):
+        with torch.no_grad():
+            for _ in range(self.n_critic):
+                fake_images = self.generator(input_data, damage_mask)
+        self.c_trainer.train_step(target_data, fake_images.detach())
+    
+    def _train_generator_step(self, input_data, target_data, damage_mask):
+        generated = self.generator(input_data, damage_mask)
+        self.g_trainer.train_step(generated, target_data)
+    
+    def train_step(self, input_data, target_data, damage_mask) -> None:
         self.current_iteration += 1
-        for _ in range(self.n_critic):
-            with torch.no_grad():
-                fake_images = self.generator(input, damage_mask)
-            self.c_trainer.train_step(target, fake_images.detach())
-        self.g_trainer.train_step(input, target, damage_mask)
+        
+        # цикл обучения критика
+        self._train_critic_step(input_data, target_data, damage_mask)
+        
+        # шаг обучения генератора
+        self._train_generator_step(input_data, target_data, damage_mask)
 
     def eval_step(self, input, target, damage_mask) -> None:
         generated = self.g_trainer.eval_step(input, target, damage_mask)
@@ -86,8 +91,8 @@ class GenerativeModel(IGenerativeModel):
             'critic_optimizer': self.c_trainer.optimizer.state_dict(),
             'generator_scheduler': self.g_trainer.scheduler.state_dict(),
             'critic_scheduler': self.c_trainer.scheduler.state_dict(),
-            'generator_loss_history': self.g_trainer.losses_history,
-            'critic_loss_history': self.c_trainer.losses_history
+            'generator_loss_history': self.g_trainer.loss_history,
+            'critic_loss_history': self.c_trainer.loss_history
         }
         torch.save(checkpoint, os.path.join(output_path, 'training_checkpoint.pt'))
         print(f"Checkpoint сохранен в {os.path.join(output_path, 'training_checkpoint.pt')}")
@@ -104,8 +109,8 @@ class GenerativeModel(IGenerativeModel):
             self.g_trainer.scheduler.load_state_dict(checkpoint['generator_scheduler'])
             self.c_trainer.scheduler.load_state_dict(checkpoint['critic_scheduler'])
 
-            self.g_trainer.losses_history = checkpoint['generator_loss_history']
-            self.c_trainer.losses_history = checkpoint['critic_loss_history']
+            self.g_trainer.loss_history = checkpoint['generator_loss_history']
+            self.c_trainer.loss_history = checkpoint['critic_loss_history']
             self.current_iteration = checkpoint['current_iteration']
 
             print(f"Checkpoint загружен из {checkpoint_path} (итерация {self.current_iteration})")
@@ -141,42 +146,29 @@ class WGANGeneratorModelTrainer(IModelTrainer):
         self.critic = critic
         self.criterion = self._calc_losses
     
-    def _calc_losses(self, input, target, phase='train') -> 'float':
-        adv_loss = -torch.mean(self.critic(input)) * self.losses_weights.get('adv')
-        self.losses_history[phase].append({'adv_loss': adv_loss})
-        
-        if self.losses_weights.get('bce') > 0.0:
-            bce_loss = nn.BCELoss()(input, target) * self.losses_weights.get('bce')
-            self.losses_history[phase][-1].update({'bce_loss': bce_loss})
-        
-        if self.losses_weights.get('l1') > 0.0:
-            l1_loss = nn.L1Loss()(input, target) * self.losses_weights.get('l1')
-            self.losses_history[phase][-1].update({'l1_loss': l1_loss})
-        
-        total_loss = sum(self.losses_history[phase][-1].values())
-        self.losses_history[phase][-1].update({'total_loss': total_loss})
-        
-        for k, v in self.losses_history[phase][-1].items():
-            self.losses_history[phase][-1][k] = v.item()
-
-        return total_loss
+    def _calc_adv_loss(self, input_data):
+        return -torch.mean(self.critic(input_data))
+    
+    def _calc_losses(self, input_data, target_data, phase='train') -> None:
+        self.loss_history[phase].append({})
+        self.calc_loss(loss_fn=self._calc_adv_loss, loss_name='adv', phase=phase, samples=(input_data,))
+        self.calc_loss(loss_fn=nn.BCELoss(), loss_name='bce', phase=phase, samples=(input_data, target_data))
             
-    def train_step(self, input, target, mask):
+    def train_step(self, generated, target) -> None:
         self.model.train()
         self.optimizer.zero_grad()
         
-        generated = self.model(input, mask)
-        loss = self.criterion(generated, target, phase='train')
-        loss.backward()
-        self.optimizer.step()
+        self.total_train_loss = torch.tensor(0.0, device="cuda:0")
+        self.criterion(generated, target, phase='train')
+        self.total_train_loss.backward()
         
-        return generated
+        self.optimizer.step()
     
     def eval_step(self, input, target, mask):
         self.model.eval()
         with torch.no_grad():
             generated = self.model(input, mask)
-            _ = self.criterion(generated, target, phase='valid')
+            self.criterion(generated, target, phase='valid')
             return generated
 
 
@@ -203,37 +195,31 @@ class WGANCriticModelTrainer(IModelTrainer):
         gradient_norm = gradients.norm(2, dim=1)
         return ((gradient_norm - 1) ** 2).mean()
     
+    def _calc_wass_loss(self, real_pred, fake_pred):
+        return -torch.mean(real_pred) + torch.mean(fake_pred)
+    
     def _calc_losses(self, real_target, fake_generated, phase='train'):
+        self.loss_history[phase].append({})
+        
         real_pred = self.model(real_target)
         fake_pred = self.model(fake_generated)
-
-        wass_loss = -torch.mean(real_pred) + torch.mean(fake_pred)
         
-        grad_penalty = torch.tensor(0.0, device=real_target.device)
+        self.calc_loss(loss_fn=self._calc_wass_loss, loss_name='wasserstein', phase=phase, samples=(real_pred, fake_pred))
+        
         if phase == 'train':
-            grad_penalty = self._calc_gradient_penalty(real_target, fake_generated)
-        
-        total_loss = wass_loss + grad_penalty * self.losses_weights.get('gp')
+            self.calc_loss(loss_fn=self._calc_gradient_penalty, loss_name='gp', phase=phase, samples=(real_target, fake_generated))    
 
-        self.losses_history[phase].append({
-            'wass_loss': wass_loss.item(),
-            'gradient_penalty': grad_penalty.item() if phase == 'train' else 0.0,
-            'total_loss': total_loss.item()
-        })
-
-        return total_loss
-    
-    def train_step(self, real_target, fake_generated):
+    def train_step(self, real_target, fake_generated) -> None:
         self.model.train()
         self.optimizer.zero_grad()
-
-        loss = self.criterion(real_target, fake_generated, phase='train')
-        loss.backward()
+        
+        self.total_train_loss = torch.tensor(0.0, device="cuda:0")
+        self.criterion(real_target, fake_generated, phase='train')
+        self.total_train_loss.backward()
         
         self.optimizer.step()
-        return loss
 
     def eval_step(self, real_target, fake_generated):
         self.model.eval()
         with torch.no_grad():
-            _ = self.criterion(real_target, fake_generated, phase='valid')
+            self.criterion(real_target, fake_generated, phase='valid')

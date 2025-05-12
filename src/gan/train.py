@@ -31,7 +31,7 @@ class GANTrainer:
         self.batch_size = batch_size
         self.checkpoints_ratio = checkpoints_ratio
         
-        self.metrics_history = {'train': defaultdict(list), 'valid': defaultdict(list)}
+        # self.metrics_history = {'train': defaultdict(list), 'valid': defaultdict(list)}
         self.losses = {'train': defaultdict(list), 'valid': defaultdict(list)}
         self.loaders = None
         self.patience_counter = 0
@@ -59,7 +59,7 @@ class GANTrainer:
         for epoch in range(self.epochs):
             print(f"\nЭпоха {epoch + 1}/{self.epochs}")
 
-            epoch_metrics = {'train': defaultdict(list), 'valid': defaultdict(list)}
+            # epoch_metrics = {'train': defaultdict(list), 'valid': defaultdict(list)}
 
             for phase, loader in [('train', train_loader), ('valid', valid_loader)]:
                 if loader is None:
@@ -75,8 +75,8 @@ class GANTrainer:
                     # metrics = self._calc_metrics(batch)
                     # epoch_metrics[phase].update(metrics)
 
-                for metric, values in epoch_metrics[phase].items():
-                    self.metrics_history[phase][metric].append(np.mean(values))
+                # for metric, values in epoch_metrics[phase].items():
+                #     self.metrics_history[phase][metric].append(np.mean(values))
 
             # self._show_epoch_metrics(epoch_metrics)
             
@@ -93,9 +93,9 @@ class GANTrainer:
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
     
-    def _schedulers_step(self, phase: Literal['train', 'valid']) -> None:
-        trg_metric_val = self.metrics_history[phase][self.model.optimization_params.get('metric')][-1]
-        self.model.step_schedulers(trg_metric_val)
+    # def _schedulers_step(self, phase: Literal['train', 'valid']) -> None:
+    #     trg_metric_val = self.metrics_history[phase][self.model.optimization_params.get('metric')][-1]
+    #     self.model.step_schedulers(trg_metric_val)
     
     def _process_batch(self, phase: Literal['train', 'valid'], batch: List, visualize_batch=False):
         inputs, targets, masks = [tensor.to(self.device) for tensor in batch]

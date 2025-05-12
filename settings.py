@@ -7,15 +7,16 @@ CONFIG = './config.json'
 DEFAULT_TRAIN_CONF = {
     "target_image_size": 256,
     "g_feature_maps": 64,
-    "d_feature_maps": 32,
+    "d_feature_maps": 64,
     "n_critic": 5,
     "losses_weights": {
         "gen": {
-            "adv": 2.0,
-            "bce": 3.0,
-            "l1": 1.5
+            "adv": 1.5,
+            "bce": 1.0,
+            "l1": 2.0
         },
         "discr": {
+            "wasserstein": 1.0,
             "gp": 10.0
         }
     },

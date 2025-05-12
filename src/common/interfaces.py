@@ -3,6 +3,9 @@ from collections import defaultdict
 import numpy as np
 from typing import Dict, Any, List, Literal, Type
 
+import torch
+
+
 
 class IProcessor(ABC):
     """Interface for user defined image processing classes
@@ -120,9 +123,12 @@ class IModelTrainer(ABC):
         self.model = model
         self.optimizer = None
         self.scheduler = None
+        
         self.criterion = self._calc_losses
-        self.losses_history = {'train': [], 'valid': []}
-        self.losses_weights = losses_weights
+        self.loss_history = {'train': [], 'valid': []}
+        self.loss_weights = losses_weights
+        
+        self.total_train_loss = torch.tensor(0.0, device="cuda:0")
     
     @abstractmethod
     def _calc_losses(self):
@@ -136,14 +142,29 @@ class IModelTrainer(ABC):
     def eval_step(self):
         pass
     
+    def _update_loss_history(self, phase: Literal['train', 'valid'], loss_n: str, loss_v: 'torch.tensor'):
+        current_history = self.loss_history[phase][-1]
+        
+        current_history.update({loss_n: loss_v})
+        current_history['total'] = current_history.get('total', 0.0) + loss_v
+    
+    def calc_loss(self, loss_fn, loss_name, phase: Literal['train', 'valid'], samples: tuple) -> Dict[str, float]:
+        weight = self.loss_weights.get(loss_name, 0.0)
+        loss_tensor = loss_fn(*samples) * weight
+        
+        if phase == 'train':
+            self.total_train_loss = self.total_train_loss + loss_tensor
+        
+        self._update_loss_history(phase, loss_name, loss_tensor.item())
+    
     def step_scheduler(self, metric):
         self.scheduler.step(metric)
     
     def reset_losses(self):
-        self.losses_history = {'train': [], 'valid': []}
+        self.loss_history = {'train': [], 'valid': []}
     
     def epoch_avg_losses_str(self, phase: Literal['train', 'valid'], batch_size: int) -> str:
-        losses_history = self.losses_history[phase]
+        losses_history = self.loss_history[phase]
 
         if losses_history:
             epoch_losses = losses_history[-batch_size:]

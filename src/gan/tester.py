@@ -47,8 +47,8 @@ class ParamGridTester:
     def _save_test(self, gen_model: 'GenerativeModel', loaders: Dict) -> None:
         Utils.to_json(data=self.trainer.metrics_history, path=os.path.join(self.output_path, 'metrics_history.json'))
         Utils.to_json({
-            'generator': gen_model.g_trainer.losses_history,
-            'critic': gen_model.c_trainer.losses_history
+            'generator': gen_model.g_trainer.loss_history,
+            'critic': gen_model.c_trainer.loss_history
         }, os.path.join(self.output_path, 'losses_history.json'))
         
         for phase, loader in loaders.items():

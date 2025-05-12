@@ -130,7 +130,7 @@ class IceRidgeDataset(Dataset):
         return tuple(binarized)
     
     @staticmethod
-    def split_dataset(metadata: Dict[str, Dict], val_ratio: float) -> Dict[str, Optional[Dict[str, Dict]]]:
+    def split_dataset_legacy(metadata: Dict[str, Dict], val_ratio: float) -> Dict[str, Optional[Dict[str, Dict]]]:
         """
         Разделяет метаданные на обучающую и валидационную выборки,
         так чтобы данные одного оригинального изображения не оказывались в обеих выборках.
@@ -219,7 +219,7 @@ class DatasetCreator:
             self.preprocess_data()
         
         dataset_metadata = Utils.from_json(self.preprocessed_metadata_json_path)
-        splitted = IceRidgeDataset.split_dataset(dataset_metadata, val_ratio=val_ratio)
+        splitted = IceRidgeDataset.split_dataset_legacy(dataset_metadata, val_ratio=val_ratio)
         train_metadata, valid_metadata = splitted.get('train'), splitted.get('valid')
         
         print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
