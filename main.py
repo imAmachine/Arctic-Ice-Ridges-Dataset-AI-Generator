@@ -6,6 +6,7 @@ from src.gan.tester import ParamGridTester
 from src.gan.train import GANTrainer
 from src.gan.arch import AUGMENTATIONS
 from src.common.utils import Utils
+from src.common.structs import TrainPhases as phases
 
 import argparse
 import tkinter as tk
@@ -27,13 +28,13 @@ def validate_or_reset_config_section(config: dict, section_name: str, default_co
 def init_config():
     if not os.path.exists(CONFIG):
         print('Файл конфигурации отсутствует, будет создан стандартный')
-        Utils.to_json({"train": DEFAULT_TRAIN_CONF, "tests": DEFAULT_TEST_CONF}, CONFIG)
+        Utils.to_json({phases.TRAIN: DEFAULT_TRAIN_CONF, phases.VALID: DEFAULT_TEST_CONF}, CONFIG)
         return
 
     config = Utils.from_json(CONFIG)
 
-    validate_or_reset_config_section(config, "train", DEFAULT_TRAIN_CONF)
-    validate_or_reset_config_section(config, "tests", DEFAULT_TEST_CONF)
+    validate_or_reset_config_section(config, phases.TRAIN.value, DEFAULT_TRAIN_CONF)
+    validate_or_reset_config_section(config, phases.TEST.value, DEFAULT_TEST_CONF)
 
     Utils.to_json(config, CONFIG)
             
@@ -60,7 +61,7 @@ def main():
     config = Utils.from_json(CONFIG)
     
     # Инициализация модели
-    model_gan = GenerativeModel(**config['train'], device=DEVICE)
+    model_gan = GenerativeModel(**config[phases.TRAIN.value], device=DEVICE)
 
     # Инициализация создателя датасета
     ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
@@ -118,7 +119,7 @@ def main():
         return
     
     if args.test:
-        grid_params = config.get('tests')
+        grid_params = config.get(phases.TEST.value)
         if grid_params:
             print('запуск тестирования')
             tester = ParamGridTester(grid_params)

@@ -86,8 +86,7 @@ class WGanGenerator(nn.Module):
         self.dec1 = UpConvBlock(feature_maps * 2 + feature_maps, feature_maps, dropout=False)
 
         self.final = nn.Sequential(
-            nn.ConvTranspose2d(feature_maps, 1, kernel_size=3, stride=1, padding=1),
-            nn.Sigmoid()
+            nn.ConvTranspose2d(feature_maps, 1, kernel_size=3, stride=1, padding=1)
         )
 
     def forward(self, x, mask):

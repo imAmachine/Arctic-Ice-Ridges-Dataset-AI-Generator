@@ -157,7 +157,8 @@ class WGANGeneratorModelTrainer(IModelTrainer):
     
     def _losses(self, input_data, target_data, phase: phases=phases.TRAIN) -> None:
         self.calc_loss(loss_fn=adversarial_loss, loss_name='adv', phase=phase, args=(self.critic, input_data,))
-        self.calc_loss(loss_fn=nn.BCELoss(), loss_name='bce', phase=phase, args=(input_data, target_data))
+        self.calc_loss(loss_fn=nn.BCEWithLogitsLoss(), loss_name='bce', phase=phase, args=(input_data, target_data))
+        self.calc_loss(loss_fn=nn.L1Loss(), loss_name='l1', phase=phase, args=(input_data, target_data))
 
 
 class WGANCriticModelTrainer(IModelTrainer):
