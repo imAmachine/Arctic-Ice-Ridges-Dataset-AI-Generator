@@ -125,6 +125,7 @@ class ParamGridTester:
             model_transforms=model.get_model_transforms(),
             preprocessors=PREPROCESSORS,
             augmentations=AUGMENTATIONS,
+            augs_per_img=params.get('augs_per_img', 1),
             device=DEVICE
         )
 

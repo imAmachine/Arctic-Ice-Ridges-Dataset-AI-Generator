@@ -13,24 +13,29 @@ import tkinter as tk
 from gui.gui import ImageGenerationApp
 from settings import *
 
+def validate_or_reset_config_section(config: dict, section_name: str, default_conf: dict) -> None:
+    section = config.get(section_name)
+    expected_keys = set(default_conf.keys())
+    actual_keys = set(section.keys()) if isinstance(section, dict) else set()
+
+    if actual_keys != expected_keys:
+        answer = input(f"Конфигурация '{section_name}' некорректна. Перезаписать стандартными значениями? (Y/N): ")
+        if answer.strip().upper() == "Y":
+            config[section_name] = default_conf
+
 
 def init_config():
     if not os.path.exists(CONFIG):
         print('Файл конфигурации отсутствует, будет создан стандартный')
-        Utils.to_json({"train": DEFAULT_TRAIN_CONF}, CONFIG)
+        Utils.to_json({"train": DEFAULT_TRAIN_CONF, "tests": DEFAULT_TEST_CONF}, CONFIG)
         return
 
     config = Utils.from_json(CONFIG)
-    train_cfg = config.get("train")
 
-    expected_keys = set(DEFAULT_TRAIN_CONF.keys())
-    actual_keys = set(train_cfg.keys()) if isinstance(train_cfg, dict) else set()
+    validate_or_reset_config_section(config, "train", DEFAULT_TRAIN_CONF)
+    validate_or_reset_config_section(config, "tests", DEFAULT_TEST_CONF)
 
-    if actual_keys != expected_keys:
-        answer = input("Конфигурация 'train' некорректна. Перезаписать стандартными значениями? (Y/N): ")
-        if answer.strip().upper() == "Y":
-            config["train"] = DEFAULT_TRAIN_CONF
-            Utils.to_json(config, CONFIG)
+    Utils.to_json(config, CONFIG)
             
 
 def main():
