@@ -12,7 +12,7 @@ import numpy as np
 from src.common.utils import Utils
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.preprocessing.processors import *
-
+from src.common.structs import TrainPhases as phases
 
 class MaskingProcessor:
     def __init__(self, mask_padding=0.15):
@@ -154,7 +154,7 @@ class IceRidgeDataset(Dataset):
         
         print(f"{len(train_origins)} обучающих, {len(val_origins)} валидационных данных")
         
-        return {"train": train_metadata if len(train_origins) > 0 else None, "valid": val_metadata if len(val_origins) > 0 else None}
+        return {phases.TRAIN: train_metadata if len(train_origins) > 0 else None, phases.VALID: val_metadata if len(val_origins) > 0 else None}
 
 
 class DatasetCreator:
@@ -214,17 +214,17 @@ class DatasetCreator:
             
             return loader
     
-    def create_train_dataloaders(self, batch_size, shuffle, workers, random_select=True, val_ratio=0.2, train_augmentations=True, val_augmentations=False) -> Dict[Literal['train', 'valid'], Dict]:
+    def create_train_dataloaders(self, batch_size, shuffle, workers, random_select=True, val_ratio=0.2, train_augmentations=True, val_augmentations=False) -> Dict[phases, Dict]:
         if not os.path.exists(self.preprocessed_metadata_json_path):
             self.preprocess_data()
         
         dataset_metadata = Utils.from_json(self.preprocessed_metadata_json_path)
         splitted = IceRidgeDataset.split_dataset_legacy(dataset_metadata, val_ratio=val_ratio)
-        train_metadata, valid_metadata = splitted.get('train'), splitted.get('valid')
+        train_metadata, valid_metadata = splitted.get(phases.TRAIN), splitted.get(phases.VALID)
         
         print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
         
         train_loader = self.create_loader(train_metadata, batch_size, shuffle, workers, train_augmentations, random_select)
         valid_loader = self.create_loader(valid_metadata, batch_size, shuffle, workers, train_augmentations, random_select)
         
-        return {'train': train_loader, 'valid': valid_loader}
+        return {phases.TRAIN: train_loader, phases.VALID: valid_loader}

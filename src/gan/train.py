@@ -9,14 +9,12 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 from collections import defaultdict
 import numpy as np
-from sklearn.metrics import f1_score, precision_score, jaccard_score
 from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_score
 
 from src.gan.model import GenerativeModel
 from src.gan.dataset import DatasetCreator
-from src.common.analyze_tools import FractalAnalyzerGPU
 from src.common.utils import Utils
-
+from src.common.structs import TrainPhases as phases
 
 class GANTrainer:
     def __init__(self, model: GenerativeModel, dataset_processor: DatasetCreator, output_path, 
@@ -31,8 +29,8 @@ class GANTrainer:
         self.batch_size = batch_size
         self.checkpoints_ratio = checkpoints_ratio
         
-        # self.metrics_history = {'train': defaultdict(list), 'valid': defaultdict(list)}
-        self.losses = {'train': defaultdict(list), 'valid': defaultdict(list)}
+        # self.metrics_history = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
+        self.losses = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
         self.loaders = None
         self.patience_counter = 0
 
@@ -43,8 +41,9 @@ class GANTrainer:
         self.loaders = self.dataset_processor.create_train_dataloaders(
             batch_size=self.batch_size, shuffle=True, workers=6, val_ratio=self.val_ratio
         )
-        train_loader = self.loaders.get('train')
-        valid_loader = self.loaders.get('valid')
+        
+        train_loader = self.loaders.get(phases.TRAIN)
+        valid_loader = self.loaders.get(phases.VALID)
 
         if train_loader is None:
             print('Обучение без тренировочного загрузчика данных невозможно! Остановка...')
@@ -59,19 +58,21 @@ class GANTrainer:
         for epoch in range(self.epochs):
             print(f"\nЭпоха {epoch + 1}/{self.epochs}")
 
-            # epoch_metrics = {'train': defaultdict(list), 'valid': defaultdict(list)}
+            # epoch_metrics = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
 
-            for phase, loader in [('train', train_loader), ('valid', valid_loader)]:
+            for phase, loader in [(phases.TRAIN, train_loader), (phases.VALID, valid_loader)]:
                 if loader is None:
                     continue
 
-                self.model.switch_mode('train' if phase == 'train' else 'eval')
+                self.model.switch_mode(phases.TRAIN if phase == phases.TRAIN else phases.EVAL)
 
-                for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.capitalize()}")):
+                for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.value.capitalize()}")):
                     self.model.switch_mode(phase)
+                    batch = [el.to(self.device) for el in batch]
+                    
                     _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
                     
-                    # self.model.switch_mode('valid')
+                    # self.model.switch_mode(phases.VALID)
                     # metrics = self._calc_metrics(batch)
                     # epoch_metrics[phase].update(metrics)
 
@@ -81,48 +82,48 @@ class GANTrainer:
             # self._show_epoch_metrics(epoch_metrics)
             
             # сохранение графиков метрик
-            # for metric in self.metrics_history['train']:
+            # for metric in self.metrics_history[phases.TRAIN]:
             #     self.save_metric_plot(target_metric=metric, suffix=metric)
 
             # расчёт и вывод средних лоссов по эпохе
             for trainer in [self.model.g_trainer, self.model.c_trainer]:
-                print(trainer.epoch_avg_losses_str('train', len(batch)))
+                print(trainer.epoch_avg_losses_str(phases.TRAIN, len(batch)))
             
-            # self._schedulers_step('valid')
+            # self._schedulers_step(phases.VALID)
 
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
     
-    # def _schedulers_step(self, phase: Literal['train', 'valid']) -> None:
+    # def _schedulers_step(self, phase: phases) -> None:
     #     trg_metric_val = self.metrics_history[phase][self.model.optimization_params.get('metric')][-1]
     #     self.model.step_schedulers(trg_metric_val)
     
-    def _process_batch(self, phase: Literal['train', 'valid'], batch: List, visualize_batch=False):
-        inputs, targets, masks = [tensor.to(self.device) for tensor in batch]
-
-        if phase == 'train':
-            self.model.train_step(inputs, targets, masks)
-        else:
-            self.model.eval_step(inputs, targets, masks)
+    def _process_batch(self, phase: phases, batch: tuple, visualize_batch=False):
+        if phase == phases.TRAIN:
+            self.model.train_step(batch)
+        elif phase == phases.VALID:
+            self.model.valid_step(batch)
 
         with torch.no_grad():
-            generated = self.model.generator(inputs, masks)
+            generated = self.model.generator(batch[0], batch[2])
             if visualize_batch:
-                self._visualize_batch(inputs, generated, targets, masks, phase=phase)
+                self._visualize_batch(batch, generated, phase=phase)
 
         return generated
 
-    def _visualize_batch(self, inputs, generated, targets, masks, phase='train'):
+    def _visualize_batch(self, batch: tuple, generated, phase: phases=phases.TRAIN):
+        inputs, targets, masks = batch
+        
         plt.figure(figsize=(20, 12), dpi=300)
 
         for i in range(min(3, inputs.shape[0])):
             plt.subplot(3, 4, i*4 + 1)
-            plt.imshow(inputs[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(inputs[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Input {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 2)
-            plt.imshow(masks[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(masks[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Mask_inpaint {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
@@ -132,14 +133,14 @@ class GANTrainer:
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 4)
-            plt.imshow(targets[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(targets[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Target {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
         plt.suptitle(f'Phase: {phase}', fontsize=14, y=1.02)
         plt.tight_layout(pad=3.0)
 
-        output_file = f"{self.output_path}/{phase}.png"
+        output_file = f"{self.output_path}/{phase.value}.png"
         plt.savefig(output_file)
         plt.close()
 
@@ -160,7 +161,7 @@ class GANTrainer:
         plt.close()
 
     def _show_epoch_metrics(self, epoch_metrics: Dict):
-        avg_metrics = {'train': defaultdict(list), 'valid': defaultdict(list)}
+        avg_metrics = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
 
         for mode_name, metrics in epoch_metrics.items():
             for metric_name, metric_history in metrics.items():
@@ -215,30 +216,8 @@ class GANTrainer:
     def _load_checkpoint(self):
         if self.load_weights:
             try:
-                _ = self.model.load_checkpoint(self.output_path)
+                self.model.load_checkpoint(self.output_path)
                 print(f"Checkpoint загружен успешно. Продолжаем с итерации {self.model.current_iteration}.")
             except FileNotFoundError as e:
                 print(f"Ошибка при загрузке чекпоинта: {e}")
                 print("Начинаем обучение с нуля.")
-
-    def _calc_fractal_loss(self, generated: torch.Tensor, target: torch.Tensor) -> float:
-        """
-        Считает среднюю разницу фрактальной размерности между сгенерированным изображением и ground truth
-        """
-        fd_total = 0.0
-        batch_size = min(generated.shape[0], 4)
-
-        for i in range(batch_size):
-            gen_img = generated[i].detach().squeeze()
-            tgt_img = target[i].detach().squeeze()
-
-            fd_gen = FractalAnalyzerGPU.calculate_fractal_dimension(
-                *FractalAnalyzerGPU.box_counting(gen_img)
-            )
-            fd_target = FractalAnalyzerGPU.calculate_fractal_dimension(
-                *FractalAnalyzerGPU.box_counting(tgt_img)
-            )
-
-            fd_total += abs(fd_gen - fd_target)
-
-        return fd_total / batch_size

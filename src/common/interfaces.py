@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
 from collections import defaultdict
 import numpy as np
-from typing import Dict, Any, List, Literal, Type
-
+from typing import Dict, List, Literal, Type
 import torch
 
+from src.common.structs import TrainPhases as phases
 
 
 class IProcessor(ABC):
@@ -111,7 +111,7 @@ class IGenerativeModel:
         pass
     
     @abstractmethod
-    def eval_step(self, **args):
+    def valid_step(self, **args):
         pass
     
     @abstractmethod
@@ -119,19 +119,20 @@ class IGenerativeModel:
         pass
 
 class IModelTrainer(ABC):
-    def __init__(self, model, losses_weights: Dict):
+    def __init__(self, model, device, losses_weights: Dict):
         self.model = model
+        self.device = device
         self.optimizer = None
         self.scheduler = None
         
-        self.criterion = self._calc_losses
-        self.loss_history = {'train': [], 'valid': []}
+        self.criterion = self._losses
+        self.loss_history = {phases.TRAIN: [], phases.VALID: []}
         self.loss_weights = losses_weights
         
-        self.total_train_loss = torch.tensor(0.0, device="cuda:0")
+        self.total_train_loss = torch.tensor(0.0, device=self.device)
     
     @abstractmethod
-    def _calc_losses(self):
+    def _losses(self):
         pass
     
     @abstractmethod
@@ -142,17 +143,34 @@ class IModelTrainer(ABC):
     def eval_step(self):
         pass
     
-    def _update_loss_history(self, phase: Literal['train', 'valid'], loss_n: str, loss_v: 'torch.tensor'):
-        current_history = self.loss_history[phase][-1]
+    def train_step(self, samples: tuple) -> None:
+        self.model.train()
+        self.optimizer.zero_grad()
         
+        self.total_train_loss = torch.tensor(0.0, device=self.device)
+        self.loss_history[phases.TRAIN].append({})
+        
+        self.criterion(*samples, phase=phases.TRAIN)
+        self.total_train_loss.backward()
+        
+        self.optimizer.step()
+    
+    def eval_step(self, samples: tuple) -> None:
+        self.model.eval()
+        self.loss_history[phases.VALID].append({})
+        
+        self.criterion(*samples, phase=phases.VALID)
+    
+    def _update_loss_history(self, phase: phases, loss_n: str, loss_v: 'torch.tensor'):
+        current_history = self.loss_history[phase][-1]
         current_history.update({loss_n: loss_v})
         current_history['total'] = current_history.get('total', 0.0) + loss_v
     
-    def calc_loss(self, loss_fn, loss_name, phase: Literal['train', 'valid'], samples: tuple) -> Dict[str, float]:
-        weight = self.loss_weights.get(loss_name, 0.0)
-        loss_tensor = loss_fn(*samples) * weight
+    def calc_loss(self, loss_fn, loss_name, phase: phases, args: tuple) -> Dict[str, float]:
+        weight = self.loss_weights.get(loss_name, 1.0)
+        loss_tensor = loss_fn(*args) * weight
         
-        if phase == 'train':
+        if phase == phases.TRAIN:
             self.total_train_loss = self.total_train_loss + loss_tensor
         
         self._update_loss_history(phase, loss_name, loss_tensor.item())
@@ -161,27 +179,30 @@ class IModelTrainer(ABC):
         self.scheduler.step(metric)
     
     def reset_losses(self):
-        self.loss_history = {'train': [], 'valid': []}
+        self.loss_history = {phases.TRAIN: [], phases.VALID: []}
     
-    def epoch_avg_losses_str(self, phase: Literal['train', 'valid'], batch_size: int) -> str:
-        losses_history = self.loss_history[phase]
+    def batch_avg_losses(self, aggregated: Dict[str, list]) -> Dict[str, float]:
+        return {name: float(np.mean(vals)) for name, vals in aggregated.items()}
 
-        if losses_history:
-            epoch_losses = losses_history[-batch_size:]
+    def epoch_avg_losses(self, phase: phases, batch_size: int) -> Dict[str, float]:
+        history = self.loss_history.get(phase, [])
+        if not history:
+            return {}
+        recent = history[-batch_size:]
+        aggregated: Dict[str, list] = defaultdict(list)
+        for batch_losses in recent:
+            for loss_name, loss_val in batch_losses.items():
+                aggregated[loss_name].append(loss_val)
+        return self.batch_avg_losses(aggregated)
 
-            # сбор значений каждой метрики по каждому батчу
-            aggregated_losses = defaultdict(list)
-            for batch_losses in epoch_losses:
-                for loss_name, loss_value in batch_losses.items():
-                    aggregated_losses[loss_name].append(loss_value)
+    def losses_stringify(self, losses: Dict[str, float]) -> str:
+        if not losses:
+            return "No loss data available."
+        s = f'Average losses for {self.__class__.__name__}:\n'
+        for loss_name, loss_val in losses.items():
+            s += f'\t{loss_name}: {loss_val:.4f}\n'
+        return s
 
-            # расчёт среднего значения за эпоху
-            avg_trainer_losses = {loss_n: np.mean(loss_v) for loss_n, loss_v in aggregated_losses.items()}
-
-            losses_str = f'Average losses for {self.__class__.__name__}:\n'
-            for loss_n, loss_v in avg_trainer_losses.items():
-                losses_str += f'\t{loss_n}: {loss_v:.4f}\n'
-
-            return losses_str
-
-        return "No loss data available."
+    def epoch_avg_losses_str(self, phase: phases, batch_size: int) -> str:
+        avg_losses = self.epoch_avg_losses(phase, batch_size)
+        return self.losses_stringify(avg_losses)
