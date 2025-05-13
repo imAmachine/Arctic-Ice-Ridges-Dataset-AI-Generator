@@ -12,9 +12,9 @@ DEFAULT_TRAIN_CONF = {
     "n_critic": 3,
     "losses_weights": {
         models.GENERATOR.value: {
-            losses.ADVERSARIAL.value: 1.5,
-            losses.BCE.value: 1.0,
-            losses.L1.value: 1.0
+            losses.ADVERSARIAL.value: 2,
+            losses.BCE.value: 1.5,
+            losses.L1.value: 1.5
         },
         models.DISCRIMINATOR.value: {
             losses.WASSERSTEIN.value: 1.0,
@@ -23,11 +23,6 @@ DEFAULT_TRAIN_CONF = {
     },
     "optimization_params": {
         "metric": "iou",
-        "mode": "max",
-        "lr": 0.0007
-    },
-    "optimization_params": {
-        "metric": "f1",
         "mode": "max",
         "lr": 0.0005
     }

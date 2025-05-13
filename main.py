@@ -28,7 +28,7 @@ def validate_or_reset_config_section(config: dict, section_name: str, default_co
 def init_config():
     if not os.path.exists(CONFIG):
         print('Файл конфигурации отсутствует, будет создан стандартный')
-        Utils.to_json({phases.TRAIN.value: DEFAULT_TRAIN_CONF, phases.VALID.value: DEFAULT_TEST_CONF}, CONFIG)
+        Utils.to_json({phases.TRAIN.value: DEFAULT_TRAIN_CONF, phases.TEST.value: DEFAULT_TEST_CONF}, CONFIG)
         return
 
     config = Utils.from_json(CONFIG)

@@ -87,6 +87,7 @@ class WGanGenerator(nn.Module):
 
         self.final = nn.Sequential(
             nn.ConvTranspose2d(feature_maps, 1, kernel_size=3, stride=1, padding=1),
+            nn.Sigmoid()
         )
 
     def forward(self, x, mask):
@@ -130,15 +131,15 @@ class WGanCritic(nn.Module):
         
         self.net = nn.Sequential(
             conv_block(input_channels, feature_maps, use_in=False),
-            conv_block(feature_maps, feature_maps*2, use_in=True),
-            conv_block(feature_maps*2, feature_maps*4, use_in=True),
-            conv_block(feature_maps*4, feature_maps*8, use_in=True),
-            nn.Conv2d(feature_maps*8, 1, kernel_size=4, stride=1, padding=0, bias=True)
+            conv_block(feature_maps, feature_maps*2, use_in=False),
+            conv_block(feature_maps*2, feature_maps*4, use_in=False),
+            conv_block(feature_maps*4, feature_maps*8, use_in=False),
+            nn.Conv2d(feature_maps*8, 1, kernel_size=4, stride=1, padding=0, bias=False),
         )
     
     def forward(self, x):
         out = self.net(x)
-        return out.view(-1)
+        return out
 
 
 class OneOf(torch.nn.Module):

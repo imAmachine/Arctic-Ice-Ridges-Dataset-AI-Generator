@@ -55,7 +55,7 @@ class GenerativeModel(IGenerativeModel):
         
         g_losses_list = [
             Loss(loss_fn=AdversarialLoss(self.discriminator), name=losses.ADVERSARIAL.value, weight=g_losses_weights.get(losses.ADVERSARIAL.value)),
-            Loss(loss_fn=nn.BCEWithLogitsLoss(), name=losses.BCE.value, weight=g_losses_weights.get(losses.BCE.value)),
+            Loss(loss_fn=nn.BCELoss(), name=losses.BCE.value, weight=g_losses_weights.get(losses.BCE.value)),
             Loss(loss_fn=nn.L1Loss(), name=losses.L1.value, weight=g_losses_weights.get(losses.L1.value)),
         ]
         
@@ -68,13 +68,14 @@ class GenerativeModel(IGenerativeModel):
         self.d_trainer = self._init_trainer(self.discriminator, d_losses_list)
     
     def _init_trainer(self, model, losses_list: List['Loss']):
-        optimizer = torch.optim.RMSprop(model.parameters(), lr=self.optimization_params.get('lr'))
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=self.optimization_params.get('mode'), factor=0.5, patience=6)
+        optimizers = [torch.optim.RMSprop(model.parameters(), lr=self.optimization_params.get('lr')),
+                      torch.optim.Adam(model.parameters(), lr=self.optimization_params.get('lr'), betas=(0.0, 0.9))]
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers[1], mode=self.optimization_params.get('mode'), factor=0.5, patience=6)
         
         trainer = ModelTrainer(
             model=model,
             device=self.device,
-            optimizer=optimizer,
+            optimizer=optimizers[1],
             scheduler=scheduler
         )
         
@@ -95,6 +96,10 @@ class GenerativeModel(IGenerativeModel):
             with torch.no_grad():
                 generated = self.generator(input_data, inpaint_mask)
             self.d_trainer.train_step(target_data, generated)
+            
+        # real_score = self.discriminator(target_data).mean().item()
+        # fake_score = self.discriminator(generated).mean().item()
+        # print(f"D(real)={real_score:.4f}, D(fake)={fake_score:.4f}")
     
     def _train_generator_step(self, input_data, target_data, inpaint_mask):
         generated = self.generator(input_data, inpaint_mask)

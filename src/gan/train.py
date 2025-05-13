@@ -128,7 +128,7 @@ class GANTrainer:
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 3)
-            plt.imshow(generated[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(generated[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Generated {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 

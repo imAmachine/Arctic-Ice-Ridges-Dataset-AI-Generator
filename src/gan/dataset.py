@@ -81,15 +81,6 @@ class IceRidgeDataset(Dataset):
                  augmentations_per_image: int = 1,
                  model_transforms: Optional[Callable] = None, 
                  random_select: bool = False):
-        """
-        Args:
-            metadata: словарь с метаданными изображений
-            dataset_processor: экземпляр класса для обработки изображений (например, MaskingProcessor)
-            augmentations: экземпляр A.Compose с аугментациями
-            model_transforms: преобразования для подготовки под модель (например, нормализация, to tensor)
-            random_select: если True – при каждом __getitem__ выбирается случайное изображение из metadata,
-                           что бывает полезно при очень маленьком датасете.
-        """
         self.processor = dataset_processor
         self.metadata = metadata
         self.image_keys = list(metadata.keys())
@@ -102,18 +93,22 @@ class IceRidgeDataset(Dataset):
         return len(self.image_keys) * self.augmentations_per_image
     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        key = random.choice(self.image_keys) if self.random_select else self.image_keys[idx]
+        img_idx = (idx // self.augmentations_per_image) if not self.random_select else random.randrange(len(self.image_keys))
+        key = self.image_keys[img_idx]
+        
         orig_meta = self.metadata[key]
-        orig_path = orig_meta.get('path')
+        orig_path = orig_meta['path']
         img = Utils.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
         
         return IceRidgeDataset.prepare_data(img, self.processor, self.augmentations, self.model_transforms)
     
     @staticmethod
-    def apply_transforms(model_transforms: Optional[Callable], images: List[np.ndarray]) -> torch.Tensor:
-        if model_transforms is not None:
-            return  [model_transforms(img) for img in images]
-        return images
+    def apply_transforms(model_transforms, images) -> List[torch.Tensor]:
+        tensors = []
+        for img in images:
+            t = model_transforms(img) if model_transforms else torch.from_numpy(img)
+            tensors.append(t)
+        return tensors
     
     @staticmethod
     def prepare_data(img: np.ndarray, processor: 'MaskingProcessor', augmentations: Optional[Callable], model_transforms: Optional[Callable]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:

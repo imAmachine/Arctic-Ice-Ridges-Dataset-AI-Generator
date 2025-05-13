@@ -15,7 +15,7 @@ class Loss:
     weight: float
     only_on: phases = phases.ANY
 
-    def __call__(self, real_sample, generated_sample) -> torch.Tensor:      
+    def __call__(self, generated_sample, real_sample) -> torch.Tensor:      
         if self.weight <= 0.0:
             return torch.tensor(0.0, device=generated_sample.device)
         return self.loss_fn(generated_sample, real_sample) * self.weight
