@@ -1,23 +1,24 @@
 import os
 from torch import cuda
 from src.preprocessing.processors import *
+from src.common.structs import ModelTypes as models, LossNames as losses
 
 # путь к файлам с конфигарциями
 CONFIG = './config.json'
 DEFAULT_TRAIN_CONF = {
     "target_image_size": 256,
     "g_feature_maps": 64,
-    "d_feature_maps": 64,
-    "n_critic": 5,
+    "d_feature_maps": 32,
+    "n_critic": 3,
     "losses_weights": {
-        "gen": {
-            "adv": 1.5,
-            "bce": 1.0,
-            "l1": 2.0
+        models.GENERATOR.value: {
+            losses.ADVERSARIAL.value: 1.5,
+            losses.BCE.value: 1.0,
+            losses.L1.value: 1.0
         },
-        "discr": {
-            "wasserstein": 1.0,
-            "gp": 10.0
+        models.DISCRIMINATOR.value: {
+            losses.WASSERSTEIN.value: 1.0,
+            losses.GP.value: 10.0
         }
     },
     "optimization_params": {
@@ -35,7 +36,7 @@ DEFAULT_TRAIN_CONF = {
 DEFAULT_TEST_CONF = {
     "augs_per_img": [1],
     "GenerativeModel": {
-        "target_image_size": [224],
+        "target_image_size": [256],
         "g_feature_maps": [32],
         "d_feature_maps": [32],
         "n_critic": [3],

@@ -6,7 +6,7 @@ from src.gan.tester import ParamGridTester
 from src.gan.train import GANTrainer
 from src.gan.arch import AUGMENTATIONS
 from src.common.utils import Utils
-from src.common.structs import TrainPhases as phases
+from src.common.structs import ExecPhases as phases
 
 import argparse
 import tkinter as tk
@@ -28,7 +28,7 @@ def validate_or_reset_config_section(config: dict, section_name: str, default_co
 def init_config():
     if not os.path.exists(CONFIG):
         print('Файл конфигурации отсутствует, будет создан стандартный')
-        Utils.to_json({phases.TRAIN: DEFAULT_TRAIN_CONF, phases.VALID: DEFAULT_TEST_CONF}, CONFIG)
+        Utils.to_json({phases.TRAIN.value: DEFAULT_TRAIN_CONF, phases.VALID.value: DEFAULT_TEST_CONF}, CONFIG)
         return
 
     config = Utils.from_json(CONFIG)
@@ -59,6 +59,7 @@ def main():
 
     init_config()
     config = Utils.from_json(CONFIG)
+    target_img_size = config.get(phases.TRAIN.value).get("target_image_size")
     
     # Инициализация модели
     model_gan = GenerativeModel(**config[phases.TRAIN.value], device=DEVICE)
@@ -68,7 +69,7 @@ def main():
                                 original_data_path=MASKS_FOLDER_PATH,
                                 preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
                                 images_extentions=MASKS_FILE_EXTENSIONS,
-                                model_transforms=model_gan.get_model_transforms(),
+                                model_transforms=model_gan.generator.get_model_transforms(target_img_size),
                                 preprocessors=PREPROCESSORS,
                                 augmentations=AUGMENTATIONS,
                                 augs_per_img=args.augs,

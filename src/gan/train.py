@@ -14,7 +14,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_sco
 from src.gan.model import GenerativeModel
 from src.gan.dataset import DatasetCreator
 from src.common.utils import Utils
-from src.common.structs import TrainPhases as phases
+from src.common.structs import ExecPhases as phases
 
 class GANTrainer:
     def __init__(self, model: GenerativeModel, dataset_processor: DatasetCreator, output_path, 
@@ -64,10 +64,10 @@ class GANTrainer:
                 if loader is None:
                     continue
 
-                self.model.switch_mode(phases.TRAIN if phase == phases.TRAIN else phases.EVAL)
+                self.model.switch_phase(phases.TRAIN if phase == phases.TRAIN else phases.EVAL)
 
                 for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.value.capitalize()}")):
-                    self.model.switch_mode(phase)
+                    self.model.switch_phase(phase)
                     batch = [el.to(self.device) for el in batch]
                     
                     _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
@@ -86,8 +86,8 @@ class GANTrainer:
             #     self.save_metric_plot(target_metric=metric, suffix=metric)
 
             # расчёт и вывод средних лоссов по эпохе
-            for trainer in [self.model.g_trainer, self.model.c_trainer]:
-                print(trainer.epoch_avg_losses_str(phases.TRAIN, len(batch)))
+            for trainer in [self.model.g_trainer, self.model.d_trainer]:
+                print(trainer.loss_processor.epoch_avg_losses_str(phases.TRAIN, len(batch)))
             
             # self._schedulers_step(phases.VALID)
 
@@ -128,7 +128,7 @@ class GANTrainer:
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 3)
-            plt.imshow(generated[i].detach().cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(generated[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Generated {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 

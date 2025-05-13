@@ -48,7 +48,7 @@ class ParamGridTester:
         Utils.to_json(data=self.trainer.metrics_history, path=os.path.join(self.output_path, 'metrics_history.json'))
         Utils.to_json({
             'generator': gen_model.g_trainer.loss_history,
-            'critic': gen_model.c_trainer.loss_history
+            'critic': gen_model.d_trainer.loss_history
         }, os.path.join(self.output_path, 'losses_history.json'))
         
         for phase, loader in loaders.items():
@@ -122,7 +122,7 @@ class ParamGridTester:
             original_data_path=MASKS_FOLDER_PATH,
             preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
             images_extentions=MASKS_FILE_EXTENSIONS,
-            model_transforms=model.get_model_transforms(),
+            model_transforms=model.generator.get_model_transforms(),
             preprocessors=PREPROCESSORS,
             augmentations=AUGMENTATIONS,
             augs_per_img=params.get('augs_per_img', 1),

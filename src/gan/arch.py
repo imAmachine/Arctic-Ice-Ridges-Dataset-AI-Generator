@@ -86,7 +86,7 @@ class WGanGenerator(nn.Module):
         self.dec1 = UpConvBlock(feature_maps * 2 + feature_maps, feature_maps, dropout=False)
 
         self.final = nn.Sequential(
-            nn.ConvTranspose2d(feature_maps, 1, kernel_size=3, stride=1, padding=1)
+            nn.ConvTranspose2d(feature_maps, 1, kernel_size=3, stride=1, padding=1),
         )
 
     def forward(self, x, mask):
@@ -108,6 +108,13 @@ class WGanGenerator(nn.Module):
 
         output = self.final(d1)
         return output
+    
+    def get_model_transforms(self, target_img_size) -> 'T.Compose':
+        return T.Compose([
+            T.ToImage(),
+            T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
+            T.ToDtype(torch.float32, scale=True)
+        ])
 
 
 class WGanCritic(nn.Module):
@@ -115,7 +122,7 @@ class WGanCritic(nn.Module):
         super(WGanCritic, self).__init__()
         
         def conv_block(in_ch, out_ch, kernel_size=4, stride=2, padding=1, use_in=False):
-            layers = [ nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, bias=True) ]
+            layers = [nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, bias=True)]
             if use_in:
                 layers.append(nn.InstanceNorm2d(out_ch, affine=True))
             layers.append(nn.LeakyReLU(0.2, inplace=True))
