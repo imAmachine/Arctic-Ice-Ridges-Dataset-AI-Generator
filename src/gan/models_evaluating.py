@@ -1,8 +1,6 @@
-from collections import defaultdict
 from dataclasses import dataclass, field
 
 from typing import Callable, Dict, List
-import numpy as np
 import torch
 from src.common.structs import ExecPhase as phases, LossName as losses, EvaluatorType as eval_type
 

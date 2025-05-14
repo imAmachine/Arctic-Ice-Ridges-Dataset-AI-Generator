@@ -112,11 +112,11 @@ def main():
     #     cv2.imwrite(output_path, generated)
     #     print(f"Генерация завершена. Результат сохранён в {output_path}")
 
-    if args.gui:
-        root = tk.Tk()
-        _ = ImageGenerationApp(root, WEIGHTS_PATH, model_gan, args)
-        root.mainloop()
-        return
+    # if args.gui:
+    #     root = tk.Tk()
+    #     _ = ImageGenerationApp(root, WEIGHTS_PATH, model_gan, args)
+    #     root.mainloop()
+    #     return
     
     if args.test:
         grid_params = config.get(phases.TEST.value)

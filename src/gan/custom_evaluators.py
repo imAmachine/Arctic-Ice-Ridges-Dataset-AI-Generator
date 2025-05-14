@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+from typing import Callable
 from torch.autograd import grad
 from sklearn.metrics import f1_score, jaccard_score, precision_score
 from src.common.analyze_tools import FractalAnalyzerGPU
@@ -42,16 +44,11 @@ def sklearn_wrapper(fn, device, threshold: float = 0.5):
     return wrapper
 
 
-class GradientPenalty(nn.Module):
-    """
-    Вычисляет градиентный штраф WGAN-GP:
-      E[(||∇ D(α·real + (1−α)·fake)||₂ − 1)²]
-    """
-    def __init__(self, model: nn.Module):
-        super().__init__()
-        self.model = model
+@dataclass
+class GradientPenalty:
+    model: Callable
 
-    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
+    def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         # α ~ U(0,1)
         shape = [real_samples.size(0)] + [1] * (real_samples.dim() - 1)
         alpha = torch.rand(shape, device=real_samples.device)
@@ -75,28 +72,19 @@ class GradientPenalty(nn.Module):
         return torch.mean((grad_norm - 1) ** 2)
 
 
-class WassersteinLoss(nn.Module):
-    """
-    WGAN loss: −E[D(real)] + E[D(fake)]
-    """
-    def __init__(self, model: nn.Module):
-        super().__init__()
-        self.model = model
+@dataclass
+class WassersteinLoss:
+    model: Callable
 
-    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
+    def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         real_pred = self.model(real_samples)
         fake_pred = self.model(fake_samples)
         return -torch.mean(real_pred) + torch.mean(fake_pred)
+        
 
+@dataclass
+class AdversarialLoss:
+    model: Callable
 
-class AdversarialLoss(nn.Module):
-    """
-    Простейший «генераторный» loss для WGAN: 
-      −E[D(G(z))]
-    """
-    def __init__(self, model: nn.Module):
-        super().__init__()
-        self.model = model
-
-    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
+    def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         return -torch.mean(self.model(fake_samples))

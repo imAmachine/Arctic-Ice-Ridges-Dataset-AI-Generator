@@ -73,14 +73,14 @@ class WGanGenerator(nn.Module):
         self.enc2 = ConvBlock(feature_maps, feature_maps * 2)
         self.enc3 = ConvBlock(feature_maps * 2, feature_maps * 4)
         self.enc4 = ConvBlock(feature_maps * 4, feature_maps * 8)
-        self.enc5 = ConvBlock(feature_maps * 8, feature_maps * 8)
+        self.enc5 = ConvBlock(feature_maps * 8, feature_maps * 16)
 
         self.bottleneck = nn.Sequential(
-            *[ResidualBlock(feature_maps * 8) for _ in range(3)]
+            *[ResidualBlock(feature_maps * 16) for _ in range(3)]
         )
 
-        self.dec5 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=True)
-        self.dec4 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=False)
+        self.dec5 = UpConvBlock(feature_maps * 16 + feature_maps * 16, feature_maps * 8, dropout=True)
+        self.dec4 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=True)
         self.dec3 = UpConvBlock(feature_maps * 8 + feature_maps * 4, feature_maps * 4, dropout=False)
         self.dec2 = UpConvBlock(feature_maps * 4 + feature_maps * 2, feature_maps * 2, dropout=False)
         self.dec1 = UpConvBlock(feature_maps * 2 + feature_maps, feature_maps, dropout=False)
@@ -134,8 +134,7 @@ class WGanCritic(nn.Module):
             conv_block(feature_maps, feature_maps*2, use_in=False),
             conv_block(feature_maps*2, feature_maps*4, use_in=False),
             conv_block(feature_maps*4, feature_maps*8, use_in=False),
-            conv_block(feature_maps*8, feature_maps*16, use_in=False),
-            nn.Conv2d(feature_maps*16, 1, kernel_size=4, stride=1, padding=0, bias=False),
+            nn.Conv2d(feature_maps*8, 1, kernel_size=4, stride=1, padding=0, bias=False),
         )
     
     def forward(self, x):
