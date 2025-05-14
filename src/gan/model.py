@@ -4,11 +4,13 @@ import torch
 import torch.nn as nn
 
 from src.gan.loss_processing import Loss, LossProcessor
+from src.gan.metric_processing import Metric, MetricProcessor
 from src.gan.custom_losses import *
+from src.gan.custom_metrics import *
 from src.gan.dataset import IceRidgeDataset
 from src.common.interfaces import IGenerativeModel
 from src.gan.arch import WGanCritic, WGanGenerator
-from src.common.structs import ExecPhases as phases, ModelTypes as models, LossNames as losses
+from src.common.structs import ExecPhases as phases, ModelTypes as models, LossNames as losses, MetricsNames as metrics
 
 
 class ModelTrainer:
@@ -18,19 +20,24 @@ class ModelTrainer:
         self.scheduler = scheduler
         
         self.loss_processor = LossProcessor(device)
+        self.metric_processor = MetricProcessor(device)
     
-    def train_step(self, real_sample, generated_sample) -> None:
+    def train_step(self, real_sample, generated_sample, mask_sample) -> None:
         self.model.train()
         self.optimizer.zero_grad()
         
         loss = self.loss_processor.calc_losses(real_sample, generated_sample, phase=phases.TRAIN)
         loss.backward()
+
+        _ = self.metric_processor.calc_metrics(generated_sample, real_sample, mask_sample, phase=phases.VALID)
         
         self.optimizer.step()
     
-    def eval_step(self, real_sample, generated_sample) -> None:
+    def eval_step(self, real_sample, generated_sample, mask_sample) -> None:
         self.model.eval()
         _ = self.loss_processor.calc_losses(real_sample, generated_sample, phase=phases.VALID)
+
+        _ = self.metric_processor.calc_metrics(generated_sample, real_sample, mask_sample, phase=phases.TRAIN)
             
     def step_scheduler(self, metric):
         self.scheduler.step(metric)
@@ -40,6 +47,7 @@ class GenerativeModel(IGenerativeModel):
     def __init__(self, device: str, 
                  losses_weights: Dict,
                  optimization_params: Dict,
+                 metrics_weights: Dict,
                  target_image_size,
                  g_feature_maps, 
                  d_feature_maps, 
@@ -54,20 +62,26 @@ class GenerativeModel(IGenerativeModel):
         g_losses_weights, d_losses_weights = losses_weights.get(models.GENERATOR.value), losses_weights.get(models.DISCRIMINATOR.value)
         
         g_losses_list = [
-            Loss(loss_fn=AdversarialLoss(self.discriminator), name=losses.ADVERSARIAL.value, weight=g_losses_weights.get(losses.ADVERSARIAL.value)),
-            Loss(loss_fn=nn.BCELoss(), name=losses.BCE.value, weight=g_losses_weights.get(losses.BCE.value)),
-            Loss(loss_fn=nn.L1Loss(), name=losses.L1.value, weight=g_losses_weights.get(losses.L1.value)),
+            Loss(loss_fn=AdversarialLoss(self.discriminator), name=losses.ADVERSARIAL.value, weight=g_losses_weights.get(losses.ADVERSARIAL.value, 0.0)),
+            Loss(loss_fn=nn.BCELoss(), name=losses.BCE.value, weight=g_losses_weights.get(losses.BCE.value, 0.0)),
+            Loss(loss_fn=nn.L1Loss(), name=losses.L1.value, weight=g_losses_weights.get(losses.L1.value, 0.0)),
         ]
         
         d_losses_list = [
-            Loss(loss_fn=WassersteinLoss(self.discriminator), name=losses.WASSERSTEIN.value, weight=d_losses_weights.get(losses.WASSERSTEIN.value)),
-            Loss(loss_fn=GradientPenalty(self.discriminator), name=losses.GP.value, weight=d_losses_weights.get(losses.GP.value), only_on=phases.TRAIN),
+            Loss(loss_fn=WassersteinLoss(self.discriminator), name=losses.WASSERSTEIN.value, weight=d_losses_weights.get(losses.WASSERSTEIN.value, 0.0)),
+            Loss(loss_fn=GradientPenalty(self.discriminator), name=losses.GP.value, weight=d_losses_weights.get(losses.GP.value, 0.0), only_on=phases.TRAIN),
+        ]
+
+        metrics_list = [
+            Metric(metric_fn=PrecisionMetric(), name=metrics.PRECISION.value, weight=metrics_weights.get(metrics.PRECISION.value, 0.0)),
+            Metric(metric_fn=F1Metric(), name=metrics.F1.value, weight=metrics_weights.get(metrics.F1.value, 0.0)),
+            Metric(metric_fn=IoUMetric(), name=metrics.IOU.value, weight=metrics_weights.get(metrics.IOU.value, 0.0))
         ]
         
-        self.g_trainer = self._init_trainer(self.generator, g_losses_list)
-        self.d_trainer = self._init_trainer(self.discriminator, d_losses_list)
+        self.g_trainer = self._init_trainer(self.generator, g_losses_list, metrics_list)
+        self.d_trainer = self._init_trainer(self.discriminator, d_losses_list, metrics_list)
     
-    def _init_trainer(self, model, losses_list: List['Loss']):
+    def _init_trainer(self, model, losses_list: List['Loss'], metrics_list: List['Loss']):
         optimizers = [torch.optim.RMSprop(model.parameters(), lr=self.optimization_params.get('lr')),
                       torch.optim.Adam(model.parameters(), lr=self.optimization_params.get('lr'), betas=(0.0, 0.9))]
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers[1], mode=self.optimization_params.get('mode'), factor=0.5, patience=6)
@@ -80,6 +94,7 @@ class GenerativeModel(IGenerativeModel):
         )
         
         trainer.loss_processor.new_losses(losses_list)
+        trainer.metric_processor.new_metrics(metrics_list)
         
         return trainer
 
@@ -95,7 +110,7 @@ class GenerativeModel(IGenerativeModel):
         for _ in range(self.n_critic):
             with torch.no_grad():
                 generated = self.generator(input_data, inpaint_mask)
-            self.d_trainer.train_step(target_data, generated)
+            self.d_trainer.train_step(target_data, generated, inpaint_mask)
             
         # real_score = self.discriminator(target_data).mean().item()
         # fake_score = self.discriminator(generated).mean().item()
@@ -103,7 +118,7 @@ class GenerativeModel(IGenerativeModel):
     
     def _train_generator_step(self, input_data, target_data, inpaint_mask):
         generated = self.generator(input_data, inpaint_mask)
-        self.g_trainer.train_step(target_data, generated)
+        self.g_trainer.train_step(target_data, generated, inpaint_mask)
     
     def train_step(self, batch: tuple[torch.Tensor,]) -> None:
         self.current_iteration += 1
@@ -120,8 +135,8 @@ class GenerativeModel(IGenerativeModel):
         with torch.no_grad():
             generated = self.g_trainer.model(input_data, inpaint_mask)
             
-            self.g_trainer.eval_step(target_data, generated)
-            self.d_trainer.eval_step(target_data, generated)
+            self.g_trainer.eval_step(target_data, generated, inpaint_mask)
+            self.d_trainer.eval_step(target_data, generated, inpaint_mask)
 
     def step_schedulers(self, metric: float) -> None:
         self.g_trainer.step_scheduler(metric)

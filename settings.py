@@ -1,7 +1,7 @@
 import os
 from torch import cuda
 from src.preprocessing.processors import *
-from src.common.structs import ModelTypes as models, LossNames as losses
+from src.common.structs import ModelTypes as models, LossNames as losses, MetricsNames as metrics
 
 # путь к файлам с конфигарциями
 CONFIG = './config.json'
@@ -20,6 +20,11 @@ DEFAULT_TRAIN_CONF = {
             losses.WASSERSTEIN.value: 1.0,
             losses.GP.value: 10.0
         }
+    },
+    "metrics_weights": {
+        metrics.PRECISION.value: 1.0,
+        metrics.F1.value: 1.0,
+        metrics.IOU.value: 1.0
     },
     "optimization_params": {
         "metric": "iou",
