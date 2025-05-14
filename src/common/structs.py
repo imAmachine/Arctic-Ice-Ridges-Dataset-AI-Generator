@@ -1,21 +1,25 @@
 from enum import Enum
 
 
-class ExecPhases(Enum):
-    TRAIN = "train"
-    EVAL = "eval"
-    VALID = "valid"
-    TEST = 'test'
-    ANY = 'any'
+class ExecPhase(Enum):
+    TRAIN = "Train"
+    EVAL = "Eval"
+    VALID = "Valid"
+    TEST = 'Test'
+    ANY = 'Any'
     
 
-class ModelTypes(Enum):
-    GENERATOR = "gen"
-    DISCRIMINATOR = "discr"
-    DIFFUSION = "dif"
+class ModelType(Enum):
+    GENERATOR = "Generator"
+    DISCRIMINATOR = "Discriminator"
 
 
-class LossNames(Enum):
+class EvaluatorType(Enum):
+    LOSS = "Loss"
+    METRIC = "Metric"
+
+
+class LossName(Enum):
     TOTAL = "Total"
     ADVERSARIAL = "Adversarial"
     BCE = "BCE"
@@ -23,7 +27,8 @@ class LossNames(Enum):
     WASSERSTEIN = "Wasserstein"
     GP = "Gradient Penalty"
 
-class MetricsNames(Enum):
+
+class MetricsName(Enum):
     PRECISION = "Precision"
     F1 = "F1"
     IOU = "IoU"

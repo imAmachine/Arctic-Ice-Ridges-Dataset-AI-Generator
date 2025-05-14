@@ -1,6 +1,45 @@
 from torch.autograd import grad
+from sklearn.metrics import f1_score, jaccard_score, precision_score
+from src.common.analyze_tools import FractalAnalyzerGPU
 import torch.nn as nn
 import torch
+
+def fractal_metric(generated: torch.Tensor, target: torch.Tensor) -> float:
+    """
+    Считает среднюю разницу фрактальной размерности между сгенерированным изображением и ground truth
+    """
+    fd_total = 0.0
+    batch_size = min(generated.shape[0], 4)
+
+    for i in range(batch_size):
+        gen_img = generated[i].detach().squeeze()
+        tgt_img = target[i].detach().squeeze()
+
+        fd_gen = FractalAnalyzerGPU.calculate_fractal_dimension(
+            *FractalAnalyzerGPU.box_counting(gen_img)
+        )
+        fd_target = FractalAnalyzerGPU.calculate_fractal_dimension(
+            *FractalAnalyzerGPU.box_counting(tgt_img)
+        )
+
+        fd_total += abs(fd_gen - fd_target)
+
+    return fd_total / batch_size
+
+def sklearn_wrapper(fn, device, threshold: float = 0.5):
+    def wrapper(gen: torch.Tensor, real: torch.Tensor) -> torch.Tensor:
+        # снимем с графа и скопируем на CPU
+        y_pred = gen.detach().cpu().numpy().ravel()
+        y_true = real.detach().cpu().numpy().ravel()
+
+        # порогуем и приводим к 0/1
+        y_pred_bin = (y_pred > threshold).astype(int)
+        y_true_bin = (y_true > threshold).astype(int)
+
+        # считаем метрику, на всякий случай обрабатываем zero_division
+        val = fn(y_true_bin, y_pred_bin, zero_division=0)
+        return torch.tensor(val, device=device)
+    return wrapper
 
 
 class GradientPenalty(nn.Module):

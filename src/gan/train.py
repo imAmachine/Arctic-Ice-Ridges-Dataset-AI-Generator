@@ -14,7 +14,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_sco
 from src.gan.model import GenerativeModel
 from src.gan.dataset import DatasetCreator
 from src.common.utils import Utils
-from src.common.structs import ExecPhases as phases
+from src.common.structs import ExecPhase as phases, EvaluatorType as eval_type, ModelType as m_type
 
 class GANTrainer:
     def __init__(self, model: GenerativeModel, dataset_processor: DatasetCreator, output_path, 
@@ -29,7 +29,6 @@ class GANTrainer:
         self.batch_size = batch_size
         self.checkpoints_ratio = checkpoints_ratio
         
-        self.losses = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
         self.loaders = None
         self.patience_counter = 0
 
@@ -70,21 +69,11 @@ class GANTrainer:
                     _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
 
             # расчёт и вывод средних лоссов по эпохе
-            for trainer in [self.model.g_trainer, self.model.d_trainer]:
-                print(trainer.loss_processor.epoch_avg_losses_str(phases.TRAIN, len(batch)))
-                print(trainer.metric_processor.epoch_metrics_str(phases.VALID))
-            print(trainer.metric_processor.epoch_metrics_str(phases.VALID))
-
-            self.save_metrics_plots(phase=phases.VALID)
+            self.model.g_trainer.get_summary(name=m_type.GENERATOR.value, phase=phases.TRAIN)
+            self.model.d_trainer.get_summary(name=m_type.DISCRIMINATOR.value, phase=phases.TRAIN)
             
-            # self._schedulers_step(phases.VALID)
-
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
-    
-    # def _schedulers_step(self, phase: phases) -> None:
-    #     trg_metric_val = self.metrics_history[phase][self.model.optimization_params.get('metric')][-1]
-    #     self.model.step_schedulers(trg_metric_val)
     
     def _process_batch(self, phase: phases, batch: tuple, visualize_batch=False):
         if phase == phases.TRAIN:
@@ -132,9 +121,9 @@ class GANTrainer:
         plt.savefig(output_file)
         plt.close()
 
-    def save_metrics_plots(self, phase: str = phases.VALID):
+    def save_metrics_plots(self, phase: str = phases.VALID.value):
         """Сохраняет графики для всех метрик указанной фазы"""
-        phase_metrics = self.model.g_trainer.metric_processor.metric_history.get(phase, {})
+        phase_metrics = self.model.g_trainer.evaluate_processor.evaluators_history[phase][-1].get(eval_type.METRIC.value)
         
         for metric_name, values in phase_metrics.items():
             plt.figure(figsize=(12, 5))
@@ -153,28 +142,3 @@ class GANTrainer:
             filepath = os.path.join(self.output_path, filename)
             plt.savefig(filepath)
             plt.close()
-
-    def _show_epoch_metrics(self, epoch_metrics: Dict):
-        avg_metrics = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
-
-        for mode_name, metrics in epoch_metrics.items():
-            for metric_name, metric_history in metrics.items():
-                avg_metrics[mode_name].update({metric_name: np.mean(metric_history)})
-
-        output_str = ''
-        for mode, metrics in avg_metrics.items():
-            output_str += f'[{mode} metrics]: '
-            for metric_name, val in metrics.items():
-                output_str += f'{metric_name} - {val:.2f} '
-            output_str += '\n'
-
-        print(output_str)
-
-    def _load_checkpoint(self):
-        if self.load_weights:
-            try:
-                self.model.load_checkpoint(self.output_path)
-                print(f"Checkpoint загружен успешно. Продолжаем с итерации {self.model.current_iteration}.")
-            except FileNotFoundError as e:
-                print(f"Ошибка при загрузке чекпоинта: {e}")
-                print("Начинаем обучение с нуля.")

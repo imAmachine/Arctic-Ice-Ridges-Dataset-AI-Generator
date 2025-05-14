@@ -6,7 +6,7 @@ from src.gan.tester import ParamGridTester
 from src.gan.train import GANTrainer
 from src.gan.arch import AUGMENTATIONS
 from src.common.utils import Utils
-from src.common.structs import ExecPhases as phases
+from src.common.structs import ExecPhase as phases
 
 import argparse
 import tkinter as tk
@@ -43,14 +43,14 @@ def main():
     parser = argparse.ArgumentParser(description='GAN модель для генерации ледовых торосов')
     parser.add_argument('--preprocess', action='store_true', help='Препроцессинг исходных данных')
     parser.add_argument('--train', action='store_true', help='Обучение модели')
-    parser.add_argument('--infer', action='store_true', help='Инференс на одном изображении')
+    # parser.add_argument('--infer', action='store_true', help='Инференс на одном изображении')
     parser.add_argument('--input_path', type=str, help='Путь к изображению для инференса')
     parser.add_argument('--epochs', type=int, default=1000, help='Количество эпох обучения')
     parser.add_argument('--augs', type=int, default=1, help='Количество аугментированных сэмплов на снимок, определяет итоговый размер датасета')
     parser.add_argument('--batch_size', type=int, default=3, help='Размер батча')
     parser.add_argument('--val_rat', type=float, default=0.2, help='Размер валидационной выборки в процентах')
     parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
-    parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
+    # parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
     parser.add_argument('--test', action='store_true', help='Запуск тестов параметров')
 
     args = parser.parse_args()
@@ -58,8 +58,7 @@ def main():
     run_all = not (args.preprocess or args.train or args.infer or args.gui or args.test)
 
     init_config()
-    config = Utils.from_json(CONFIG)
-    target_img_size = config.get(phases.TRAIN.value).get("target_image_size")
+    config = dict(Utils.from_json(CONFIG))
     
     # Инициализация модели
     model_gan = GenerativeModel(**config[phases.TRAIN.value], device=DEVICE)
@@ -69,7 +68,8 @@ def main():
                                 original_data_path=MASKS_FOLDER_PATH,
                                 preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
                                 images_extentions=MASKS_FILE_EXTENSIONS,
-                                model_transforms=model_gan.generator.get_model_transforms(target_img_size),
+                                model_transforms=model_gan.generator.get_model_transforms(config.get(phases.TRAIN.value)
+                                                                                          .get("target_image_size")),
                                 preprocessors=PREPROCESSORS,
                                 augmentations=AUGMENTATIONS,
                                 augs_per_img=args.augs,
@@ -95,23 +95,23 @@ def main():
         
         trainer.train()
 
-    # Инференс
-    if args.infer:
-        if not args.input_path:
-            print("Ошибка: для инференса необходимо указать --input_path путь к изображению.")
-            return
-        img = Utils.cv2_load_image(args.input_path, cv2.IMREAD_GRAYSCALE)
-        preprocessor = IceRidgeDatasetPreprocessor(PREPROCESSORS)
-        preprocessed_img = preprocessor.process_image(img)
+    # # Инференс
+    # if args.infer:
+    #     if not args.input_path:
+    #         print("Ошибка: для инференса необходимо указать --input_path путь к изображению.")
+    #         return
+    #     img = Utils.cv2_load_image(args.input_path, cv2.IMREAD_GRAYSCALE)
+    #     preprocessor = IceRidgeDatasetPreprocessor(PREPROCESSORS)
+    #     preprocessed_img = preprocessor.process_image(img)
         
-        processor = InferenceMaskingProcessor(outpaint_ratio=0.2)
-        generated, _ = model_gan.infer_generate(preprocessed_img=preprocessed_img, 
-                                                       checkpoint_path=WEIGHTS_PATH, 
-                                                       processor=processor)
+    #     processor = InferenceMaskingProcessor(outpaint_ratio=0.2)
+    #     generated, _ = model_gan.infer_generate(preprocessed_img=preprocessed_img, 
+    #                                                    checkpoint_path=WEIGHTS_PATH, 
+    #                                                    processor=processor)
 
-        output_path = './data/inference/output.png'
-        cv2.imwrite(output_path, generated)
-        print(f"Генерация завершена. Результат сохранён в {output_path}")
+    #     output_path = './data/inference/output.png'
+    #     cv2.imwrite(output_path, generated)
+    #     print(f"Генерация завершена. Результат сохранён в {output_path}")
 
     if args.gui:
         root = tk.Tk()

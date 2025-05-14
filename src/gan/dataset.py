@@ -12,7 +12,7 @@ import numpy as np
 from src.common.utils import Utils
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.preprocessing.processors import *
-from src.common.structs import ExecPhases as phases
+from src.common.structs import ExecPhase as phases
 
 class MaskingProcessor:
     def __init__(self, mask_padding=0.15):

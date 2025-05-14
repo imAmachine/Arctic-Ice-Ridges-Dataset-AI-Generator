@@ -1,66 +1,67 @@
 import os
 from torch import cuda
 from src.preprocessing.processors import *
-from src.common.structs import ModelTypes as models, LossNames as losses, MetricsNames as metrics
+from src.common.structs import ModelType as models, LossName as losses, MetricsName as metrics, ExecPhase as phases, EvaluatorType as eval_type
 
 # путь к файлам с конфигарциями
 CONFIG = './config.json'
 DEFAULT_TRAIN_CONF = {
     "target_image_size": 256,
     "g_feature_maps": 64,
-    "d_feature_maps": 32,
-    "n_critic": 3,
-    "losses_weights": {
+    "d_feature_maps": 64,
+    "n_critic": 5,
+    "evaluators_info": {
         models.GENERATOR.value: {
-            losses.ADVERSARIAL.value: 1,
-            losses.BCE.value: 0.1,
-            losses.L1.value: 1.0
+            losses.ADVERSARIAL.value: {
+                "weight": 1.0,
+                "exec_phase": phases.ANY.value,
+                "type": eval_type.LOSS.value,
+            },
+            losses.BCE.value: {
+                "weight": 0.1,
+                "exec_phase": phases.ANY.value,
+                "type": eval_type.LOSS.value,
+            },
+            losses.L1.value: {
+                "weight": 1.0,
+                "exec_phase": phases.ANY.value,
+                "type": eval_type.LOSS.value,
+            },
+            metrics.PRECISION.value: {
+                "weight": 1.0,
+                "exec_phase": phases.ANY.value,
+                "type": eval_type.METRIC.value,
+            },
+            metrics.F1.value: {
+                "exec_phase": phases.ANY.value,
+                "type": eval_type.METRIC.value,
+            },
+            metrics.IOU.value: {
+                "exec_phase": phases.ANY.value,
+                "type": eval_type.METRIC.value,
+            }
         },
         models.DISCRIMINATOR.value: {
-            losses.WASSERSTEIN.value: 1.0,
-            losses.GP.value: 10.0
+            losses.WASSERSTEIN.value: {
+                "weight": 1.0,
+                "exec_phase": phases.ANY.value,
+                "type": eval_type.LOSS.value,
+            },
+            losses.GP.value: {
+                "weight": 10.0,
+                "exec_phase": phases.TRAIN.value,
+                "type": eval_type.LOSS.value,
+            },
         }
     },
-    "metrics_weights": {
-        metrics.PRECISION.value: 1.0,
-        metrics.F1.value: 1.0,
-        metrics.IOU.value: 1.0
-    },
     "optimization_params": {
-        "metric": "iou",
+        eval_type.METRIC.name: metrics.IOU.value,
         "mode": "max",
         "lr": 0.0005
     }
 }
 
 DEFAULT_TEST_CONF = {
-    "augs_per_img": [1],
-    "GenerativeModel": {
-        "target_image_size": [256],
-        "g_feature_maps": [32],
-        "d_feature_maps": [32],
-        "n_critic": [3],
-        "losses_weights": {
-            "gen": {
-                "adv": [2.0],
-                "bce": [1.0],
-                "l1": [1.5]
-            },
-            "discr": {
-                "gp": [10.0]
-            }
-        },
-        "optimization_params": {
-            "metric": "iou",
-            "mode": "max",
-            "lr": [0.0005]
-        }
-    },
-    "GANTrainer": {
-        "epochs": [100],
-        "batch_size": [3],
-        "val_ratio": [0.2]
-    }
 } 
 
 # путь к файлу с геоанализом исходных снимков

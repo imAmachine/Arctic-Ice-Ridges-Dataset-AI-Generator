@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import numpy as np
-from typing import Dict, List, Type
+from typing import Callable, Dict, List, Type
 
-from src.common.structs import ExecPhases as phases
+import torch
+
+from src.common.structs import ExecPhase as phases
 
 class IProcessor(ABC):
     """Interface for user defined image processing classes
