@@ -12,9 +12,9 @@ DEFAULT_TRAIN_CONF = {
     "n_critic": 3,
     "losses_weights": {
         models.GENERATOR.value: {
-            losses.ADVERSARIAL.value: 2,
-            losses.BCE.value: 1.5,
-            losses.L1.value: 1.5
+            losses.ADVERSARIAL.value: 1,
+            losses.BCE.value: 0.1,
+            losses.L1.value: 1.0
         },
         models.DISCRIMINATOR.value: {
             losses.WASSERSTEIN.value: 1.0,

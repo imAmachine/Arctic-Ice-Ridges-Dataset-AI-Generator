@@ -36,7 +36,7 @@ class SEBlock(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(channels, channels // reduction),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
             nn.Linear(channels // reduction, channels),
             nn.Sigmoid()
         )
@@ -80,7 +80,7 @@ class WGanGenerator(nn.Module):
         )
 
         self.dec5 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=True)
-        self.dec4 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=True)
+        self.dec4 = UpConvBlock(feature_maps * 8 + feature_maps * 8, feature_maps * 8, dropout=False)
         self.dec3 = UpConvBlock(feature_maps * 8 + feature_maps * 4, feature_maps * 4, dropout=False)
         self.dec2 = UpConvBlock(feature_maps * 4 + feature_maps * 2, feature_maps * 2, dropout=False)
         self.dec1 = UpConvBlock(feature_maps * 2 + feature_maps, feature_maps, dropout=False)
@@ -134,7 +134,8 @@ class WGanCritic(nn.Module):
             conv_block(feature_maps, feature_maps*2, use_in=False),
             conv_block(feature_maps*2, feature_maps*4, use_in=False),
             conv_block(feature_maps*4, feature_maps*8, use_in=False),
-            nn.Conv2d(feature_maps*8, 1, kernel_size=4, stride=1, padding=0, bias=False),
+            conv_block(feature_maps*8, feature_maps*16, use_in=False),
+            nn.Conv2d(feature_maps*16, 1, kernel_size=4, stride=1, padding=0, bias=False),
         )
     
     def forward(self, x):
