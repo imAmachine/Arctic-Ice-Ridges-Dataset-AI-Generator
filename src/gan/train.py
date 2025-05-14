@@ -29,7 +29,6 @@ class GANTrainer:
         self.batch_size = batch_size
         self.checkpoints_ratio = checkpoints_ratio
         
-        # self.metrics_history = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
         self.losses = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
         self.loaders = None
         self.patience_counter = 0
@@ -58,8 +57,6 @@ class GANTrainer:
         for epoch in range(self.epochs):
             print(f"\nЭпоха {epoch + 1}/{self.epochs}")
 
-            # epoch_metrics = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
-
             for phase, loader in [(phases.TRAIN, train_loader), (phases.VALID, valid_loader)]:
                 if loader is None:
                     continue
@@ -71,23 +68,14 @@ class GANTrainer:
                     batch = [el.to(self.device) for el in batch]
                     
                     _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
-                    
-                    # self.model.switch_mode(phases.VALID)
-                    # metrics = self._calc_metrics(batch)
-                    # epoch_metrics[phase].update(metrics)
-
-                # for metric, values in epoch_metrics[phase].items():
-                #     self.metrics_history[phase][metric].append(np.mean(values))
-
-            # self._show_epoch_metrics(epoch_metrics)
-            
-            # сохранение графиков метрик
-            # for metric in self.metrics_history[phases.TRAIN]:
-            #     self.save_metric_plot(target_metric=metric, suffix=metric)
 
             # расчёт и вывод средних лоссов по эпохе
             for trainer in [self.model.g_trainer, self.model.d_trainer]:
                 print(trainer.loss_processor.epoch_avg_losses_str(phases.TRAIN, len(batch)))
+                print(trainer.metric_processor.epoch_metrics_str(phases.VALID))
+            print(trainer.metric_processor.epoch_metrics_str(phases.VALID))
+
+            self.save_metrics_plots(phase=phases.VALID)
             
             # self._schedulers_step(phases.VALID)
 
@@ -144,21 +132,27 @@ class GANTrainer:
         plt.savefig(output_file)
         plt.close()
 
-    def save_metric_plot(self, target_metric, suffix=''):
-        plt.figure(figsize=(12, 5))
-        plt.plot(self.metrics_history['train'][target_metric], label='train')
-        plt.plot(self.metrics_history['valid'][target_metric], label='valid')
-        plt.xlabel('Epoch')
-        plt.ylabel(target_metric)
-        plt.title('Train history')
-        plt.grid(True)
-        plt.legend()
-        plt.tight_layout()
+    def save_metrics_plots(self, phase: str = phases.VALID):
+        """Сохраняет графики для всех метрик указанной фазы"""
+        phase_metrics = self.model.g_trainer.metric_processor.metric_history.get(phase, {})
+        
+        for metric_name, values in phase_metrics.items():
+            plt.figure(figsize=(12, 5))
+            
+            plt.plot(values, label=phase, color='orange')
 
-        filename = f"training_history{f'_{suffix}' if suffix else ''}.png"
-        filepath = os.path.join(self.output_path, filename)
-        plt.savefig(filepath)
-        plt.close()
+            plt.xlabel('Epoch')
+            plt.ylabel(metric_name.capitalize())
+            plt.title(f'{metric_name.capitalize()} History ({phase})')
+            plt.grid(True)
+            plt.legend()
+            plt.tight_layout()
+
+            # Сохранение файла
+            filename = f"{metric_name}_{phase}_history.png"
+            filepath = os.path.join(self.output_path, filename)
+            plt.savefig(filepath)
+            plt.close()
 
     def _show_epoch_metrics(self, epoch_metrics: Dict):
         avg_metrics = {phases.TRAIN: defaultdict(list), phases.VALID: defaultdict(list)}
@@ -175,43 +169,6 @@ class GANTrainer:
             output_str += '\n'
 
         print(output_str)
-    
-    # 
-    # ДОРАБОТАТЬ МЕТРИКИ (НЕ ВЕРНО СЧИТАЕТ)
-    # 
-    # def _calc_metrics(self, batch: tuple[torch.Tensor, torch.Tensor, torch.Tensor]) -> tuple[float, float, float]:
-    #     damaged, target, damage_mask = [el.to(self.device).detach() for el in batch]
-        
-    #     with torch.no_grad():
-    #         generated = self.model.generator(damaged, damage_mask)
-
-    #         # Accuracy (по маске)
-    #         gen_bin = (generated.cpu().numpy() > 0.15).astype(np.uint8)
-    #         tgt_bin = (target.cpu().numpy() > 0.15).astype(np.uint8)
-    #         mask_bin = (damage_mask.cpu().numpy() > 0.15).astype(np.uint8)
-
-    #         acc, f1, iou = [], [], []
-    #         for i in range(gen_bin.shape[0]):
-    #             p = gen_bin[i].flatten()
-    #             t = tgt_bin[i].flatten()
-    #             m = mask_bin[i].flatten()
-
-    #             p_masked = p[m == 1]
-    #             t_masked = t[m == 1]
-
-    #             acc.append(precision_score(t_masked, p_masked, zero_division=1))
-    #             f1.append(f1_score(t_masked, p_masked, zero_division=1))
-    #             iou.append(jaccard_score(t_masked, p_masked, zero_division=1))
-
-    #         accuracy = acc if acc else 0.0
-    #         # fd = self._calc_fractal_loss(generated, target)
-            
-    #         return {
-    #             'accuracy': np.mean(accuracy),
-    #             'f1': np.mean(f1),
-    #             'iou': np.mean(iou),
-    #             # 'fd': fd
-    #         }
 
     def _load_checkpoint(self):
         if self.load_weights:

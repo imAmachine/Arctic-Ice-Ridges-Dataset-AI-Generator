@@ -170,9 +170,11 @@ class RandomRotate(torch.nn.Module):
 
 AUGMENTATIONS = T.Compose([
     OneOf([
+        T.RandomCrop((1280, 1280)),
         T.RandomCrop((1024, 1024)),
+        T.RandomCrop((864, 864)),
         T.RandomCrop((768, 768)),
-        T.RandomCrop((512, 512)),
+        T.RandomCrop((640, 640)),
     ], p=1.0),
     RandomRotate(p=0.8),
     T.RandomHorizontalFlip(p=0.8),

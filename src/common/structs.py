@@ -22,3 +22,8 @@ class LossNames(Enum):
     L1 = "L1"
     WASSERSTEIN = "Wasserstein"
     GP = "Gradient Penalty"
+
+class MetricsNames(Enum):
+    PRECISION = "Precision"
+    F1 = "F1"
+    IOU = "IoU"
