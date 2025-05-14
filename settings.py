@@ -84,10 +84,9 @@ GENERATOR_PATH = os.path.join(WEIGHTS_PATH, 'generator.pth')
 DEVICE = 'cuda' if cuda.is_available() else 'cpu'
 
 PREPROCESSORS = [
-            Binarize(),
             RotateMaskProcessor(),
+            Binarize(),
             CropToContentProcessor(),
-            EnchanceProcessor(kernel_size=3),
             AutoAdjust(),
             Unbinarize()
         ]

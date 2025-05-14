@@ -1,4 +1,3 @@
-from collections import defaultdict
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel

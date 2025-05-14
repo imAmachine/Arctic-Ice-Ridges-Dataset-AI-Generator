@@ -1,5 +1,4 @@
 import os
-from typing import Dict, List, Literal
 import torch
 import matplotlib
 
@@ -7,13 +6,9 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from collections import defaultdict
-import numpy as np
-from sklearn.metrics import f1_score, precision_score, recall_score, jaccard_score
 
 from src.gan.model import GenerativeModel
 from src.gan.dataset import DatasetCreator
-from src.common.utils import Utils
 from src.common.structs import ExecPhase as phases, EvaluatorType as eval_type, ModelType as m_type
 
 class GANTrainer:

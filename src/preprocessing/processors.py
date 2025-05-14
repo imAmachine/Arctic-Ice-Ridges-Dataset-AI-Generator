@@ -74,7 +74,7 @@ class EnchanceProcessor(IProcessor):
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, self.kernel_size))
-        return cv2.morphologyEx(image.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
+        return cv2.morphologyEx(image.astype(np.uint8), cv2.MORPH_OPEN, kernel)
 
 
 class CropToContentProcessor(IProcessor):
@@ -173,7 +173,9 @@ class RotateMaskProcessor(IProcessor):
         M = cv2.getRotationMatrix2D(center, angle, 1.0)
         rotated_img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, 
                                     borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-        return rotated_img
+        
+        _, binary = cv2.threshold(rotated_img, 70, 255, cv2.THRESH_BINARY)
+        return binary
 
 
 class TensorConverterProcessor(IProcessor):

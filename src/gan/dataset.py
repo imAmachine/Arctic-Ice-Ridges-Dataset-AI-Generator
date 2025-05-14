@@ -120,7 +120,7 @@ class IceRidgeDataset(Dataset):
         batch = (damaged, img_aug, damage_mask)
         
         tensors = IceRidgeDataset.apply_transforms(model_transforms, batch)
-        binarized = [(x > 0.0).float() for x in tensors]
+        binarized = [(x > 0.12).float() for x in tensors]
         
         return tuple(binarized)
     
