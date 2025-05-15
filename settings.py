@@ -83,11 +83,9 @@ GENERATOR_PATH = os.path.join(WEIGHTS_PATH, 'generator.pth')
 DEVICE = 'cuda' if cuda.is_available() else 'cpu'
 
 PREPROCESSORS = [
-            RotateMaskProcessor(),
-            Binarize(),
-            CropToContentProcessor(),
-            AutoAdjust(),
-            Unbinarize()
-        ]
+    RotateMask(),
+    AdjustToContent(),
+    Crop(k=0.5),
+]
 
 MASKS_FILE_EXTENSIONS = ['.png']

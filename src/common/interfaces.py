@@ -58,9 +58,7 @@ class IProcessor(ABC):
             processor_name = processor_class.__name__
             proc_val = metadata.get(processor_name)
             if processor_name not in metadata or proc_val in ("False", None):
-                print(f'Need {processor_name} before {self.NAME}')
-                return False
-        return True
+                raise Exception(f'Need {processor_name} before {self.NAME}')
     
     def process(self, image: np.ndarray, metadata: Dict[str, str]) -> np.ndarray:
         """Выполняет процесс обработки изображения
@@ -73,15 +71,12 @@ class IProcessor(ABC):
             np.ndarray: Обработанное изображение
         """
         self.metadata = metadata
-        processed_image = image
         
-        if self.check_conditions(metadata):
-            processed_image = self.process_image(image)
-            self.VALUE = self.get_metadata_value()
-        else:
-            self.VALUE = "False"
-            
-        metadata[self.NAME] = self.VALUE
+        self.check_conditions(metadata)
+        processed_image = self.process_image(image)
+        self.VALUE = self.get_metadata_value()
+    
+        metadata[self.NAME] = self.VALUE        
         return processed_image
 
 

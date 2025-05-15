@@ -44,9 +44,9 @@ class IceRidgeDatasetPreprocessor:
             print(f"Error processing {output_path}: {str(e)}")
     
     def _process_file(self, input_path: str, output_folder: str, filename: str):
+            print(f'Обработка {filename}')
             processing_img = Utils.cv2_load_image(os.path.join(input_path, filename), cv2_read_mode=IMREAD_GRAYSCALE)
             output_path = self._get_output_path(filename=filename, output_folder_path=output_folder)
-            print(f'Обработка {filename}')
             processing_img = self.process_image(processing_img, filename, output_path)
             self._write_processed_img(processing_img, output_path)
             

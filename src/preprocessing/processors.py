@@ -2,91 +2,110 @@ import cv2
 import numpy as np
 import torch
 
-from src.common.analyze_tools import FractalAnalyzer, FractalAnalyzerGPU
 from src.common.interfaces import IProcessor
 from src.common.utils import Utils
 
-class CropProcessor(IProcessor):
+class Crop(IProcessor):
     """Процессор для обрезки изображения"""
     
-    def __init__(self, processor_name: str = None, crop_percent: int = 0):
+    def __init__(self, processor_name: str = None, k: float = 1.0):
         super().__init__(processor_name)
-        self.crop_percent = crop_percent
-    
-    @property
-    def PROCESSORS_NEEDED(self):
-        return []
+        self.k = k
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        return Utils.crop_image(image, self.crop_percent)
-
-
-class AutoAdjust(IProcessor):
-    """Процессор для автоматического постраивания соотношения сторон изображения"""
-    
-    @property
-    def PROCESSORS_NEEDED(self):
-        return []
-    
-    def process_image(self, image: np.ndarray) -> np.ndarray:
-        h, w = image.shape
-        
-        if h == w:
+        mask = image > 0
+        if not mask.any():
             return image
-        elif h > w:
-            crop_before, crop_after = self._image_crop_calc(h, w)
-            return image[crop_before:h-crop_after, :]
-        else:
-            crop_before, crop_after = self._image_crop_calc(h, w)
-            return image[:, crop_before:w-crop_after]
+
+        # белые пиксели по строкам и столбцам
+        row_counts = mask.sum(axis=1)
+        col_counts = mask.sum(axis=0)
+
+        # пороговые значения
+        thr_r = row_counts.mean() - self.k * row_counts.std()
+        thr_c = col_counts.mean() - self.k * col_counts.std()
+
+        # индексы «достаточно плотных» строк и столбцов
+        rows = np.where(row_counts >= thr_r)[0]
+        cols = np.where(col_counts >= thr_c)[0]
+
+        if rows.size == 0 or cols.size == 0:
+            return image
+
+        return image[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
+
+# 
+# Нужно доработать
+# 
+
+# class AutoAdjust(IProcessor):
+#     """Процессор для автоматического ресайза изображения с сохранением соотношения сторон."""
+    
+#     def __init__(self, processor_name: str = None, target_size: int = 2048):
+#         super().__init__(processor_name)
+#         self.target_size = target_size
+    
+#     def process_image(self, image: np.ndarray) -> np.ndarray:
+#         h, w = image.shape[:2]
+#         if h == 0 or w == 0:
+#             return image
         
-    def _image_crop_calc(self, h, w):
-        diff = abs(h - w)
-        crop_before = diff // 2
-        crop_after = diff - crop_before
-        return crop_before, crop_after
+#         scale = self.target_size / max(h, w)
+#         new_w = int(w * scale)
+#         new_h = int(h * scale)
+        
+#         interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
+        
+#         resized = cv2.resize(image, (new_w, new_h), interpolation=interp)
+#         return resized
 
-class Binarize(IProcessor):
-    """Процессор для бинаризации изображения"""
+# class Binarize(IProcessor):
+#     def process_image(self, image: np.ndarray) -> np.ndarray:
+#         return Utils.binarize_by_threshold(image, threshold=image.std(), max_val=1)
+
+
+# class Unbinarize(IProcessor):
+#     def process_image(self, image):
+#         return image * 255
+
+
+# class EnchanceProcessor(IProcessor):
+#     """Процессор для улучшения бинаризованного изображения с помощью морфологических операций"""
     
-    def process_image(self, image: np.ndarray) -> np.ndarray:
-        return Utils.binarize_by_threshold(image, threshold=0.1, max_val=1)
-
-
-class Unbinarize(IProcessor):
-    @property
-    def PROCESSORS_NEEDED(self):
-        return [Binarize]
+#     @property
+#     def PROCESSORS_NEEDED(self):
+#         return [Binarize]
     
-    def process_image(self, image):
-        return image * 255
-
-
-class EnchanceProcessor(IProcessor):
-    """Процессор для улучшения бинаризованного изображения с помощью морфологических операций"""
+#     def __init__(self, processor_name: str = None, kernel_size: int = 5):
+#         super().__init__(processor_name)
+#         self.kernel_size = kernel_size
     
-    def __init__(self, processor_name: str = None, kernel_size: int = 5):
-        super().__init__(processor_name)
-        self.kernel_size = kernel_size
-    
-    @property
-    def PROCESSORS_NEEDED(self):
-        return [Binarize]
-    
-    def process_image(self, image: np.ndarray) -> np.ndarray:
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, self.kernel_size))
-        return cv2.morphologyEx(image.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+#     def process_image(self, image: np.ndarray) -> np.ndarray:
+#         # Убедимся, что тип правильный
+#         binary_image = image.copy()
+#         if image.dtype != np.uint8:
+#             binary_image = image.astype(np.uint8)
+        
+#         # Структурные элементы по направлениям
+#         vertical = cv2.getStructuringElement(cv2.MORPH_RECT, (1, self.kernel_size))
+#         horizontal = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, 1))
+#         diag1 = np.eye(self.kernel_size, dtype=np.uint8)
+#         diag2 = np.fliplr(diag1)
+
+#         # Применяем морфологическое закрытие по 4 направлениям
+#         repaired = binary_image.copy()
+#         for kernel in [vertical, horizontal, diag1, diag2]:
+#             closed = cv2.morphologyEx(repaired, cv2.MORPH_CLOSE, kernel)
+#             repaired = cv2.bitwise_or(repaired, closed)  # объединяем результат
+
+#         return repaired
 
 
-class CropToContentProcessor(IProcessor):
+class AdjustToContent(IProcessor):
     """Процессор для обрезки пустых краёв до границ контента."""
 
     def __init__(self, processor_name: str = None):
         super().__init__(processor_name)
-    
-    @property
-    def PROCESSORS_NEEDED(self):
-        return [Binarize]
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
         return self._crop_to_content(image)
@@ -104,79 +123,41 @@ class CropToContentProcessor(IProcessor):
         return cropped
     
 
-class RotateMaskProcessor(IProcessor):
-    """Процессор для выравнивания маски по максимальной диагонали выпуклой оболочки."""
+class RotateMask(IProcessor):
+    """Процессор, выравнивающий главную ось бинарной маски по диагонали изображения."""
     
     def __init__(self, processor_name: str = None):
         super().__init__(processor_name)
     
     def process_image(self, image: np.ndarray) -> np.ndarray:
-        points = self._find_farthest_points(image)
-        angle = self._calculate_rotate_angle(points, image.shape)
-        center = self._calculate_center(points)
-        rotated_image = self._rotate_image(image, angle, center)
+        ys, xs = np.where(image > 0)
+        if len(xs) < 2:
+            self._result_value = 0.0
+            return image
+        
+        pts = np.column_stack((xs, ys)).astype(np.int32)
+        
+        rect = cv2.minAreaRect(pts)
+        (cx, cy), (w_rect, h_rect), rect_angle = rect
+        
+        if w_rect < h_rect:
+            angle = rect_angle + 90
+        else:
+            angle = rect_angle
+        
+        center = (cx, cy)
+        
+        h, w = image.shape
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotated = cv2.warpAffine(
+            image, M, (w, h),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=0
+        )
         
         self._result_value = angle
-        
-        return rotated_image
-    
-    def _find_farthest_points(self, image):
-        """Находит 2 наиболее удалённые белые точки"""
-        # Получаем координаты всех белых пикселей
-        yx = np.column_stack(np.where(image > 0))  # (y, x) → для OpenCV меняем на (x, y) позже
-
-        if len(yx) < 2:
-            return None
-
-        # Меняем порядок на (x, y) для OpenCV
-        points = np.array([[x, y] for y, x in yx], dtype=np.int32)
-
-        # Строим выпуклую оболочку
-        hull = cv2.convexHull(points)
-
-        # Используем rotating calipers для поиска самой дальней пары
-        max_dist = 0
-        farthest_pair = (tuple(hull[0][0]), tuple(hull[1][0]))
-
-        n = len(hull)
-        j = 1
-        for i in range(n):
-            while True:
-                dist1 = np.linalg.norm(hull[i][0] - hull[j % n][0])
-                dist2 = np.linalg.norm(hull[i][0] - hull[(j+1) % n][0])
-                if dist2 > dist1:
-                    j += 1
-                else:
-                    break
-            if dist1 > max_dist:
-                max_dist = dist1
-                farthest_pair = (tuple(hull[i][0]), tuple(hull[j % n][0]))
-
-        return farthest_pair
-    
-    def _calculate_rotate_angle(self, points, img_shape):
-        """Вычисляет угол между линией (p1-p2) и диагональю изображения"""
-        p1, p2 = points
-        line_vec = np.array([p2[0] - p1[0], p2[1] - p1[1]])
-        h, w = img_shape
-        diag_vec = np.array([w, -h])  # левая нижняя -> правая верхняя
-        angle_rad = np.arctan2(line_vec[1], line_vec[0]) - np.arctan2(diag_vec[1], diag_vec[0])
-        angle_deg = np.degrees(angle_rad)
-        return (angle_deg + 90) % 180 - 90
-    
-    def _calculate_center(self, points):
-        p1, p2 = points
-        center = ((int(p1[0])+int(p2[0])) // 2, (int(p1[1])+int(p2[1])) // 2)
-        return center
-    
-    def _rotate_image(self, img: np.ndarray, angle: float, center) -> np.ndarray:
-        h, w = img.shape
-        M = cv2.getRotationMatrix2D(center, angle, 1.0)
-        rotated_img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, 
-                                    borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-        
-        _, binary = cv2.threshold(rotated_img, 70, 255, cv2.THRESH_BINARY)
-        return binary
+        return rotated
 
 
 class TensorConverterProcessor(IProcessor):
@@ -196,31 +177,3 @@ class TensorConverterProcessor(IProcessor):
             tensor_image = tensor_image.unsqueeze(0)
         
         return tensor_image
-
-
-class FractalDimensionProcessorGPU(IProcessor):
-    """Процессор для расчета фрактальной размерности с использованием GPU"""
-    @property
-    def PROCESSORS_NEEDED(self):
-        return [TensorConverterProcessor]
-    
-    def process_image(self, image: np.ndarray) -> np.ndarray:
-        fr_dim = FractalAnalyzerGPU.calculate_fractal_dimension(
-            *FractalAnalyzerGPU.box_counting(image), 
-            device=image.device)
-        
-        self._result_value = fr_dim.item()
-        
-        return image
-
-
-class FractalDimensionProcessorCPU(IProcessor):
-    """Процессор для расчета фрактальной размерности с использованием CPU"""
-    
-    def process_image(self, image: np.ndarray) -> np.ndarray:
-        fr_dim = FractalAnalyzer.calculate_fractal_dimension(
-            *FractalAnalyzer.box_counting(image))
-        
-        self._result_value = fr_dim.item()
-        
-        return image
