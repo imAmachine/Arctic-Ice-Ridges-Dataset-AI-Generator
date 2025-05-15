@@ -34,16 +34,17 @@ class AutoAdjust(IProcessor):
         if h == w:
             return image
         elif h > w:
-            diff = h - w
-            top_crop = diff // 2
-            bottom_crop = diff - top_crop
-            return image[top_crop:h-bottom_crop, :]
+            crop_before, crop_after = self._image_crop_calc(h, w)
+            return image[crop_before:h-crop_after, :]
         else:
-            diff = w - h
-            left_crop = diff // 2
-            right_crop = diff - left_crop
-            return image[:, left_crop:w-right_crop]
-
+            crop_before, crop_after = self._image_crop_calc(h, w)
+            return image[:, crop_before:w-crop_after]
+        
+    def _image_crop_calc(self, h, w):
+        diff = abs(h - w)
+        crop_before = diff // 2
+        crop_after = diff - crop_before
+        return crop_before, crop_after
 
 class Binarize(IProcessor):
     """Процессор для бинаризации изображения"""
