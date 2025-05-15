@@ -59,18 +59,16 @@ class ModelTrainer:
         self.evaluate_processor.reset_history()
             
 
-
 class GenerativeModel(IGenerativeModel):
     def __init__(self, device: str, 
                  evaluators_info: Dict,
                  optimization_params: Dict,
                  target_image_size,
-                 g_feature_maps, 
-                 d_feature_maps, 
+                 model_base_features,
                  n_critic):
         super().__init__(target_image_size, device, optimization_params)
-        self.generator = WGanGenerator(input_channels=2, feature_maps=g_feature_maps).to(self.device)
-        self.discriminator = WGanCritic(input_channels=1, feature_maps=d_feature_maps).to(self.device)
+        self.generator = WGanGenerator(input_channels=1, feature_maps=model_base_features).to(self.device)
+        self.discriminator = WGanCritic(input_channels=1, feature_maps=model_base_features).to(self.device)
         self.current_iteration = 0
 
         self.n_critic = n_critic
@@ -111,7 +109,7 @@ class GenerativeModel(IGenerativeModel):
         
         return trainer
 
-    def switch_phase(self, phase: phases=phases.TRAIN) -> None:
+    def set_phase(self, phase: phases=phases.TRAIN) -> None:
         if phase == phases.TRAIN:
             self.generator.train()
             self.discriminator.train()
@@ -119,51 +117,28 @@ class GenerativeModel(IGenerativeModel):
             self.generator.eval()
             self.discriminator.eval()
     
-    def __train_critic_step(self, input_data, target_data, inpaint_mask):
+    def __train_critic_step(self, input_data, target_data):
         for _ in range(self.n_critic):
             with torch.no_grad():
-                generated = self.generator(input_data, inpaint_mask)
+                generated = self.generator(input_data)
             self.d_trainer.optimization_step(target_data, generated)
     
-    def __train_generator_step(self, input_data, target_data, inpaint_mask):
-        generated = self.generator(input_data, inpaint_mask)
+    def __train_generator_step(self, input_data, target_data):
+        generated = self.generator(input_data)
         self.g_trainer.optimization_step(target_data, generated)
     
-    def train_step(self, batch: tuple[torch.Tensor,]) -> None:
+    def train_step(self, input_data, target_data) -> None:
         self.current_iteration += 1
         
         # цикл обучения критика
-        self.__train_critic_step(*batch)
+        self.__train_critic_step(input_data, target_data)
         
         # шаг обучения генератора
-        self.__train_generator_step(*batch)
+        self.__train_generator_step(input_data, target_data)
 
-    def valid_step(self, batch: tuple[torch.Tensor,]) -> None:
-        input_data, target_data, inpaint_mask = batch
-        
+    def valid_step(self, input_data, target_data) -> None:
         with torch.no_grad():
-            generated = self.g_trainer.model(input_data, inpaint_mask)
+            generated = self.g_trainer.model(input_data)
             
             self.g_trainer.evaluation_step(target_data, generated)
             self.d_trainer.evaluation_step(target_data, generated)
-
-    # def infer_generate(self, preprocessed_img, checkpoint_path, processor): # НУЖНО РАЗГРЕСТИ ЭТОТ МУСОР
-    #     self.switch_phase(phases.EVAL)
-    #     self.load_checkpoint(checkpoint_path)
-
-    #     damaged, original, outpaint_mask = IceRidgeDataset.prepare_data(
-    #         img=preprocessed_img,
-    #         processor=processor,
-    #         augmentations=None,
-    #         model_transforms=self.generator.get_model_transforms(self.target_image_size)
-    #     )
-    #     damaged = damaged.to(self.device)
-    #     outpaint_mask = outpaint_mask.to(self.device)
-
-    #     with torch.no_grad():
-    #         generated = self.generator(damaged.unsqueeze(1), outpaint_mask.unsqueeze(1))
-
-    #     generated_img = generated.detach().cpu().squeeze().numpy() * 255
-    #     original_img = original.squeeze().numpy() * 255
-
-    #     return generated_img, original_img

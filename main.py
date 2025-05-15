@@ -1,9 +1,10 @@
+import torchvision
+import torchvision.transforms.v2
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
 from src.gan.model import GenerativeModel
 from src.gan.tester import ParamGridTester
 from src.gan.train import GANTrainer
-from src.gan.arch import AUGMENTATIONS
 from src.common.utils import Utils
 from src.common.structs import ExecPhase as phases
 
@@ -61,16 +62,17 @@ def main():
     
     # Инициализация модели
     model_gan = GenerativeModel(**config[phases.TRAIN.value], device=DEVICE)
-
+    
+    target_img_size = config.get(phases.TRAIN.value).get("target_image_size")
+    model_transforms = torchvision.transforms.v2.Compose(model_gan.generator.get_train_transforms(target_img_size))
+    
     # Инициализация создателя датасета
-    ds_creator = DatasetCreator(generated_path=AUGMENTED_DATASET_FOLDER_PATH,
-                                original_data_path=MASKS_FOLDER_PATH,
-                                preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
-                                images_extentions=MASKS_FILE_EXTENSIONS,
-                                model_transforms=model_gan.generator.get_model_transforms(config.get(phases.TRAIN.value)
-                                                                                          .get("target_image_size")),
+    ds_creator = DatasetCreator(output_path=AUGMENTED_DATASET_FOLDER_PATH,
+                                original_images_path=MASKS_FOLDER_PATH,
+                                preprocessed_images_path=PREPROCESSED_MASKS_FOLDER_PATH,
+                                images_ext=MASKS_FILE_EXTENSIONS,
+                                model_transforms=model_transforms,
                                 preprocessors=PREPROCESSORS,
-                                augmentations=AUGMENTATIONS,
                                 augs_per_img=args.augs,
                                 device=DEVICE)
 

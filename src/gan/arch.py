@@ -1,6 +1,8 @@
 import random
+from typing import List
 import torch
 import torch.nn as nn
+import torchvision
 import torchvision.transforms.v2 as T
 
 class ConvBlock(nn.Module):
@@ -36,7 +38,7 @@ class SEBlock(nn.Module):
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(channels, channels // reduction),
-            nn.LeakyReLU(inplace=True),
+            nn.ReLU(inplace=True),
             nn.Linear(channels // reduction, channels),
             nn.Sigmoid()
         )
@@ -66,7 +68,7 @@ class UpConvBlock(nn.Module):
         return self.se(x)
 
 class WGanGenerator(nn.Module):
-    def __init__(self, input_channels=2, feature_maps=64):
+    def __init__(self, input_channels=1, feature_maps=64):
         super(WGanGenerator, self).__init__()
 
         self.enc1 = ConvBlock(input_channels, feature_maps, use_batchnorm=False)
@@ -90,10 +92,8 @@ class WGanGenerator(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x, mask):
-        x_in = torch.cat([x, mask], dim=1)
-
-        e1 = self.enc1(x_in)
+    def forward(self, x):
+        e1 = self.enc1(x)
         e2 = self.enc2(e1)
         e3 = self.enc3(e2)
         e4 = self.enc4(e3)
@@ -110,12 +110,29 @@ class WGanGenerator(nn.Module):
         output = self.final(d1)
         return output
     
-    def get_model_transforms(self, target_img_size) -> 'T.Compose':
-        return T.Compose([
+    @staticmethod
+    def get_train_transforms(target_img_size) -> List[T.Transform]:
+        max_crop = 1024
+        return [
+            T.ToImage(),
+            T.Resize((max_crop, max_crop), interpolation=T.InterpolationMode.BILINEAR),
+            OneOf([T.RandomCrop((size, size)) for size in range(640, max_crop, 128)], p=1.0),
+
+            RandomRotate(p=0.8),
+            T.RandomHorizontalFlip(p=0.8),
+            T.RandomVerticalFlip(p=0.8),
+
+            T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
+            T.ToDtype(torch.float32, scale=True),
+        ]
+    
+    @staticmethod
+    def get_input_transforms(target_img_size) -> 'List[T.Transform]':
+        return [
             T.ToImage(),
             T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
             T.ToDtype(torch.float32, scale=True)
-        ])
+        ]
 
 
 class WGanCritic(nn.Module):
@@ -166,17 +183,3 @@ class RandomRotate(torch.nn.Module):
             angle = random.choice(self.angles)
             return T.functional.rotate(x, angle)
         return x
-
-
-AUGMENTATIONS = T.Compose([
-    OneOf([
-        T.RandomCrop((1280, 1280)),
-        T.RandomCrop((1024, 1024)),
-        T.RandomCrop((864, 864)),
-        T.RandomCrop((768, 768)),
-        T.RandomCrop((640, 640)),
-    ], p=1.0),
-    RandomRotate(p=0.8),
-    T.RandomHorizontalFlip(p=0.8),
-    T.RandomVerticalFlip(p=0.8),
-])

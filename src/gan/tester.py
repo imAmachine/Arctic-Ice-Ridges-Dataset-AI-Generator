@@ -13,7 +13,6 @@ from src.common.utils import Utils
 from src.gan.model import GenerativeModel
 from src.gan.train import GANTrainer
 from src.gan.dataset import DatasetCreator
-from src.gan.arch import AUGMENTATIONS
 
 class ParamGridTester:
     def __init__(self, param_grid, output_root=None, seed=42):
@@ -118,13 +117,12 @@ class ParamGridTester:
         )
 
         ds_creator = DatasetCreator(
-            generated_path=AUGMENTED_DATASET_FOLDER_PATH,
-            original_data_path=MASKS_FOLDER_PATH,
-            preprocessed_data_path=PREPROCESSED_MASKS_FOLDER_PATH,
-            images_extentions=MASKS_FILE_EXTENSIONS,
-            model_transforms=model.generator.get_model_transforms(),
+            output_path=AUGMENTED_DATASET_FOLDER_PATH,
+            original_images_path=MASKS_FOLDER_PATH,
+            preprocessed_images_path=PREPROCESSED_MASKS_FOLDER_PATH,
+            images_ext=MASKS_FILE_EXTENSIONS,
+            model_transforms=model.generator.get_input_transforms(),
             preprocessors=PREPROCESSORS,
-            augmentations=AUGMENTATIONS,
             augs_per_img=params.get('augs_per_img', 1),
             device=DEVICE
         )

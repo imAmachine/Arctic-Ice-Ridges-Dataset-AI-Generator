@@ -1,9 +1,6 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 import numpy as np
-from typing import Callable, Dict, List, Type
-
-import torch
+from typing import Dict, List, Type
 
 from src.common.structs import ExecPhase as phases
 
@@ -95,7 +92,7 @@ class IGenerativeModel:
         self.optimization_params = optimization_params
     
     @abstractmethod
-    def switch_phase(self, mode: phases = phases.TRAIN) -> None:
+    def set_phase(self, mode: phases = phases.TRAIN) -> None:
         pass
     
     @abstractmethod

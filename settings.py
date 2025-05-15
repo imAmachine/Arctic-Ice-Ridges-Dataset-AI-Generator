@@ -7,8 +7,7 @@ from src.common.structs import ModelType as models, LossName as losses, MetricsN
 CONFIG = './config.json'
 DEFAULT_TRAIN_CONF = {
     "target_image_size": 256,
-    "g_feature_maps": 64,
-    "d_feature_maps": 64,
+    "model_base_features": 64,
     "n_critic": 5,
     "evaluators_info": {
         models.GENERATOR.value: {

@@ -55,13 +55,21 @@ class GANTrainer:
                 if loader is None:
                     continue
 
-                self.model.switch_phase(phases.TRAIN if phase == phases.TRAIN else phases.EVAL)
+                self.model.set_phase(phases.TRAIN if phase == phases.TRAIN else phases.VALID)
 
                 for i, batch in enumerate(tqdm(loader, desc=f"Epoch {epoch+1} {phase.value.capitalize()}")):
-                    self.model.switch_phase(phase)
-                    batch = [el.to(self.device) for el in batch]
+                    self.model.set_phase(phase)
+                    inp, trg = [el.to(self.device) for el in batch]
                     
-                    _ = self._process_batch(phase=phase, batch=batch, visualize_batch=(i == 0))
+                    if phase == phases.TRAIN:
+                        self.model.train_step(inp, trg)
+                    elif phase == phases.VALID:
+                        self.model.valid_step(inp, trg)
+                    
+                    if i == 0:
+                        with torch.no_grad():
+                            generated = self.model.generator(inp)
+                            self._visualize_batch(inp, trg, generated, phase=phase)
 
             # расчёт и вывод средних лоссов по эпохе
             self.model.g_trainer.get_summary(name=m_type.GENERATOR.value, phase=phases.TRAIN)
@@ -69,34 +77,15 @@ class GANTrainer:
             
             if (epoch + 1) % self.checkpoints_ratio == 0 and self.checkpoints_ratio != 0:
                 self.model.save_checkpoint(self.output_path)
-    
-    def _process_batch(self, phase: phases, batch: tuple, visualize_batch=False):
-        if phase == phases.TRAIN:
-            self.model.train_step(batch)
-        elif phase == phases.VALID:
-            self.model.valid_step(batch)
 
-        with torch.no_grad():
-            generated = self.model.generator(batch[0], batch[2])
-            if visualize_batch:
-                self._visualize_batch(batch, generated, phase=phase)
-
-        return generated
-
-    def _visualize_batch(self, batch: tuple, generated, phase: phases=phases.TRAIN):
-        inputs, targets, masks = batch
+    def _visualize_batch(self, input_data, target_data, generated, phase: phases=phases.TRAIN):
         
         plt.figure(figsize=(20, 12), dpi=300)
 
-        for i in range(min(3, inputs.shape[0])):
+        for i in range(min(3, input_data.shape[0])):
             plt.subplot(3, 4, i*4 + 1)
-            plt.imshow(inputs[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(input_data[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Input {i+1}", fontsize=12, pad=10)
-            plt.axis('off')
-
-            plt.subplot(3, 4, i*4 + 2)
-            plt.imshow(masks[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
-            plt.title(f"Mask_inpaint {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 3)
@@ -105,7 +94,7 @@ class GANTrainer:
             plt.axis('off')
 
             plt.subplot(3, 4, i*4 + 4)
-            plt.imshow(targets[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
+            plt.imshow(target_data[i].cpu().squeeze(), cmap='gray', vmin=0, vmax=1)
             plt.title(f"Target {i+1}", fontsize=12, pad=10)
             plt.axis('off')
 
