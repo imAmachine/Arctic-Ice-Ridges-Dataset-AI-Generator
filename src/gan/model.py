@@ -6,6 +6,7 @@ from src.gan.models_evaluating import Evaluator, EvalProcessor
 from src.gan.custom_evaluators import *
 from src.common.interfaces import IGenerativeModel
 from src.gan.arch import WGanCritic, WGanGenerator
+
 from src.common.structs import ExecPhase as phases, ModelType as models, LossName as losses, MetricsName as metrics, EvaluatorType as eval_type
 
 

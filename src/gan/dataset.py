@@ -86,15 +86,13 @@ class IceRidgeDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_keys) * self.augmentations_per_image
     
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
         img_idx = (idx // self.augmentations_per_image)
         key = self.image_keys[img_idx]
-        orig_meta = self.metadata[key]
+        orig_path = self.metadata[key]['path']
+        orig_img = Utils.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
         
-        orig_img = Utils.cv2_load_image(orig_meta['path'], cv2.IMREAD_GRAYSCALE)
-        batch = self.get_processed_batch(orig_img)
-        
-        return batch
+        return self.get_processed_batch(orig_img)
     
     def process_img(self, img: np.ndarray) -> 'List[np.ndarray]':
         transformed_trg = self.model_transforms(img).numpy()
@@ -109,6 +107,9 @@ class IceRidgeDataset(Dataset):
 
         return inp, trg
     
+    #
+    #   НЕОБХОДИМО ПЕРЕРАБОТАТЬ ЛОГИКУ РАЗДЕЛЕНИЯ ДАТАСЕТА
+    #
     @staticmethod
     def split_dataset_legacy(metadata: Dict[str, Dict], val_ratio: float) -> Dict[str, Optional[Dict[str, Dict]]]:
         """
