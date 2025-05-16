@@ -155,6 +155,14 @@ def main():
         modules = build_modules(train_conf)
         
         gan = GAN(DEVICE, modules, n_critic=5)
+
+        if args.load_weights:
+            checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
+            if os.path.exists(checkpoint_path):
+                print(f"Загрузка весов из {checkpoint_path}")
+                gan.load(checkpoint_path)
+            else:
+                print(f"Файл чекпоинта {checkpoint_path} не найден. Обучение с нуля.")
         
         trainer = Trainer(
             device=DEVICE,

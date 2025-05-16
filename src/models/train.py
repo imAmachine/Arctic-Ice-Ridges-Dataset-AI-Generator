@@ -9,6 +9,9 @@ from src.models.structs import ArchModule, BaseModel, MetricsCollector, Visualiz
 from src.common.enums import ExecPhase, ModelType
 from src.dataset.dataset import DatasetCreator
 
+import os
+from settings import *
+
 # Enable cuDNN autotuner for potential performance boost
 torch.backends.cudnn.benchmark = True
 matplotlib.use('Agg')
@@ -17,7 +20,20 @@ matplotlib.use('Agg')
 class GAN(BaseModel):
     """Wasserstein GAN logic with multiple critic updates per generator update."""
     def __init__(self, device: torch.device, modules: List[ArchModule], n_critic: int = 5):
-        super().__init__(device, modules)
+        checkpoint_map = {
+            ModelType.GENERATOR: {
+                'model': ('trainers', ModelType.GENERATOR, 'module', 'arch'),
+                'optimizer': ('trainers', ModelType.GENERATOR, 'module', 'optimizer'),
+                'scheduler': ('trainers', ModelType.GENERATOR, 'module', 'scheduler'),
+            },
+            ModelType.DISCRIMINATOR: {
+                'model': ('trainers', ModelType.DISCRIMINATOR, 'module', 'arch'),
+                'optimizer': ('trainers', ModelType.DISCRIMINATOR, 'module', 'optimizer'),
+                'scheduler': ('trainers', ModelType.DISCRIMINATOR, 'module', 'scheduler'),
+            }
+        }
+
+        super().__init__(device, modules, checkpoint_map)
         self.n_critic = n_critic
 
     def train_step(self, inp: Tensor, target: Tensor) -> None:
@@ -56,6 +72,7 @@ class Trainer:
         self.metrics = MetricsCollector(self.model.trainers)
         self.visualizer = Visualizer(output_path)
         self.epochs = epochs
+        self.weight_path = output_path
         
         self.train_loader, self.val_loader = dataset.get_dataloaders(
             batch_size, shuffle=True, workers=6, val_ratio=val_ratio
@@ -71,6 +88,8 @@ class Trainer:
                 self._after_epoch(phase, loader)
             
             self.metrics.reset()
+
+            self.model.save(os.path.join(self.weight_path, 'training_checkpoint.pt'))
 
     def _run_epoch(self, phase: ExecPhase, loader: DataLoader) -> None:         
         desc = phase.value.capitalize()
