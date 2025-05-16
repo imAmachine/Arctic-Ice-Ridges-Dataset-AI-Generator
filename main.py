@@ -32,14 +32,44 @@ def init_config():
                        phases.TEST.value: DEFAULT_TEST_CONF}, CONFIG)
         return
     cfg = Utils.from_json(CONFIG)
-    validate_or_reset_section(cfg, phases.TRAIN.value, DEFAULT_TRAIN_CONF)
-    validate_or_reset_section(cfg, phases.TEST.value, DEFAULT_TEST_CONF)
+    for section, defaults in [(phases.TRAIN.value, DEFAULT_TRAIN_CONF),
+                              (phases.TEST.value, DEFAULT_TEST_CONF)]:
+        validate_or_reset_section(cfg, section, defaults)
     Utils.to_json(cfg, CONFIG)
 
 
-def build_modules(config_section: dict) -> List[ArchModule]:
+def create_optimizer(parameters, lr: float=0.0001, betas=(0.0, 0.9)):
+    """Create Adam optimizer with specified parameters."""
+    return torch.optim.Adam(parameters, lr=lr, betas=betas)
+
+
+def create_scheduler(optimizer, mode: str, factor: float=0.5, patience: int=6):
+    """Create ReduceLROnPlateau scheduler."""
+    return torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode=mode,
+        factor=factor,
+        patience=patience
+    )
+
+
+def build_evaluators(discriminator: WGanCritic) -> Dict:
+    """Create dictionary of evaluation metrics and losses."""
+    return {
+        LossName.ADVERSARIAL.value: AdversarialLoss(discriminator),
+        LossName.BCE.value: nn.BCELoss(),
+        LossName.L1.value: nn.L1Loss(),
+        LossName.WASSERSTEIN.value: WassersteinLoss(discriminator),
+        LossName.GP.value: GradientPenalty(discriminator),
+        MetricName.PRECISION.value: sklearn_wrapper(precision_score, DEVICE),
+        MetricName.F1.value: sklearn_wrapper(f1_score, DEVICE),
+        MetricName.IOU.value: sklearn_wrapper(jaccard_score, DEVICE),
+    }
+
+
+def build_gan_modules(config_section: dict) -> List[ArchModule]:
     """Construct ArchModule list for GAN model."""
-    # Architectures
+    # Model initialization
     gen = WGanGenerator(
         input_channels=1,
         feature_maps=config_section['model_base_features']
@@ -48,44 +78,14 @@ def build_modules(config_section: dict) -> List[ArchModule]:
         input_channels=1,
         feature_maps=config_section['model_base_features']
     ).to(DEVICE)
+    
+    g_optimizer = create_optimizer(gen.parameters(), config_section['optimization_params']['lr'], betas=(0.0, 0.9))
+    g_scheduler = create_scheduler(g_optimizer, config_section['optimization_params']['mode'], factor=0.5, patience=6)
 
-    # Optimizer and scheduler
-    g_optimizer = torch.optim.Adam(
-        gen.parameters(),
-        lr=config_section['optimization_params']['lr'],
-        betas=(0.0, 0.9)
-    )
-    
-    g_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        g_optimizer,
-        mode=config_section['optimization_params']['mode'],
-        factor=0.5,
-        patience=6
-    )
-    
-    d_optimizer = torch.optim.Adam(
-        disc.parameters(),
-        lr=config_section['optimization_params']['lr'],
-        betas=(0.0, 0.9)
-    )
-    d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        d_optimizer,
-        mode=config_section['optimization_params']['mode'],
-        factor=0.5,
-        patience=6
-    )
-    
-    # Evaluators
-    evaluators = {
-        LossName.ADVERSARIAL.value: AdversarialLoss(disc),
-        LossName.BCE.value: nn.BCELoss(),
-        LossName.L1.value: nn.L1Loss(),
-        LossName.WASSERSTEIN.value: WassersteinLoss(disc),
-        LossName.GP.value: GradientPenalty(disc),
-        MetricName.PRECISION.value: sklearn_wrapper(precision_score, DEVICE),
-        MetricName.F1.value: sklearn_wrapper(f1_score, DEVICE),
-        MetricName.IOU.value: sklearn_wrapper(jaccard_score, DEVICE),
-    }
+    d_optimizer = create_optimizer(disc.parameters(), config_section['optimization_params']['lr'], betas=(0.0, 0.9))
+    d_scheduler = create_scheduler(d_optimizer, config_section['optimization_params']['mode'], factor=0.5, patience=6)
+
+    evaluators = build_evaluators(disc)
 
     modules: List[ArchModule] = []
     modules.extend([
@@ -110,8 +110,18 @@ def build_modules(config_section: dict) -> List[ArchModule]:
     return modules
 
 
-def main():
-    parser = argparse.ArgumentParser(description='GAN ледовых торосов')
+def load_checkpoint(model: GAN, checkpoint_path: str) -> None:
+    """Load model weights from checkpoint if exists."""
+    if os.path.exists(checkpoint_path):
+        print(f"Загрузка весов из {checkpoint_path}")
+        model.load(checkpoint_path)
+    else:
+        print(f"Файл чекпоинта {checkpoint_path} не найден. Обучение с нуля.")
+
+
+def parse_arguments() -> argparse.Namespace:
+    """Parse and return command line arguments."""
+    parser = argparse.ArgumentParser(description='GAN для сегментации ледовых торосов')
     parser.add_argument('--preprocess', action='store_true')
     parser.add_argument('--train', type=str, default='gan')
     parser.add_argument('--input_path', type=str)
@@ -121,7 +131,11 @@ def main():
     parser.add_argument('--val_rat', type=float, default=0.2)
     parser.add_argument('--load_weights', action='store_true')
     parser.add_argument('--test', action='store_true')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main():
+    args = parse_arguments()
 
     init_config()
     cfg = Utils.from_json(CONFIG)
@@ -152,21 +166,17 @@ def main():
     # Training
     if args.train:
         print(f"Обучение модели {args.train} на {args.epochs} эпохах...")
-        modules = build_modules(train_conf)
-        
-        gan = GAN(DEVICE, modules, n_critic=5)
+        if args.train=='gan':
+            modules = build_gan_modules(train_conf)
+            model = GAN(DEVICE, modules, n_critic=5)
 
         if args.load_weights:
             checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
-            if os.path.exists(checkpoint_path):
-                print(f"Загрузка весов из {checkpoint_path}")
-                gan.load(checkpoint_path)
-            else:
-                print(f"Файл чекпоинта {checkpoint_path} не найден. Обучение с нуля.")
+            load_checkpoint(model, checkpoint_path)
         
         trainer = Trainer(
             device=DEVICE,
-            model=gan,
+            model=model,
             dataset=ds,
             output_path=WEIGHTS_PATH,
             epochs=args.epochs,

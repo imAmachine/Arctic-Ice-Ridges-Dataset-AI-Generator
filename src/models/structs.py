@@ -134,7 +134,7 @@ class CheckpointManager:
         print(f"Checkpoint saved to {path}")
 
     def load(self, path: str):
-        checkpoint = torch.load(path, map_location=self.model.device)
+        checkpoint = torch.load(path, map_location=self.model.device, weights_only=False)
         for role, components in self.checkpoint_map.items():
             for name, attr_path in components.items():
                 obj = self._traverse_path(attr_path)
