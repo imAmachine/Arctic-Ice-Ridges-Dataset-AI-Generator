@@ -190,7 +190,7 @@ class DatasetCreator:
             
             return loader
     
-    def create_train_dataloaders(self, batch_size, shuffle, workers, val_ratio=0.2) -> Dict[phases, Dict]:
+    def get_dataloaders(self, batch_size, shuffle, workers, val_ratio=0.2) -> Dict[phases, Dict]:
         if not os.path.exists(self.preprocessed_metadata_json_path):
             self.preprocess_data()
         
@@ -203,4 +203,4 @@ class DatasetCreator:
         train_loader = self.create_loader(train_metadata, batch_size, shuffle, workers)
         valid_loader = self.create_loader(valid_metadata, batch_size, shuffle, workers)
         
-        return {phases.TRAIN: train_loader, phases.VALID: valid_loader}
+        return train_loader, valid_loader

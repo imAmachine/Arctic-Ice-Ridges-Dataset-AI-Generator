@@ -10,8 +10,8 @@ from settings import *
 from typing import List, Dict
 
 from src.common.utils import Utils
-from src.gan.model import GenerativeModel
-from src.gan.train import GANTrainer
+from src.gan.model import GANModel
+from src.gan.train import ModelTrainer
 from src.gan.dataset import DatasetCreator
 
 class ParamGridTester:
@@ -19,7 +19,7 @@ class ParamGridTester:
         self.param_grid = param_grid
         self.seed = seed
         self.output_path = None
-        self.trainer = GANTrainer
+        self.trainer = ModelTrainer
         self.combinations = self._generate_combinations()
         self.output_root = output_root or os.path.join(WEIGHTS_PATH, 'test')
         self.results_summary_path = os.path.join(self.output_root, 'results.csv')
@@ -41,13 +41,13 @@ class ParamGridTester:
         Utils.to_json(data=params, path=os.path.join(self.output_path, "config.json"))
         
         self._append_summary(params, self.trainer, folder_name)
-        self._save_test(self.trainer.model, self.trainer.loaders)
+        self._save_test(self.trainer.generative_model, self.trainer.loaders)
     
-    def _save_test(self, gen_model: 'GenerativeModel', loaders: Dict) -> None:
+    def _save_test(self, gen_model: 'GANModel', loaders: Dict) -> None:
         Utils.to_json(data=self.trainer.metrics_history, path=os.path.join(self.output_path, 'metrics_history.json'))
         Utils.to_json({
-            'generator': gen_model.g_trainer.loss_history,
-            'critic': gen_model.d_trainer.loss_history
+            'generator': gen_model.gen_model.loss_history,
+            'critic': gen_model.discr_model.loss_history
         }, os.path.join(self.output_path, 'losses_history.json'))
         
         for phase, loader in loaders.items():
@@ -110,8 +110,8 @@ class ParamGridTester:
         val = re.sub(r'[^a-zA-Z0-9\-_]', '', val)
         return val
 
-    def _get_new_trainer(self, params: Dict) -> 'GANTrainer':
-        model = GenerativeModel(
+    def _get_new_trainer(self, params: Dict) -> 'ModelTrainer':
+        model = GANModel(
             **params.get('GenerativeModel'),
             device=DEVICE
         )
@@ -127,14 +127,14 @@ class ParamGridTester:
             device=DEVICE
         )
 
-        return GANTrainer(
-            model=model,
+        return ModelTrainer(
+            generative_model=model,
             **params.get('GANTrainer'),
             dataset_processor=ds_creator,
             output_path=self.output_path,
             device=DEVICE,
             load_weights=False,
-            checkpoints_ratio=5
+            checkpoints_freq=5
         )
     
     def _create_output_path(self, params) -> tuple[str, str]:
@@ -143,7 +143,7 @@ class ParamGridTester:
         os.makedirs(self.output_path, exist_ok=True)
         return folder_name
     
-    def _append_summary(self, params, trainer: 'GANTrainer', folder_name: str):
+    def _append_summary(self, params, trainer: 'ModelTrainer', folder_name: str):
         summary_row = {'folder': folder_name, **params}
         
         val_metrics_res = {name: metric[-1] for name, metric in trainer.metrics_history['valid'].items() if len(metric) > 0}

@@ -160,7 +160,7 @@ class RotateMask(IProcessor):
         return rotated
 
 
-class TensorConverterProcessor(IProcessor):
+class TensorConverter(IProcessor):
     """Процессор для преобразования numpy.ndarray в torch.Tensor"""
     
     def __init__(self, processor_name: str = None, device: str = "cpu"):

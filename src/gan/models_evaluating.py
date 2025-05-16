@@ -4,7 +4,6 @@ from typing import Callable, Dict, List
 import torch
 from src.common.structs import ExecPhase as phases, LossName as losses, EvaluatorType as eval_type
 
-
 @dataclass
 class Evaluator:
     callable_fn: Callable
@@ -67,4 +66,14 @@ class EvalProcessor:
             result[eval_type_key] = {name: torch.stack(vals).mean().item() for name, vals in metrics.items()}
 
         return result
+    
+    def print_eval_summary(self, name: str, phase: phases):
+        summary = self.compute_epoch_summary(phase=phase)
+
+        for group, metrics in summary.items():
+            print('\n')
+            if len(metrics.items()) > 0:
+                print(f"[{name}] {group.upper()}:")
+                for k, v in metrics.items():
+                    print(f"\t{k}: {v:.4f}")
 

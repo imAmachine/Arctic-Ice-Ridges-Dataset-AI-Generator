@@ -28,7 +28,7 @@ class LossName(Enum):
     GP = "Gradient Penalty"
 
 
-class MetricsName(Enum):
+class MetricName(Enum):
     PRECISION = "Precision"
     F1 = "F1"
     IOU = "IoU"

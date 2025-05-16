@@ -1,145 +1,85 @@
-from typing import Dict
+from typing import Dict, List
 import torch
-import torch.nn as nn
 
 from src.gan.models_evaluating import Evaluator, EvalProcessor
 from src.gan.custom_evaluators import *
 from src.common.interfaces import IGenerativeModel
-from src.gan.arch import WGanCritic, WGanGenerator
 
-from src.common.structs import ExecPhase as phases, ModelType as models, LossName as losses, MetricsName as metrics, EvaluatorType as eval_type
+from src.common.structs import *
 
 
-class ModelTrainer:
-    def __init__(self, model, optimizer, scheduler, evaluate_processor: EvalProcessor):
-        self.model = model
-        self.optimizer = optimizer
-        self.scheduler = scheduler
-        self.evaluate_processor: EvalProcessor = evaluate_processor
+@dataclass
+class ArchModule:
+    model_type: ModelType
+    arch: 'torch.nn.Module'
+    optimizer: 'torch.optim.Optimizer'
+    scheduler: 'torch.optim.lr_scheduler.LRScheduler'
+    eval_funcs: Dict[str, Callable]
+    eval_settings: Dict
+
+
+class ModuleTrainManager:
+    def __init__(self,
+                 device: torch.device,
+                 module: 'ArchModule'):
+        self.module = module
+        self.evaluate_processor = EvalProcessor(device=device, evaluators=self.__build_evaluators())
     
-    def process_losses(self, generated_sample, real_sample, history_key: phases) -> 'torch.Tensor':
+    def __build_evaluators(self) -> List[Evaluator]:
+        return [Evaluator(callable_fn=self.module.eval_funcs[k], name=k, **v) for k, v in self.module.eval_settings.items()]
+    
+    def _process_losses(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor', history_key: ExecPhase) -> 'torch.Tensor':
         self.evaluate_processor.process(generated_sample=generated_sample,
                                         real_sample=real_sample,
                                         exec_phase=history_key)
         
-        processed_losses = self.evaluate_processor.evaluators_history[history_key][-1][eval_type.LOSS.value].values()
+        processed_losses = self.evaluate_processor.evaluators_history[history_key][-1][EvaluatorType.LOSS.value].values()
         
         return sum(processed_losses)
     
-    def optimization_step(self, real_sample, generated_sample) -> float:
-        self.model.train()
-        self.optimizer.zero_grad()
+    def optimization_step(self, real_sample: 'torch.Tensor', generated_sample: 'torch.Tensor') -> float:
+        self.module.optimizer.zero_grad()
         
-        # подсчёт эвалуаторов и градиентный шаг
-        loss_tensor = self.process_losses(generated_sample, real_sample, history_key=phases.TRAIN)
+        loss_tensor = self._process_losses(generated_sample, real_sample, history_key=ExecPhase.TRAIN)
         loss_tensor.backward()
         
-        self.optimizer.step()
+        self.module.optimizer.step()
         
         return loss_tensor.item()
     
-    def evaluation_step(self, real_sample, generated_sample) -> float:
-        self.model.eval()
-        
-        loss_tensor = self.process_losses(generated_sample=generated_sample,
+    def valid_step(self, real_sample: 'torch.Tensor', generated_sample: 'torch.Tensor') -> float:
+        loss_tensor = self._process_losses(generated_sample=generated_sample,
                                           real_sample=real_sample,
-                                          history_key=phases.VALID)
+                                          history_key=ExecPhase.VALID)
         
         return loss_tensor.item()
-    
-    def get_summary(self, name, phase: phases):
-        summary = self.evaluate_processor.compute_epoch_summary(phase=phase)
 
-        for group, metrics in summary.items():
-            print('\n')
-            if len(metrics.items()) > 0:
-                print(f"[{name}] {group.upper()}:")
-                for k, v in metrics.items():
-                    print(f"\t{k}: {v:.4f}")
 
-        self.evaluate_processor.reset_history()
-            
-
-class GenerativeModel(IGenerativeModel):
-    def __init__(self, device: str, 
-                 evaluators_info: Dict,
-                 optimization_params: Dict,
-                 target_image_size,
-                 model_base_features,
-                 n_critic):
-        super().__init__(target_image_size, device, optimization_params)
-        self.generator = WGanGenerator(input_channels=1, feature_maps=model_base_features).to(self.device)
-        self.discriminator = WGanCritic(input_channels=1, feature_maps=model_base_features).to(self.device)
-        self.current_iteration = 0
-
+class GANModel(IGenerativeModel):
+    def __init__(self, device: 'torch.device', modules: List[ArchModule], output_path: str, n_critic):
+        super().__init__(device, modules, output_path)
         self.n_critic = n_critic
-        g_eval_info, d_eval_info = evaluators_info.get(models.GENERATOR.value), evaluators_info.get(models.DISCRIMINATOR.value)
         
-        self.evaluation_funcs = {
-            losses.ADVERSARIAL.value: AdversarialLoss(self.discriminator),
-            losses.BCE.value: nn.BCELoss(),
-            losses.L1.value: nn.L1Loss(),
-            losses.WASSERSTEIN.value: WassersteinLoss(self.discriminator),
-            losses.GP.value: GradientPenalty(self.discriminator),
-            
-            metrics.PRECISION.value: sklearn_wrapper(precision_score, device),
-            metrics.F1.value: sklearn_wrapper(f1_score, device),
-            metrics.IOU.value: sklearn_wrapper(jaccard_score, device),
-        }
-
-        self.g_trainer = self.init_trainer(self.generator, g_eval_info)
-        self.d_trainer = self.init_trainer(self.discriminator, d_eval_info)
-    
-    def build_evaluators(self, funcs, evaluators_info):
-        return [Evaluator(callable_fn=funcs[k], name=k, **v) for k, v in evaluators_info.items()]
-    
-    def init_trainer(self, model, eval_info: Dict):
-        optimizers = [torch.optim.RMSprop(model.parameters(), lr=self.optimization_params.get('lr')),
-                      torch.optim.Adam(model.parameters(), lr=self.optimization_params.get('lr'), betas=(0.0, 0.9))]
+    def _training_pipeline(self, input_data, target_data):
+        gen, discr = self.t_managers[ModelType.GENERATOR], self.t_managers[ModelType.DISCRIMINATOR]
         
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizers[1], mode=self.optimization_params.get('mode'), factor=0.5, patience=6)
-        
-        model_evaluators = self.build_evaluators(self.evaluation_funcs, eval_info)
-        
-        trainer = ModelTrainer(
-            model=model,
-            optimizer=optimizers[1],
-            scheduler=scheduler,
-            evaluate_processor=EvalProcessor(device=self.device, evaluators=model_evaluators)
-        )
-        
-        return trainer
-
-    def set_phase(self, phase: phases=phases.TRAIN) -> None:
-        if phase == phases.TRAIN:
-            self.generator.train()
-            self.discriminator.train()
-        else:
-            self.generator.eval()
-            self.discriminator.eval()
-    
-    def __train_critic_step(self, input_data, target_data):
+        # тренировка дискриминатора
         for _ in range(self.n_critic):
             with torch.no_grad():
-                generated = self.generator(input_data)
-            self.d_trainer.optimization_step(target_data, generated)
-    
-    def __train_generator_step(self, input_data, target_data):
-        generated = self.generator(input_data)
-        self.g_trainer.optimization_step(target_data, generated)
-    
-    def train_step(self, input_data, target_data) -> None:
-        self.current_iteration += 1
+                generated = gen.module.arch(input_data)
+            discr.optimization_step(target_data, generated)
         
-        # цикл обучения критика
-        self.__train_critic_step(input_data, target_data)
-        
-        # шаг обучения генератора
-        self.__train_generator_step(input_data, target_data)
+        # тренировка генератора
+        generated = gen.module.arch(input_data)
+        gen.optimization_step(target_data, generated)
 
-    def valid_step(self, input_data, target_data) -> None:
+    def _validation_pipeline(self, input_data, target_data):
         with torch.no_grad():
-            generated = self.g_trainer.model(input_data)
-            
-            self.g_trainer.evaluation_step(target_data, generated)
-            self.d_trainer.evaluation_step(target_data, generated)
+            generated = self.t_managers[ModelType.GENERATOR].module.arch(input_data)
+            for _, t_manager in self.t_managers.items():
+                t_manager.valid_step(target_data, generated)
+
+    def _evaluation_pipeline(self, input_data, target_data):
+        with torch.no_grad():
+            generated = self.t_managers[ModelType.GENERATOR].module.arch(input_data)
+            self.save_batch_plot(input_data, target_data, generated)

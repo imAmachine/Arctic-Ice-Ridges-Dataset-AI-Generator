@@ -1,17 +1,15 @@
+from typing import List, Literal
 import torchvision
-import torchvision.transforms.v2
-from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
-from src.gan.dataset import DatasetCreator, InferenceMaskingProcessor
-from src.gan.model import GenerativeModel
-from src.gan.tester import ParamGridTester
-from src.gan.train import GANTrainer
+import torchvision.transforms.v2 as tf2
+from src.gan.dataset import DatasetCreator
+from src.gan.custom_evaluators import *
+from src.gan.arch import WGanCritic, WGanGenerator
+from src.gan.model import ArchModule, GANModel
+from src.gan.train import ModelTrainer
 from src.common.utils import Utils
 from src.common.structs import ExecPhase as phases
 
 import argparse
-import tkinter as tk
-
-from gui.gui import ImageGenerationApp
 from settings import *
 
 def validate_or_reset_config_section(config: dict, section_name: str, default_conf: dict) -> None:
@@ -42,15 +40,13 @@ def init_config():
 def main():
     parser = argparse.ArgumentParser(description='GAN модель для генерации ледовых торосов')
     parser.add_argument('--preprocess', action='store_true', help='Препроцессинг исходных данных')
-    parser.add_argument('--train', action='store_true', help='Обучение модели')
-    # parser.add_argument('--infer', action='store_true', help='Инференс на одном изображении')
+    parser.add_argument('--train', type=str, default='gan', help='Обучение выбранной модели')
     parser.add_argument('--input_path', type=str, help='Путь к изображению для инференса')
     parser.add_argument('--epochs', type=int, default=1000, help='Количество эпох обучения')
     parser.add_argument('--augs', type=int, default=1, help='Количество аугментированных сэмплов на снимок, определяет итоговый размер датасета')
     parser.add_argument('--batch_size', type=int, default=3, help='Размер батча')
     parser.add_argument('--val_rat', type=float, default=0.2, help='Размер валидационной выборки в процентах')
     parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
-    # parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
     parser.add_argument('--test', action='store_true', help='Запуск тестов параметров')
 
     args = parser.parse_args()
@@ -59,22 +55,19 @@ def main():
 
     init_config()
     config = dict(Utils.from_json(CONFIG))
-    
-    # Инициализация модели
-    model_gan = GenerativeModel(**config[phases.TRAIN.value], device=DEVICE)
-    
-    target_img_size = config.get(phases.TRAIN.value).get("target_image_size")
-    model_transforms = torchvision.transforms.v2.Compose(model_gan.generator.get_train_transforms(target_img_size))
+    model_transforms = tf2.Compose(WGanGenerator.get_train_transforms(config[phases.TRAIN.value][args.train].get("target_image_size")))
     
     # Инициализация создателя датасета
-    ds_creator = DatasetCreator(output_path=AUGMENTED_DATASET_FOLDER_PATH,
-                                original_images_path=MASKS_FOLDER_PATH,
-                                preprocessed_images_path=PREPROCESSED_MASKS_FOLDER_PATH,
-                                images_ext=MASKS_FILE_EXTENSIONS,
-                                model_transforms=model_transforms,
-                                preprocessors=PREPROCESSORS,
-                                augs_per_img=args.augs,
-                                device=DEVICE)
+    ds_creator = DatasetCreator(
+        device=DEVICE,
+        output_path=AUGMENTED_DATASET_FOLDER_PATH,
+        original_images_path=MASKS_FOLDER_PATH,
+        preprocessed_images_path=PREPROCESSED_MASKS_FOLDER_PATH,
+        images_ext=MASKS_FILE_EXTENSIONS,
+        model_transforms=model_transforms,
+        preprocessors=PREPROCESSORS,
+        augs_per_img=args.augs,
+    )
 
     # Препроцессинг данных
     if args.preprocess or run_all:
@@ -83,52 +76,68 @@ def main():
 
     # Обучение модели
     if args.train or run_all:
+        model = None
+        config = config[phases.TRAIN.value][args.train]
+        
+        def get_module(model_type, arch, optimizer, scheduler, evaluators, evaluators_config):
+            return ArchModule(
+                model_type, 
+                arch,
+                optimizer,
+                scheduler,
+                evaluators,
+                evaluators_config
+            )
+        
+        if args.train == 'gan':            
+            arch_list = {
+                ModelType.GENERATOR: WGanGenerator(input_channels=1, feature_maps=config.get('model_base_features')).to(DEVICE),
+                ModelType.DISCRIMINATOR: WGanCritic(input_channels=1, feature_maps=config.get('model_base_features')).to(DEVICE)
+            }
+            
+            optimizer = torch.optim.Adam(arch_list[ModelType.GENERATOR].parameters(), lr=config.get('optimization_params').get('lr'), betas=(0.0, 0.9))
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=config.get('optimization_params').get('mode'), factor=0.5, patience=6)
+            
+            evaluators = {
+                LossName.ADVERSARIAL.value: AdversarialLoss(arch_list[ModelType.DISCRIMINATOR]),
+                LossName.BCE.value: nn.BCELoss(),
+                LossName.L1.value: nn.L1Loss(),
+                LossName.WASSERSTEIN.value: WassersteinLoss(arch_list[ModelType.DISCRIMINATOR]),
+                LossName.GP.value: GradientPenalty(arch_list[ModelType.DISCRIMINATOR]),
+                MetricName.PRECISION.value: sklearn_wrapper(precision_score, DEVICE),
+                MetricName.F1.value: sklearn_wrapper(f1_score, DEVICE),
+                MetricName.IOU.value: sklearn_wrapper(jaccard_score, DEVICE),
+            }
+            
+            modules: List[ArchModule] = []
+            
+            for t, m in arch_list.items():
+                evaluators_config = config['evaluators_info'][t.value]
+                modules.append(get_module(
+                    t,
+                    m,
+                    optimizer,
+                    scheduler,
+                    evaluators,
+                    evaluators_config
+                ))
+            
+            
+            model = GANModel(device=DEVICE, modules=modules, output_path=WEIGHTS_PATH, n_critic=5)
+            
         print(f"Запуск обучения модели на {args.epochs} эпох...")
-        trainer = GANTrainer(model=model_gan, 
-                             dataset_processor=ds_creator,
-                             output_path=WEIGHTS_PATH,
-                             epochs=args.epochs,
-                             device=DEVICE,
-                             batch_size=args.batch_size,
-                             load_weights=args.load_weights,
-                             val_ratio=args.val_rat,
-                             checkpoints_ratio=50)
-        
+        trainer = ModelTrainer(
+            device=DEVICE,
+            generative_model=model,
+            dataset_processor=ds_creator,
+            output_path=WEIGHTS_PATH,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            load_weights=args.load_weights,
+            validation_ratio=args.val_rat,
+            checkpoints_freq=50
+        )
         trainer.train()
-
-    # # Инференс
-    # if args.infer:
-    #     if not args.input_path:
-    #         print("Ошибка: для инференса необходимо указать --input_path путь к изображению.")
-    #         return
-    #     img = Utils.cv2_load_image(args.input_path, cv2.IMREAD_GRAYSCALE)
-    #     preprocessor = IceRidgeDatasetPreprocessor(PREPROCESSORS)
-    #     preprocessed_img = preprocessor.process_image(img)
-        
-    #     processor = InferenceMaskingProcessor(outpaint_ratio=0.2)
-    #     generated, _ = model_gan.infer_generate(preprocessed_img=preprocessed_img, 
-    #                                                    checkpoint_path=WEIGHTS_PATH, 
-    #                                                    processor=processor)
-
-    #     output_path = './data/inference/output.png'
-    #     cv2.imwrite(output_path, generated)
-    #     print(f"Генерация завершена. Результат сохранён в {output_path}")
-
-    # if args.gui:
-    #     root = tk.Tk()
-    #     _ = ImageGenerationApp(root, WEIGHTS_PATH, model_gan, args)
-    #     root.mainloop()
-    #     return
-    
-    if args.test:
-        grid_params = config.get(phases.TEST.value)
-        if grid_params:
-            print('запуск тестирования')
-            tester = ParamGridTester(grid_params)
-            tester.run_grid_tests()
-        else:
-            print('проблема чтения параметров тестирования')
-        return
         
 
 if __name__ == "__main__":
