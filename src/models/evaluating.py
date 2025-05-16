@@ -7,6 +7,7 @@ from src.common.enums import ExecPhase, EvaluatorType
 
 @dataclass
 class Evaluator:
+    """Датакласс для метрики или лосса и нужной логикой """
     callable_fn: Callable
     name: str
     type: str
@@ -21,6 +22,7 @@ class Evaluator:
 
 @dataclass
 class EvalProcessor:
+    """Нужен для подсчёта метрик и лоссов внутри ModuleTrainer"""
     device: torch.device
     evaluators: List[Evaluator] = field(default_factory=list)
     evaluators_history: Dict[ExecPhase, List] = field(default_factory=lambda: {

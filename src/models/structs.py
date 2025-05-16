@@ -1,8 +1,8 @@
 import os
 
 from torch import Tensor
-from src.models.models_evaluating import Evaluator, EvalProcessor
-from src.models.custom_evaluators import *
+from src.models.evaluating import EvalProcessor, Evaluator
+from src.models.gan.gan_evaluators import *
 from src.common.enums import *
 from typing import Dict, List
 from matplotlib import pyplot as plt
@@ -21,6 +21,7 @@ class ArchModule:
 
 
 class ModuleTrainer:
+    """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
     def __init__(self,
                  device: torch.device,
                  module: 'ArchModule'):
@@ -34,26 +35,21 @@ class ModuleTrainer:
         self.evaluate_processor.process(generated_sample=generated_sample,
                                         real_sample=real_sample,
                                         exec_phase=history_key)
-        
         processed_losses = self.evaluate_processor.evaluators_history[history_key][-1][EvaluatorType.LOSS.value].values()
         
         return torch.stack(list(processed_losses)).sum()
     
     def optimization_step(self, real_sample: 'torch.Tensor', generated_sample: 'torch.Tensor') -> float:
         self.module.optimizer.zero_grad()
-        
         loss_tensor = self._process_losses(generated_sample, real_sample, history_key=ExecPhase.TRAIN)
         loss_tensor.backward()
-        
         self.module.optimizer.step()
-        
         return loss_tensor.item()
     
     def valid_step(self, real_sample: 'torch.Tensor', generated_sample: 'torch.Tensor') -> float:
         loss_tensor = self._process_losses(generated_sample=generated_sample,
                                           real_sample=real_sample,
                                           history_key=ExecPhase.VALID)
-        
         return loss_tensor.item()
 
 
@@ -165,3 +161,4 @@ class BaseModel(ABC):
 
     def __call__(self, inp: Tensor) -> Tensor:
         return self.trainers[ModelType.GENERATOR].module.arch(inp)
+    

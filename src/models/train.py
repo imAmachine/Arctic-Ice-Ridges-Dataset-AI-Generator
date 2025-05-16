@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import List
 import torch
 from torch import Tensor
 from torch.utils.data import DataLoader

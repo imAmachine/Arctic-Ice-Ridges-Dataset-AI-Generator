@@ -12,6 +12,8 @@ class ExecPhase(Enum):
 class ModelType(Enum):
     GENERATOR = "Generator"
     DISCRIMINATOR = "Discriminator"
+    GAN = "gan"
+    DIFFUSION = "diffusion"
 
 
 class EvaluatorType(Enum):

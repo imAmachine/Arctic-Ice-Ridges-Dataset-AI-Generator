@@ -1,7 +1,7 @@
 import os
 from torch import cuda
 
-from src.dataset.preprocessing.processors import *
+from src.preprocessing.processors import *
 from src.common.enums import *
 
 # путь к файлам с конфигарциями
@@ -60,16 +60,17 @@ DEFAULT_TRAIN_CONF = {
             "mode": "max",
             "lr": 0.0005
         },
-        "masking_params": {
-            "mask_padding": 0.15,
-            "num_holes": 1,
-            "min_hole_size": 30,
-            "max_hole_size": 50
+        "mask_params": {
+            "padding": 0.15,
+            "processors": {
+                "holes": {
+                    "count": 1,
+                    "min_size": 30,
+                    "max_size": 50
+                }
+            }
         }
     },
-    "dif": {
-        
-    }
 }
 
 DEFAULT_TEST_CONF = {

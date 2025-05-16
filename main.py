@@ -5,15 +5,18 @@ from typing import List
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2 as tf2
-from src.models.train import GAN, Trainer
-from src.models.gan_arch import WGanCritic, WGanGenerator
-from src.models.structs import ArchModule
-from src.models.custom_evaluators import *
 from settings import *
 
+from src.dataset.structs import ProcessingStrategies
+from src.dataset.mask_strats import RandomHoleStrategy
+from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
+from src.models.gan.gan_evaluators import *
+from src.models.train import GAN, Trainer
+from src.models.gan.gan_arch import WGanCritic, WGanGenerator
+from src.models.structs import ArchModule
 from src.common.utils import Utils
 from src.common.enums import ExecPhase as phases, ModelType
-from src.dataset.dataset import DatasetCreator
+from src.dataset.dataset import DatasetCreator, DatasetMaskingProcessor
 
 
 def validate_or_reset_section(config: dict, section: str, defaults: dict) -> None:
@@ -141,44 +144,51 @@ def main():
     cfg = Utils.from_json(CONFIG)
     train_conf = cfg[phases.TRAIN.value][args.train]
 
-    # Transforms
-    transforms = tf2.Compose(
-        WGanGenerator.get_train_transforms(
-            train_conf['target_image_size']
-        )
+    dataset_preprocessor = IceRidgeDatasetPreprocessor(
+        MASKS_FOLDER_PATH, 
+        PREPROCESSED_MASKS_FOLDER_PATH, 
+        MASKS_FILE_EXTENSIONS, 
+        PREPROCESSORS
     )
-
-    # Dataset
-    ds = DatasetCreator(
-        device=DEVICE,
-        output_path=AUGMENTED_DATASET_FOLDER_PATH,
-        original_images_path=MASKS_FOLDER_PATH,
-        preprocessed_images_path=PREPROCESSED_MASKS_FOLDER_PATH,
-        images_ext=MASKS_FILE_EXTENSIONS,
-        model_transforms=transforms,
-        preprocessors=PREPROCESSORS,
-        masking_prm=train_conf['masking_params'],
-        augs_per_img=args.augs
-    )
+    
     if args.preprocess:
         print('Препроцессинг данных...')
-        ds.preprocess_data()
+        dataset_preprocessor.process_folder()
 
     # Training
     if args.train:
+        modules = None
+        model = None
+        masking_processor = None
+        transforms = None
+        
         print(f"Обучение модели {args.train} на {args.epochs} эпохах...")
         if args.train=='gan':
             modules = build_gan_modules(train_conf)
             model = GAN(DEVICE, modules, n_critic=5)
+            processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
+            
+            masking_processor = DatasetMaskingProcessor(
+                mask_params=train_conf['mask_params'],
+                processing_strats=processing_strats
+            )
+            transforms = tf2.Compose(WGanGenerator.get_train_transforms(train_conf['target_image_size']))
 
         if args.load_weights:
             checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
             load_checkpoint(model, checkpoint_path)
         
+        ds_creator = DatasetCreator(
+            input_preprocessor=dataset_preprocessor,
+            masking_processor=masking_processor,
+            model_transforms=transforms,
+            augs_per_img=args.augs
+        )
+        
         trainer = Trainer(
             device=DEVICE,
             model=model,
-            dataset=ds,
+            dataset=ds_creator,
             output_path=WEIGHTS_PATH,
             epochs=args.epochs,
             batch_size=args.batch_size,
