@@ -3,7 +3,6 @@ from typing import Callable
 from torch.autograd import grad
 from sklearn.metrics import f1_score, jaccard_score, precision_score
 from src.common.analyze_tools import FractalAnalyzerGPU
-import torch.nn as nn
 import torch
 
 def fractal_metric(generated: torch.Tensor, target: torch.Tensor) -> float:

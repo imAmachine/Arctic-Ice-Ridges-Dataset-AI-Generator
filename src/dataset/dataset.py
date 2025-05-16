@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Optional, Tuple
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
+from dataclasses import dataclass
 import torchvision
 import cv2
 
@@ -12,25 +13,46 @@ from src.common.enums import ExecPhase as phases
 from src.dataset.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.common.utils import Utils
 
-class MaskingProcessor:
-    def __init__(self, mask_padding: float = 0.15):
-        self.shift_percent = mask_padding
+@dataclass
+class MaskRegion:
+    mask: torch.Tensor
+    top: int
+    left: int
+    bh: int
+    bw: int
 
-    def create_border_mask(self, height: int, width: int, device, dtype) -> torch.Tensor:
-        bh = int(height * (1 - self.shift_percent))
-        bw = int(width  * (1 - self.shift_percent))
+class MaskingProcessor:
+    def __init__(self, masking_prm: Dict):
+        self.masking_prm = masking_prm
+
+    def create_border_mask(self, height: int, width: int, device, dtype) -> MaskRegion:
+        bh = int(height * (1 - self.masking_prm['mask_padding']))
+        bw = int(width  * (1 - self.masking_prm['mask_padding']))
         top  = (height - bh) // 2
         left = (width  - bw) // 2
 
         mask = np.ones((height, width), device=device, dtype=dtype)
         mask[top:top + bh, left:left + bw] = 0.0
-        return mask
+
+        return MaskRegion(mask, top, left, bh, bw)
+    
+    def create_random_hole(self, region: MaskRegion) -> None:
+        for _ in range(self.masking_prm['num_holes']):
+            hole_w = np.random.randint(self.masking_prm['min_hole_size'], self.masking_prm['max_hole_size'] + 1)
+            hole_h = np.random.randint(self.masking_prm['min_hole_size'], self.masking_prm['max_hole_size'] + 1)
+            
+            y = random.randint(region.top, region.top + region.bh - hole_h - 1)
+            x = random.randint(region.left, region.left + region.bw - hole_w - 1)
+
+            region.mask[y:y+hole_h, x:x+hole_w] = 1.0
 
     def process(self, image: np.ndarray) -> torch.Tensor:
         damaged = image.copy()
         _, h, w = damaged.shape
-        mask = self.create_border_mask(h, w, device=image.device, dtype=image.dtype)
-        damaged = damaged * (1 - mask)
+        region = self.create_border_mask(h, w, device=image.device, dtype=image.dtype)
+        if self.masking_prm['num_holes'] > 0:
+            self.create_random_hole(region)
+        damaged = damaged * (1 - region.mask)
 
         return damaged
 
@@ -145,10 +167,12 @@ class DatasetCreator:
                  images_ext: List[str], 
                  model_transforms: 'torchvision.transforms.Compose', 
                  preprocessors: List,
-                 augs_per_img: int = 1):
+                 masking_prm: dict,
+                 augs_per_img: int = 1, 
+                 ):
         # Инициализация
         self.preprocessor = IceRidgeDatasetPreprocessor(preprocessors)
-        self.dataset_processor = MaskingProcessor(mask_padding=0.2) # Процессор для обработки тренировочных изображений
+        self.dataset_processor = MaskingProcessor(masking_prm) # Процессор для обработки тренировочных изображений
         self.model_transforms = model_transforms # трансформации необходимые при передаче батча в модель
         self.augs_per_img = augs_per_img # количество аугментаций на снимок
         self.device = device

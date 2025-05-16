@@ -158,11 +158,9 @@ class BaseModel(ABC):
         pass
 
     def save(self, path: str) -> None:
-        """Делегируем сохранение менеджеру чекпоинтов"""
         self.checkpoint_manager.save(path)
 
     def load(self, path: str) -> None:
-        """Делегируем загрузку менеджеру чекпоинтов"""
         self.checkpoint_manager.load(path)
 
     def __call__(self, inp: Tensor) -> Tensor:

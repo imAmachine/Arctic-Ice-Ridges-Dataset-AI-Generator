@@ -60,6 +60,12 @@ DEFAULT_TRAIN_CONF = {
             "mode": "max",
             "lr": 0.0005
         },
+        "masking_params": {
+            "mask_padding": 0.15,
+            "num_holes": 1,
+            "min_hole_size": 30,
+            "max_hole_size": 50
+        }
     },
     "dif": {
         

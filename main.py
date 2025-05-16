@@ -157,6 +157,7 @@ def main():
         images_ext=MASKS_FILE_EXTENSIONS,
         model_transforms=transforms,
         preprocessors=PREPROCESSORS,
+        masking_prm=train_conf['masking_params'],
         augs_per_img=args.augs
     )
     if args.preprocess:
