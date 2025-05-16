@@ -126,7 +126,7 @@ def parse_arguments() -> argparse.Namespace:
     """Parse and return command line arguments."""
     parser = argparse.ArgumentParser(description='GAN для сегментации ледовых торосов')
     parser.add_argument('--preprocess', action='store_true')
-    parser.add_argument('--train', type=str, default='gan')
+    parser.add_argument('--train', type=str)
     parser.add_argument('--input_path', type=str)
     parser.add_argument('--epochs', type=int, default=1000)
     parser.add_argument('--augs', type=int, default=1)
@@ -142,7 +142,7 @@ def main():
 
     init_config()
     cfg = Utils.from_json(CONFIG)
-    train_conf = cfg[phases.TRAIN.value][args.train]
+    train_conf = cfg[phases.TRAIN.value]
 
     dataset_preprocessor = IceRidgeDatasetPreprocessor(
         MASKS_FOLDER_PATH, 
@@ -157,6 +157,7 @@ def main():
 
     # Training
     if args.train:
+        config = train_conf[args.train]
         modules = None
         model = None
         masking_processor = None
@@ -164,15 +165,15 @@ def main():
         
         print(f"Обучение модели {args.train} на {args.epochs} эпохах...")
         if args.train=='gan':
-            modules = build_gan_modules(train_conf)
+            modules = build_gan_modules(config)
             model = GAN(DEVICE, modules, n_critic=5)
             processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
             
             masking_processor = DatasetMaskingProcessor(
-                mask_params=train_conf['mask_params'],
+                mask_params=config['mask_params'],
                 processing_strats=processing_strats
             )
-            transforms = tf2.Compose(WGanGenerator.get_train_transforms(train_conf['target_image_size']))
+            transforms = tf2.Compose(WGanGenerator.get_train_transforms(config['target_image_size']))
 
         if args.load_weights:
             checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
