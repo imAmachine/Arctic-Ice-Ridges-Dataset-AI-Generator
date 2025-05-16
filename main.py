@@ -1,144 +1,171 @@
-from typing import List, Literal
-import torchvision
-import torchvision.transforms.v2 as tf2
-from src.gan.dataset import DatasetCreator
-from src.gan.custom_evaluators import *
-from src.gan.arch import WGanCritic, WGanGenerator
-from src.gan.model import ArchModule, GANModel
-from src.gan.train import ModelTrainer
-from src.common.utils import Utils
-from src.common.structs import ExecPhase as phases
-
+import os
 import argparse
+from typing import List
+
+import torch
+import torch.nn as nn
+import torchvision.transforms.v2 as tf2
+from src.models.train import GAN, Trainer
+from src.models.gan_arch import WGanCritic, WGanGenerator
+from src.models.structs import ArchModule
+from src.models.custom_evaluators import *
 from settings import *
 
-def validate_or_reset_config_section(config: dict, section_name: str, default_conf: dict) -> None:
-    section = config.get(section_name)
-    expected_keys = set(default_conf.keys())
-    actual_keys = set(section.keys()) if isinstance(section, dict) else set()
+from src.common.utils import Utils
+from src.common.enums import ExecPhase as phases, ModelType
+from src.dataset.dataset import DatasetCreator
 
-    if actual_keys != expected_keys:
-        answer = input(f"Конфигурация '{section_name}' некорректна. Перезаписать стандартными значениями? (Y/N): ")
-        if answer.strip().upper() == "Y":
-            config[section_name] = default_conf
+
+def validate_or_reset_section(config: dict, section: str, defaults: dict) -> None:
+    """Ensure config[section] matches defaults; prompt to reset if not."""
+    sec = config.get(section, {})
+    if not isinstance(sec, dict) or set(sec.keys()) != set(defaults.keys()):
+        ans = input(f"Конфигурация '{section}' некорректна. Перезаписать стандартными значениями? (Y/N): ")
+        if ans.strip().upper() == 'Y':
+            config[section] = defaults
 
 
 def init_config():
     if not os.path.exists(CONFIG):
-        print('Файл конфигурации отсутствует, будет создан стандартный')
-        Utils.to_json({phases.TRAIN.value: DEFAULT_TRAIN_CONF, phases.TEST.value: DEFAULT_TEST_CONF}, CONFIG)
+        print('Создаем файл конфигурации по умолчанию')
+        Utils.to_json({phases.TRAIN.value: DEFAULT_TRAIN_CONF,
+                       phases.TEST.value: DEFAULT_TEST_CONF}, CONFIG)
         return
+    cfg = Utils.from_json(CONFIG)
+    validate_or_reset_section(cfg, phases.TRAIN.value, DEFAULT_TRAIN_CONF)
+    validate_or_reset_section(cfg, phases.TEST.value, DEFAULT_TEST_CONF)
+    Utils.to_json(cfg, CONFIG)
 
-    config = Utils.from_json(CONFIG)
 
-    validate_or_reset_config_section(config, phases.TRAIN.value, DEFAULT_TRAIN_CONF)
-    validate_or_reset_config_section(config, phases.TEST.value, DEFAULT_TEST_CONF)
+def build_modules(config_section: dict) -> List[ArchModule]:
+    """Construct ArchModule list for GAN model."""
+    # Architectures
+    gen = WGanGenerator(
+        input_channels=1,
+        feature_maps=config_section['model_base_features']
+    ).to(DEVICE)
+    disc = WGanCritic(
+        input_channels=1,
+        feature_maps=config_section['model_base_features']
+    ).to(DEVICE)
 
-    Utils.to_json(config, CONFIG)
-            
+    # Optimizer and scheduler
+    g_optimizer = torch.optim.Adam(
+        gen.parameters(),
+        lr=config_section['optimization_params']['lr'],
+        betas=(0.0, 0.9)
+    )
+    
+    g_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        g_optimizer,
+        mode=config_section['optimization_params']['mode'],
+        factor=0.5,
+        patience=6
+    )
+    
+    d_optimizer = torch.optim.Adam(
+        disc.parameters(),
+        lr=config_section['optimization_params']['lr'],
+        betas=(0.0, 0.9)
+    )
+    d_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        d_optimizer,
+        mode=config_section['optimization_params']['mode'],
+        factor=0.5,
+        patience=6
+    )
+    
+    # Evaluators
+    evaluators = {
+        LossName.ADVERSARIAL.value: AdversarialLoss(disc),
+        LossName.BCE.value: nn.BCELoss(),
+        LossName.L1.value: nn.L1Loss(),
+        LossName.WASSERSTEIN.value: WassersteinLoss(disc),
+        LossName.GP.value: GradientPenalty(disc),
+        MetricName.PRECISION.value: sklearn_wrapper(precision_score, DEVICE),
+        MetricName.F1.value: sklearn_wrapper(f1_score, DEVICE),
+        MetricName.IOU.value: sklearn_wrapper(jaccard_score, DEVICE),
+    }
+
+    modules: List[ArchModule] = []
+    modules.extend([
+        ArchModule(
+            model_type=ModelType.GENERATOR,
+            arch=gen,
+            optimizer=g_optimizer,
+            scheduler=g_scheduler,
+            eval_funcs=evaluators,
+            eval_settings=config_section['evaluators_info'][ModelType.GENERATOR.value]
+        ),
+        ArchModule(
+            model_type=ModelType.DISCRIMINATOR,
+            arch=disc,
+            optimizer=d_optimizer,
+            scheduler=d_scheduler,
+            eval_funcs=evaluators,
+            eval_settings=config_section['evaluators_info'][ModelType.DISCRIMINATOR.value]
+        )
+    ])
+    
+    return modules
+
 
 def main():
-    parser = argparse.ArgumentParser(description='GAN модель для генерации ледовых торосов')
-    parser.add_argument('--preprocess', action='store_true', help='Препроцессинг исходных данных')
-    parser.add_argument('--train', type=str, default='gan', help='Обучение выбранной модели')
-    parser.add_argument('--input_path', type=str, help='Путь к изображению для инференса')
-    parser.add_argument('--epochs', type=int, default=1000, help='Количество эпох обучения')
-    parser.add_argument('--augs', type=int, default=1, help='Количество аугментированных сэмплов на снимок, определяет итоговый размер датасета')
-    parser.add_argument('--batch_size', type=int, default=3, help='Размер батча')
-    parser.add_argument('--val_rat', type=float, default=0.2, help='Размер валидационной выборки в процентах')
-    parser.add_argument('--load_weights', action='store_true', help='Загрузить сохраненные веса модели')
-    parser.add_argument('--test', action='store_true', help='Запуск тестов параметров')
-
+    parser = argparse.ArgumentParser(description='GAN ледовых торосов')
+    parser.add_argument('--preprocess', action='store_true')
+    parser.add_argument('--train', type=str, default='gan')
+    parser.add_argument('--input_path', type=str)
+    parser.add_argument('--epochs', type=int, default=1000)
+    parser.add_argument('--augs', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=3)
+    parser.add_argument('--val_rat', type=float, default=0.2)
+    parser.add_argument('--load_weights', action='store_true')
+    parser.add_argument('--test', action='store_true')
     args = parser.parse_args()
 
-    run_all = not (args.preprocess or args.train or args.infer or args.gui or args.test)
-
     init_config()
-    config = dict(Utils.from_json(CONFIG))
-    model_transforms = tf2.Compose(WGanGenerator.get_train_transforms(config[phases.TRAIN.value][args.train].get("target_image_size")))
-    
-    # Инициализация создателя датасета
-    ds_creator = DatasetCreator(
+    cfg = Utils.from_json(CONFIG)
+    train_conf = cfg[phases.TRAIN.value][args.train]
+
+    # Transforms
+    transforms = tf2.Compose(
+        WGanGenerator.get_train_transforms(
+            train_conf['target_image_size']
+        )
+    )
+
+    # Dataset
+    ds = DatasetCreator(
         device=DEVICE,
         output_path=AUGMENTED_DATASET_FOLDER_PATH,
         original_images_path=MASKS_FOLDER_PATH,
         preprocessed_images_path=PREPROCESSED_MASKS_FOLDER_PATH,
         images_ext=MASKS_FILE_EXTENSIONS,
-        model_transforms=model_transforms,
+        model_transforms=transforms,
         preprocessors=PREPROCESSORS,
-        augs_per_img=args.augs,
+        augs_per_img=args.augs
     )
+    if args.preprocess:
+        print('Препроцессинг данных...')
+        ds.preprocess_data()
 
-    # Препроцессинг данных
-    if args.preprocess or run_all:
-        print("Выполняется препроцессинг данных...")
-        ds_creator.preprocess_data()
-
-    # Обучение модели
-    if args.train or run_all:
-        model = None
-        config = config[phases.TRAIN.value][args.train]
+    # Training
+    if args.train:
+        print(f"Обучение модели {args.train} на {args.epochs} эпохах...")
+        modules = build_modules(train_conf)
         
-        def get_module(model_type, arch, optimizer, scheduler, evaluators, evaluators_config):
-            return ArchModule(
-                model_type, 
-                arch,
-                optimizer,
-                scheduler,
-                evaluators,
-                evaluators_config
-            )
+        gan = GAN(DEVICE, modules, n_critic=5)
         
-        if args.train == 'gan':            
-            arch_list = {
-                ModelType.GENERATOR: WGanGenerator(input_channels=1, feature_maps=config.get('model_base_features')).to(DEVICE),
-                ModelType.DISCRIMINATOR: WGanCritic(input_channels=1, feature_maps=config.get('model_base_features')).to(DEVICE)
-            }
-            
-            optimizer = torch.optim.Adam(arch_list[ModelType.GENERATOR].parameters(), lr=config.get('optimization_params').get('lr'), betas=(0.0, 0.9))
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode=config.get('optimization_params').get('mode'), factor=0.5, patience=6)
-            
-            evaluators = {
-                LossName.ADVERSARIAL.value: AdversarialLoss(arch_list[ModelType.DISCRIMINATOR]),
-                LossName.BCE.value: nn.BCELoss(),
-                LossName.L1.value: nn.L1Loss(),
-                LossName.WASSERSTEIN.value: WassersteinLoss(arch_list[ModelType.DISCRIMINATOR]),
-                LossName.GP.value: GradientPenalty(arch_list[ModelType.DISCRIMINATOR]),
-                MetricName.PRECISION.value: sklearn_wrapper(precision_score, DEVICE),
-                MetricName.F1.value: sklearn_wrapper(f1_score, DEVICE),
-                MetricName.IOU.value: sklearn_wrapper(jaccard_score, DEVICE),
-            }
-            
-            modules: List[ArchModule] = []
-            
-            for t, m in arch_list.items():
-                evaluators_config = config['evaluators_info'][t.value]
-                modules.append(get_module(
-                    t,
-                    m,
-                    optimizer,
-                    scheduler,
-                    evaluators,
-                    evaluators_config
-                ))
-            
-            
-            model = GANModel(device=DEVICE, modules=modules, output_path=WEIGHTS_PATH, n_critic=5)
-            
-        print(f"Запуск обучения модели на {args.epochs} эпох...")
-        trainer = ModelTrainer(
+        trainer = Trainer(
             device=DEVICE,
-            generative_model=model,
-            dataset_processor=ds_creator,
+            model=gan,
+            dataset=ds,
             output_path=WEIGHTS_PATH,
             epochs=args.epochs,
             batch_size=args.batch_size,
-            load_weights=args.load_weights,
-            validation_ratio=args.val_rat,
-            checkpoints_freq=50
+            val_ratio=args.val_rat
         )
-        trainer.train()
-        
+        trainer.run()
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

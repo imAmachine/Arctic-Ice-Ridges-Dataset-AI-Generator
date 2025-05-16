@@ -3,8 +3,8 @@ from typing import Any, Dict, List
 from cv2 import imwrite, IMREAD_GRAYSCALE
 import numpy as np
 
+from src.dataset.preprocessing.processors import IProcessor
 from src.common.utils import Utils
-from src.common.interfaces import IProcessor
 
 
 class IceRidgeDatasetPreprocessor:    

@@ -1,9 +1,84 @@
 import cv2
 import numpy as np
 import torch
+from abc import ABC, abstractmethod
+from typing import Dict, List, Type
 
-from src.common.interfaces import IProcessor
-from src.common.utils import Utils
+class IProcessor(ABC):
+    """Interface for user defined image processing classes
+    
+    Attributes:
+        NAME: Name identifier for the processor
+        PROCESSORS_NEEDED: List of processor classes that should be applied before this processor
+    """
+    
+    def __init__(self, processor_name: str = None):
+        self.NAME = processor_name if processor_name else self.__class__.__name__
+        self.metadata = {}
+        self.VALUE = "False"
+        self._result_value = None
+    
+    @property
+    def PROCESSORS_NEEDED(self) -> List[Type['IProcessor']]:
+        """Должен быть переопределен в дочерних классах"""
+        return []
+    
+    @abstractmethod
+    def process_image(self, image: np.ndarray) -> np.ndarray:
+        """Метод обработки изображения, реализуемый в дочерних классах
+        
+        Args:
+            image (np.ndarray): Изображение для обработки
+            
+        Returns:
+            np.ndarray: Обработанное изображение
+        """
+        pass
+    
+    def get_metadata_value(self) -> str:
+        """Возвращает значение для записи в метаданные
+        
+        По умолчанию возвращает значение _result_value если оно установлено,
+        иначе возвращает "True"
+        """
+        if self._result_value is not None:
+            return str(self._result_value)
+        return "True"
+    
+    def check_conditions(self, metadata: Dict[str, str]) -> bool:
+        """Проверяет, выполнены ли все необходимые условия для запуска процессора
+        
+        Args:
+            metadata: Текущие метаданные процесса обработки
+            
+        Returns:
+            bool: True, если все необходимые процессоры были выполнены успешно
+        """
+        for processor_class in self.PROCESSORS_NEEDED:
+            processor_name = processor_class.__name__
+            proc_val = metadata.get(processor_name)
+            if processor_name not in metadata or proc_val in ("False", None):
+                raise Exception(f'Need {processor_name} before {self.NAME}')
+    
+    def process(self, image: np.ndarray, metadata: Dict[str, str]) -> np.ndarray:
+        """Выполняет процесс обработки изображения
+        
+        Args:
+            image: Изображение для обработки
+            metadata: Метаданные процесса обработки
+            
+        Returns:
+            np.ndarray: Обработанное изображение
+        """
+        self.metadata = metadata
+        
+        self.check_conditions(metadata)
+        processed_image = self.process_image(image)
+        self.VALUE = self.get_metadata_value()
+    
+        metadata[self.NAME] = self.VALUE        
+        return processed_image
+
 
 class Crop(IProcessor):
     """Процессор для обрезки изображения"""
@@ -33,72 +108,6 @@ class Crop(IProcessor):
             return image
 
         return image[rows[0] : rows[-1] + 1, cols[0] : cols[-1] + 1]
-
-# 
-# Нужно доработать
-# 
-
-# class AutoAdjust(IProcessor):
-#     """Процессор для автоматического ресайза изображения с сохранением соотношения сторон."""
-    
-#     def __init__(self, processor_name: str = None, target_size: int = 2048):
-#         super().__init__(processor_name)
-#         self.target_size = target_size
-    
-#     def process_image(self, image: np.ndarray) -> np.ndarray:
-#         h, w = image.shape[:2]
-#         if h == 0 or w == 0:
-#             return image
-        
-#         scale = self.target_size / max(h, w)
-#         new_w = int(w * scale)
-#         new_h = int(h * scale)
-        
-#         interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
-        
-#         resized = cv2.resize(image, (new_w, new_h), interpolation=interp)
-#         return resized
-
-# class Binarize(IProcessor):
-#     def process_image(self, image: np.ndarray) -> np.ndarray:
-#         return Utils.binarize_by_threshold(image, threshold=image.std(), max_val=1)
-
-
-# class Unbinarize(IProcessor):
-#     def process_image(self, image):
-#         return image * 255
-
-
-# class EnchanceProcessor(IProcessor):
-#     """Процессор для улучшения бинаризованного изображения с помощью морфологических операций"""
-    
-#     @property
-#     def PROCESSORS_NEEDED(self):
-#         return [Binarize]
-    
-#     def __init__(self, processor_name: str = None, kernel_size: int = 5):
-#         super().__init__(processor_name)
-#         self.kernel_size = kernel_size
-    
-#     def process_image(self, image: np.ndarray) -> np.ndarray:
-#         # Убедимся, что тип правильный
-#         binary_image = image.copy()
-#         if image.dtype != np.uint8:
-#             binary_image = image.astype(np.uint8)
-        
-#         # Структурные элементы по направлениям
-#         vertical = cv2.getStructuringElement(cv2.MORPH_RECT, (1, self.kernel_size))
-#         horizontal = cv2.getStructuringElement(cv2.MORPH_RECT, (self.kernel_size, 1))
-#         diag1 = np.eye(self.kernel_size, dtype=np.uint8)
-#         diag2 = np.fliplr(diag1)
-
-#         # Применяем морфологическое закрытие по 4 направлениям
-#         repaired = binary_image.copy()
-#         for kernel in [vertical, horizontal, diag1, diag2]:
-#             closed = cv2.morphologyEx(repaired, cv2.MORPH_CLOSE, kernel)
-#             repaired = cv2.bitwise_or(repaired, closed)  # объединяем результат
-
-#         return repaired
 
 
 class AdjustToContent(IProcessor):

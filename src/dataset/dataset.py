@@ -2,17 +2,15 @@ import os
 import random
 from typing import Callable, Dict, List, Optional, Tuple
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torchvision
-
 import cv2
-import numpy as np
 
+from src.common.enums import ExecPhase as phases
+from src.dataset.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.common.utils import Utils
-from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
-from src.preprocessing.processors import *
-from src.common.structs import ExecPhase as phases
 
 class MaskingProcessor:
     def __init__(self, mask_padding: float = 0.15):

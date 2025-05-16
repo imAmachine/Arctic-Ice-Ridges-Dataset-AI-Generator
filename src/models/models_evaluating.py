@@ -2,7 +2,8 @@ from dataclasses import dataclass, field
 
 from typing import Callable, Dict, List
 import torch
-from src.common.structs import ExecPhase as phases, LossName as losses, EvaluatorType as eval_type
+
+from src.common.enums import ExecPhase, EvaluatorType
 
 @dataclass
 class Evaluator:
@@ -10,7 +11,7 @@ class Evaluator:
     name: str
     type: str
     weight: float = field(default=1.0)
-    exec_phase: str = phases.ANY.value
+    exec_phase: str = ExecPhase.ANY.value
     
     def __call__(self, generated_sample, real_sample) -> torch.Tensor:   
         if self.weight <= 0.0:
@@ -22,28 +23,28 @@ class Evaluator:
 class EvalProcessor:
     device: torch.device
     evaluators: List[Evaluator] = field(default_factory=list)
-    evaluators_history: Dict[phases, List] = field(default_factory=lambda: {
-        phases.TRAIN: [], phases.VALID: []
+    evaluators_history: Dict[ExecPhase, List] = field(default_factory=lambda: {
+        ExecPhase.TRAIN: [], ExecPhase.VALID: []
     })
 
-    def _update_history(self, eval_type: str, phase: phases, name: str, value: 'torch.Tensor') -> None:
+    def _update_history(self, eval_type: str, phase: ExecPhase, name: str, value: 'torch.Tensor') -> None:
         current_history = self.evaluators_history[phase][-1]
         current_history[eval_type].update({name: value})
 
     def process(self, generated_sample, real_sample, exec_phase: str) -> None:
-        evaluators_types = [member.value for member in eval_type]
+        evaluators_types = [member.value for member in EvaluatorType]
         self.evaluators_history[exec_phase].append({e_type: {} for e_type in evaluators_types})
         
         for item in self.evaluators:
             phase_value = exec_phase.value
-            if item.exec_phase == phases.ANY.value or item.exec_phase == phase_value:
+            if item.exec_phase == ExecPhase.ANY.value or item.exec_phase == phase_value:
                 weighted_tensor = item(generated_sample, real_sample)
                 self._update_history(item.type, exec_phase, item.name, weighted_tensor)
 
     def reset_history(self):
-        self.evaluators_history = {phases.TRAIN: [], phases.VALID: []}
+        self.evaluators_history = {ExecPhase.TRAIN: [], ExecPhase.VALID: []}
     
-    def compute_epoch_summary(self, phase: phases) -> Dict[str, Dict[str, float]]:
+    def compute_epoch_summary(self, phase: ExecPhase) -> Dict[str, Dict[str, float]]:
         history = self.evaluators_history[phase]
         if not history:
             return {}
@@ -67,7 +68,7 @@ class EvalProcessor:
 
         return result
     
-    def print_eval_summary(self, name: str, phase: phases):
+    def print_eval_summary(self, name: str, phase: ExecPhase):
         summary = self.compute_epoch_summary(phase=phase)
 
         for group, metrics in summary.items():

@@ -1,7 +1,8 @@
 import os
 from torch import cuda
-from src.preprocessing.processors import *
-from src.common.structs import *
+
+from src.dataset.preprocessing.processors import *
+from src.common.enums import *
 
 # путь к файлам с конфигарциями
 CONFIG = './config.json'
