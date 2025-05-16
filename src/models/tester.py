@@ -10,7 +10,6 @@ from settings import *
 from typing import List, Dict
 
 from src.common.utils import Utils
-from src.gan.train import Trainer
 from dataset.dataset import DatasetCreator
 
 # 
