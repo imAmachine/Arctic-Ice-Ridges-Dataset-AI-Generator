@@ -12,7 +12,6 @@ from typing import List, Dict
 from src.common.utils import Utils
 from src.dataset.dataset import DatasetCreator
 from src.models.train import GAN, Trainer
-from src.models.structs import Visualizer
 
 class ParamGridTester:
     def __init__(self, config, dataset_preprocessor, masking_processor, transforms, output_root=None, seed=42,):

@@ -1,9 +1,6 @@
 import os
 import argparse
-from typing import List
 
-import torch
-import torch.nn as nn
 import torchvision.transforms.v2 as tf2
 from settings import *
 
@@ -12,10 +9,9 @@ from src.dataset.mask_strats import RandomHoleStrategy
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.models.gan.gan_evaluators import *
 from src.models.train import GAN, Trainer
-from src.models.gan.gan_arch import WGanCritic, WGanGenerator
-from src.models.structs import ArchModule
+from src.models.gan.gan_arch import WGanGenerator
 from src.common.utils import Utils
-from src.common.enums import ExecPhase as phases, ModelType
+from src.common.enums import ExecPhase as phases
 from src.dataset.dataset import DatasetCreator, DatasetMaskingProcessor
 from src.models.tester import ParamGridTester
 
@@ -96,8 +92,6 @@ def main():
 
     # Training
     if args.train:
-        print(train_conf)
-        print(args.train)
         config = train_conf[args.train]
         modules = None
         model = None

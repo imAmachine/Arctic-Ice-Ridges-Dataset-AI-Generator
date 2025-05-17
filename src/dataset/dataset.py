@@ -1,6 +1,5 @@
 
 from collections import defaultdict
-import os
 import random
 from typing import Callable, Dict, List, Optional, Tuple
 
