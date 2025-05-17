@@ -17,6 +17,7 @@ from src.models.structs import ArchModule
 from src.common.utils import Utils
 from src.common.enums import ExecPhase as phases, ModelType
 from src.dataset.dataset import DatasetCreator, DatasetMaskingProcessor
+from src.models.tester import ParamGridTester
 
 
 def validate_or_reset_section(config: dict, section: str, defaults: dict) -> None:
@@ -29,89 +30,27 @@ def validate_or_reset_section(config: dict, section: str, defaults: dict) -> Non
 
 
 def init_config():
+    default_test_conf = {
+        model_name: {
+            **DEFAULT_TRAIN_CONF[model_name],
+            **DEFAULT_TEST_CONF[model_name]
+        }
+        for model_name in DEFAULT_TRAIN_CONF
+    }
+
     if not os.path.exists(CONFIG):
         print('Создаем файл конфигурации по умолчанию')
         Utils.to_json({phases.TRAIN.value: DEFAULT_TRAIN_CONF,
-                       phases.TEST.value: DEFAULT_TEST_CONF}, CONFIG)
+                       phases.TEST.value: default_test_conf}, CONFIG)
         return
     cfg = Utils.from_json(CONFIG)
-    for section, defaults in [(phases.TRAIN.value, DEFAULT_TRAIN_CONF),
-                              (phases.TEST.value, DEFAULT_TEST_CONF)]:
-        validate_or_reset_section(cfg, section, defaults)
+
+    validate_or_reset_section(cfg, phases.TRAIN.value, DEFAULT_TRAIN_CONF)
+    
+    # Валидация секции TEST с учетом дефолтных значений
+    validate_or_reset_section(cfg, phases.TEST.value, default_test_conf)
     Utils.to_json(cfg, CONFIG)
-
-
-def create_optimizer(parameters, lr: float=0.0001, betas=(0.0, 0.9)):
-    """Create Adam optimizer with specified parameters."""
-    return torch.optim.Adam(parameters, lr=lr, betas=betas)
-
-
-def create_scheduler(optimizer, mode: str, factor: float=0.5, patience: int=6):
-    """Create ReduceLROnPlateau scheduler."""
-    return torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer,
-        mode=mode,
-        factor=factor,
-        patience=patience
-    )
-
-
-def build_evaluators(discriminator: WGanCritic) -> Dict:
-    """Create dictionary of evaluation metrics and losses."""
-    return {
-        LossName.ADVERSARIAL.value: AdversarialLoss(discriminator),
-        LossName.BCE.value: nn.BCELoss(),
-        LossName.L1.value: nn.L1Loss(),
-        LossName.WASSERSTEIN.value: WassersteinLoss(discriminator),
-        LossName.GP.value: GradientPenalty(discriminator),
-        MetricName.PRECISION.value: sklearn_wrapper(precision_score, DEVICE),
-        MetricName.F1.value: sklearn_wrapper(f1_score, DEVICE),
-        MetricName.IOU.value: sklearn_wrapper(jaccard_score, DEVICE),
-    }
-
-
-def build_gan_modules(config_section: dict) -> List[ArchModule]:
-    """Construct ArchModule list for GAN model."""
-    # Model initialization
-    gen = WGanGenerator(
-        input_channels=1,
-        feature_maps=config_section['model_base_features']
-    ).to(DEVICE)
-    disc = WGanCritic(
-        input_channels=1,
-        feature_maps=config_section['model_base_features']
-    ).to(DEVICE)
     
-    g_optimizer = create_optimizer(gen.parameters(), config_section['optimization_params']['lr'], betas=(0.0, 0.9))
-    g_scheduler = create_scheduler(g_optimizer, config_section['optimization_params']['mode'], factor=0.5, patience=6)
-
-    d_optimizer = create_optimizer(disc.parameters(), config_section['optimization_params']['lr'], betas=(0.0, 0.9))
-    d_scheduler = create_scheduler(d_optimizer, config_section['optimization_params']['mode'], factor=0.5, patience=6)
-
-    evaluators = build_evaluators(disc)
-
-    modules: List[ArchModule] = []
-    modules.extend([
-        ArchModule(
-            model_type=ModelType.GENERATOR,
-            arch=gen,
-            optimizer=g_optimizer,
-            scheduler=g_scheduler,
-            eval_funcs=evaluators,
-            eval_settings=config_section['evaluators_info'][ModelType.GENERATOR.value]
-        ),
-        ArchModule(
-            model_type=ModelType.DISCRIMINATOR,
-            arch=disc,
-            optimizer=d_optimizer,
-            scheduler=d_scheduler,
-            eval_funcs=evaluators,
-            eval_settings=config_section['evaluators_info'][ModelType.DISCRIMINATOR.value]
-        )
-    ])
-    
-    return modules
-
 
 def load_checkpoint(model: GAN, checkpoint_path: str) -> None:
     """Load model weights from checkpoint if exists."""
@@ -133,7 +72,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--batch_size', type=int, default=3)
     parser.add_argument('--val_rat', type=float, default=0.2)
     parser.add_argument('--load_weights', action='store_true')
-    parser.add_argument('--test', action='store_true')
+    parser.add_argument('--test', type=str)
     return parser.parse_args()
 
 
@@ -157,6 +96,8 @@ def main():
 
     # Training
     if args.train:
+        print(train_conf)
+        print(args.train)
         config = train_conf[args.train]
         modules = None
         model = None
@@ -165,7 +106,7 @@ def main():
         
         print(f"Обучение модели {args.train} на {args.epochs} эпохах...")
         if args.train=='gan':
-            modules = build_gan_modules(config)
+            modules = GAN.build_modules(config)
             model = GAN(DEVICE, modules, n_critic=5)
             processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
             
@@ -196,6 +137,28 @@ def main():
             val_ratio=args.val_rat
         )
         trainer.run()
+    
+    if args.test:
+        print("Запуск тестов...")
+        cfg = Utils.from_json(CONFIG)
+        test_conf = cfg[phases.TEST.value][args.test]
+
+        processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
+            
+        masking_processor = DatasetMaskingProcessor(
+            mask_params=test_conf['mask_params'],
+            processing_strats=processing_strats
+        )
+        transforms = tf2.Compose(WGanGenerator.get_train_transforms(test_conf['target_image_size']))
+        
+        tester = ParamGridTester(
+            config=test_conf,
+            output_root=os.path.join(WEIGHTS_PATH, 'grid_tests'),
+            dataset_preprocessor=dataset_preprocessor,
+            masking_processor=masking_processor,
+            transforms=transforms
+        )
+        tester.run_grid_tests()
 
 if __name__ == '__main__':
     main()

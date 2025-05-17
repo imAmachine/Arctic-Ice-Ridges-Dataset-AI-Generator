@@ -74,6 +74,16 @@ DEFAULT_TRAIN_CONF = {
 }
 
 DEFAULT_TEST_CONF = {
+    "gan": {
+        "Trainer": {
+            "epochs": 30,
+            "batch_size": 3,
+            "val_ratio": 0.2
+        },
+        "Dataset": {
+            "augs_per_img": 5
+        }
+    }
 } 
 
 # путь к файлу с геоанализом исходных снимков
