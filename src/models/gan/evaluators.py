@@ -1,3 +1,5 @@
+import math
+
 from dataclasses import dataclass
 from typing import Callable
 from torch.autograd import grad
@@ -5,27 +7,27 @@ from sklearn.metrics import f1_score, jaccard_score, precision_score
 from src.common.analyze_tools import FractalAnalyzerGPU
 import torch
 
-def fractal_metric(generated: torch.Tensor, target: torch.Tensor) -> float:
-    """
-    Считает среднюю разницу фрактальной размерности между сгенерированным изображением и ground truth
-    """
-    fd_total = 0.0
-    batch_size = min(generated.shape[0], 4)
+@dataclass
+class FractalMetric:
+    def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
+        fd_total = 0.0
+        batch_size = min(fake_samples.shape[0], 4)
 
-    for i in range(batch_size):
-        gen_img = generated[i].detach().squeeze()
-        tgt_img = target[i].detach().squeeze()
+        for i in range(batch_size):
+            fake_img = fake_samples[i].detach().squeeze()
+            real_img = real_samples[i].detach().squeeze()
 
-        fd_gen = FractalAnalyzerGPU.calculate_fractal_dimension(
-            *FractalAnalyzerGPU.box_counting(gen_img)
-        )
-        fd_target = FractalAnalyzerGPU.calculate_fractal_dimension(
-            *FractalAnalyzerGPU.box_counting(tgt_img)
-        )
+            fd_fake = FractalAnalyzerGPU.calculate_fractal_dimension(
+                *FractalAnalyzerGPU.box_counting(fake_img)
+            )
+            fd_real = FractalAnalyzerGPU.calculate_fractal_dimension(
+                *FractalAnalyzerGPU.box_counting(real_img)
+            )
 
-        fd_total += abs(fd_gen - fd_target)
+            fd_diff = abs(fd_fake - fd_real)
+            fd_total += math.exp(fd_diff) - 1
 
-    return fd_total / batch_size
+        return torch.tensor(fd_total / batch_size, device=fake_samples.device)
 
 def sklearn_wrapper(fn, device, threshold: float = 0.5):
     def wrapper(gen: torch.Tensor, real: torch.Tensor) -> torch.Tensor:

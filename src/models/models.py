@@ -114,4 +114,5 @@ class GAN(GenerativeModel):
             MetricName.PRECISION.value: sklearn_wrapper(precision_score, device),
             MetricName.F1.value: sklearn_wrapper(f1_score, device),
             MetricName.IOU.value: sklearn_wrapper(jaccard_score, device),
+            MetricName.FD.value: FractalMetric(),
         }

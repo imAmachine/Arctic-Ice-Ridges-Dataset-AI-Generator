@@ -34,3 +34,4 @@ class MetricName(Enum):
     PRECISION = "Precision"
     F1 = "F1"
     IOU = "IoU"
+    FD = "FD"
