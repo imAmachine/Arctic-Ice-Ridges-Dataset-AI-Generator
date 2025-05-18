@@ -15,6 +15,7 @@ from src.dataset.strategies import RandomHoleStrategy
 from src.dataset.base import ProcessingStrategies
 from src.models.gan.architecture import CustomGenerator
 from src.models.models import GAN
+from src.models.tester import ParamGridTester
 from src.models.train import Trainer
 from src.preprocessing.preprocessor import DataPreprocessor
 
@@ -137,40 +138,46 @@ def main():
     
     if args.test:
         print("Запуск тестов...")
-        
-        ds_creator = DatasetCreator(
-            input_preprocessor=dataset_preprocessor,
-            masking_processor=masking_processor,
-            model_transforms=transforms,
-            augs_per_img=args.augs
-        )
-        
-        trainer = Trainer(
-            device=DEVICE,
-            model=model,
-            dataset=ds_creator,
-            output_path=WEIGHTS_PATH,
-            epochs=args.epochs,
-            batch_size=args.batch_size,
-            val_ratio=args.val_rat
-        )
-        
-        config = test_conf[args.test]
-        processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
+        if args.test=='gan':
+            config = test_conf[args.test]
+
+            model = GAN(DEVICE, config["n_critic"])
+
+            processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
+            masking_processor = DatasetMaskingProcessor(
+                mask_params=config['mask_params'],
+                processing_strats=processing_strats
+            )
+            transforms = tf2.Compose(CustomGenerator.get_transforms(config['target_image_size']))
+
+            ds_creator = DatasetCreator(
+                metadata=dataset_metadata,
+                mask_processor=masking_processor,
+                transforms=transforms,
+                augs_per_img=args.augs,
+                valid_size_p=0.2,
+                shuffle=True,
+                batch_size=args.batch_size,
+                workers=4,
+            )
+
+            trainer = Trainer(
+                device=DEVICE,
+                model=model,
+                dataloaders=ds_creator.create_loaders(),
+                output_path=WEIGHTS_PATH,
+                epochs=args.epochs,
+                checkpoints_ratio=5
+            )
             
-        masking_processor = DatasetMaskingProcessor(
-            mask_params=test_conf['mask_params'],
-            processing_strats=processing_strats
-        )
-        transforms = tf2.Compose(CustomGenerator.get_transforms(test_conf['target_image_size']))
-        
-        # tester = ParamGridTester(
-        #     param_grid_config=config,
-        #     trainer=trainer,
-        #     output_folder_path=WEIGHTS_PATH,
-        #     seed=42,
-        # )
-        # tester.run_grid_tests()
+            tester = ParamGridTester(
+                param_grid_config=config,
+                trainer=trainer,
+                dataset=ds_creator,
+                output_folder_path=WEIGHTS_PATH,
+                seed=42,
+            )
+            tester.run()
 
 if __name__ == '__main__':
     main()

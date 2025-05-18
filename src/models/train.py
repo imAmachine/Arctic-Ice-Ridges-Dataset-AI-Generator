@@ -65,5 +65,5 @@ class Trainer:
                 gen = self.model.trainers[ModelType.GENERATOR].module.arch(inp)
                 self.visualizer.save(inp, target, gen, phase)
             
-            if epoch_id + 1 % self.checkpoints_ratio == 0:
+            if (epoch_id + 1) % self.checkpoints_ratio == 0:
                 self.model.save(os.path.join(self.weight_path, 'training_checkpoint.pt'))

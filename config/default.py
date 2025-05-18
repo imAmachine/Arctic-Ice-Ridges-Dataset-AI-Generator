@@ -73,11 +73,13 @@ DEFAULT_TEST_CONF = {
     "gan": {
         "Trainer": {
             "epochs": 30,
-            "batch_size": 3,
-            "val_ratio": 0.2
+            "checkpoints_ratio": 15
         },
         "Dataset": {
-            "augs_per_img": 5
+            "augs_per_img": 5,
+            "batch_size": 3,
+            "val_ratio": 0.2,
+            "workers": 4
         }
     }
 } 
