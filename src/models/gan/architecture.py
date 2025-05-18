@@ -142,7 +142,7 @@ class CustomDiscriminator(nn.Module):
             conv_block(feature_maps, feature_maps*2, use_in=False),
             conv_block(feature_maps*2, feature_maps*4, use_in=False),
             conv_block(feature_maps*4, feature_maps*8, use_in=False),
-            nn.Conv2d(feature_maps*8, 1, kernel_size=4, stride=1, padding=0, bias=False)
+            nn.Conv2d(feature_maps*8, 1, kernel_size=3, stride=1, padding=1, bias=False),
         )
     
     def forward(self, x):
