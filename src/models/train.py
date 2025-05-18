@@ -1,4 +1,5 @@
 import os
+from typing import Dict, List
 from tqdm import tqdm
 import matplotlib
 
@@ -23,11 +24,9 @@ class Trainer:
         self,
         device: torch.device,
         model: GenerativeModel,
-        dataset: DatasetCreator,
+        dataloaders: Dict[ExecPhase, DataLoader],
         output_path: str,
         epochs: int,
-        batch_size: int,
-        val_ratio: float = 0.2,
         checkpoints_ratio: int = 15
     ):
         self.device = device
@@ -35,17 +34,16 @@ class Trainer:
 
         self.visualizer = Visualizer(output_path)
         self.epochs = epochs
+        
         self.weight_path = output_path
         self.checkpoints_ratio = checkpoints_ratio
         
-        self.trainer_phases = dataset.get_dataloaders(
-            batch_size, shuffle=True, workers=6, val_ratio=val_ratio
-        )
+        self.dataloaders = dataloaders
 
     def run(self) -> None:
         for epoch_id in range(self.epochs):
             print(f"\n=== Epoch {epoch_id + 1}/{self.epochs}")
-            for phase, loader in self.trainer_phases.items():
+            for phase, loader in self.dataloaders.items():
                 self._run_epoch(phase, loader)
                 
             self.model.collect_epoch_evaluators()
@@ -62,7 +60,7 @@ class Trainer:
 
     def _after_epoch(self, epoch_id: int):
         with torch.no_grad():
-            for phase, loader in self.trainer_phases.items():
+            for phase, loader in self.dataloaders.items():
                 inp, target = [el.to(self.device) for el in next(iter(loader))]
                 gen = self.model.trainers[ModelType.GENERATOR].module.arch(inp)
                 self.visualizer.save(inp, target, gen, phase)

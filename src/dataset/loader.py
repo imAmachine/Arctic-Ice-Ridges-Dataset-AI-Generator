@@ -43,15 +43,16 @@ class DatasetMaskingProcessor:
 
 
 class IceRidgeDataset(Dataset):
-    def __init__(self, metadata: Dict[str, Dict], 
+    def __init__(self, 
+                 metadata: Dict[str, Dict], 
                  masking_processor: 'DatasetMaskingProcessor', 
                  augmentations_per_image: int = 1,
                  model_transforms: Optional[Callable] = None):
-        self.masking_processor = masking_processor
         self.metadata = metadata
-        self.image_keys = list(metadata.keys())
+        self.masking_processor = masking_processor
         self.augmentations_per_image = augmentations_per_image
         self.model_transforms: 'torchvision.transforms.Compose' = model_transforms
+        self.image_keys = list(metadata.keys())
 
     def __len__(self) -> int:
         return len(self.image_keys) * self.augmentations_per_image
@@ -62,24 +63,63 @@ class IceRidgeDataset(Dataset):
         orig_path = self.metadata[key]['path']
         orig_img = Utils.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
         
-        return self.get_processed_batch(orig_img)
+        return self._get_processed_batch(orig_img)
     
-    def process_img(self, img: np.ndarray) -> 'List[np.ndarray]':
+    def _process_img(self, img: np.ndarray) -> 'List[np.ndarray]':
         transformed_trg = self.model_transforms(img).numpy()
         inp = self.masking_processor.process(transformed_trg)
         return inp, transformed_trg
     
-    def get_processed_batch(self, img: np.ndarray) -> Tuple[torch.Tensor,]:
+    def _get_processed_batch(self, img: np.ndarray) -> Tuple[torch.Tensor,]:
         original = img.astype(np.float32)
         
-        batch = self.process_img(original)
+        batch = self._process_img(original)
         inp, trg = [Utils.binarize_by_threshold(el, threshold=el.std(), max_val=1.0) for el in batch]
 
         return inp, trg
+ 
+
+class DatasetCreator:
+    def __init__(self, metadata, mask_processor, transforms, augs_per_img, shuffle, batch_size, workers):
+        self.metadata = metadata
+        self.mask_processor = mask_processor
+        self.transforms = transforms
+        self.augs_per_img = augs_per_img
+        self.shuffle = shuffle
+        self.batch_size = batch_size
+        self.workers = workers
     
-    #
-    #   НЕОБХОДИМО ПЕРЕРАБОТАТЬ ЛОГИКУ РАЗДЕЛЕНИЯ ДАТАСЕТА
-    #
+    def create_loader(self, metadata):
+        loader = None
+        
+        if metadata is not None:
+            dataset = IceRidgeDataset(
+                metadata=metadata,
+                masking_processor=self.mask_processor,
+                model_transforms=self.transforms,
+                augmentations_per_image=self.augs_per_img
+            )
+            
+            loader = DataLoader(
+                dataset=dataset,
+                batch_size=self.batch_size,
+                shuffle=self.shuffle,
+                num_workers=self.workers
+            )
+            
+        return loader
+    
+    def create_loaders(self, val_ratio=0.2) -> Dict[ExecPhase, Dict]:        
+        splitted = DatasetCreator.split_dataset_legacy(self.metadata, val_ratio=val_ratio)
+        train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN), splitted.get(ExecPhase.VALID)
+        
+        # print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
+        
+        return {
+            ExecPhase.TRAIN: self.create_loader(train_metadata), 
+            ExecPhase.VALID: self.create_loader(valid_metadata)
+        }
+
     @staticmethod
     def split_dataset_legacy(metadata: Dict[str, Dict], val_ratio: float) -> Dict[str, Optional[Dict[str, Dict]]]:
         """
@@ -107,62 +147,3 @@ class IceRidgeDataset(Dataset):
         print(f"{len(train_origins)} обучающих, {len(val_origins)} валидационных данных")
         
         return {ExecPhase.TRAIN: train_metadata if len(train_origins) > 0 else None, ExecPhase.VALID: val_metadata if len(val_origins) > 0 else None}
-
-
-class DatasetCreator:
-    def __init__(
-            self,
-            input_preprocessor: DataPreprocessor,
-            masking_processor: DatasetMaskingProcessor,
-            model_transforms: 'torchvision.transforms.Compose', 
-            augs_per_img: int = 1, 
-        ):
-        # Инициализация
-        self.preprocessor = input_preprocessor # первоначальная предобработка исходных данных
-        self.dataset_processor = masking_processor # Процессор для маскирования и создания датасета
-        
-        self.model_transforms = model_transforms # трансформации необходимые при передаче батча в модель
-        self.augs_per_img = augs_per_img # количество аугментаций на снимок
-    
-    def create_loader(self, metadata, batch_size, shuffle, workers):
-        loader = None
-        
-        if metadata is not None:
-            train_dataset = IceRidgeDataset(
-                metadata=metadata, 
-                masking_processor=self.dataset_processor,
-                augmentations_per_image=self.augs_per_img,
-                model_transforms=self.model_transforms
-            )
-            
-            loader = DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=shuffle,
-                num_workers=workers
-            )
-            
-            return loader
-    
-    def get_dataloaders(self, batch_size, shuffle, workers, val_ratio=0.2) -> Dict[ExecPhase, Dict]:
-        # предобработка входных снимков
-        dataset_metadata = defaultdict()
-        
-        if not self.preprocessor.is_metadata_exist():
-            self.preprocessor.process_folder()
-            dataset_metadata = self.preprocessor.metadata
-        else:
-            dataset_metadata = Utils.from_json(self.preprocessor.metadata_json_path)
-        
-        splitted = IceRidgeDataset.split_dataset_legacy(dataset_metadata, val_ratio=val_ratio)
-        train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN), splitted.get(ExecPhase.VALID)
-        
-        print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
-        
-        train_loader = self.create_loader(train_metadata, batch_size, shuffle, workers)
-        valid_loader = self.create_loader(valid_metadata, batch_size, shuffle, workers)
-        
-        return {
-            ExecPhase.TRAIN: train_loader, 
-            ExecPhase.VALID: valid_loader
-        }

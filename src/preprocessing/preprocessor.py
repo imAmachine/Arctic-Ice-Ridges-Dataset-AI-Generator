@@ -75,6 +75,7 @@ class DataPreprocessor:
         
         os.makedirs(self.output_path, exist_ok=True)
         
+        print('Препроцессинг данных...')
         for filename in os.listdir(self.input_path):
             ext = os.path.splitext(filename)[1].lower()
             if ext in self.files_extensions:
@@ -84,3 +85,11 @@ class DataPreprocessor:
             raise ValueError(f'[{DataPreprocessor.__class__.__name__}] Метаданные после предобработки пусты. Остановка.')
         
         Utils.to_json(self.metadata, self.metadata_json_path)
+    
+    def get_metadata(self):
+        if self.is_metadata_exist():
+            self.metadata = Utils.from_json(self.metadata_json_path)
+        else:
+            self.process_folder()
+        
+        return self.metadata

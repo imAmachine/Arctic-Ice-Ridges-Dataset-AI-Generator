@@ -10,7 +10,7 @@ from config.path import *
 
 from src.common import Utils
 from src.common.enums import ExecPhase
-from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
+from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor, IceRidgeDataset
 from src.dataset.strategies import RandomHoleStrategy
 from src.dataset.base import ProcessingStrategies
 from src.models.gan.architecture import CustomGenerator
@@ -64,7 +64,6 @@ def load_checkpoint(model: GAN, checkpoint_path: str) -> None:
 def parse_arguments() -> argparse.Namespace:
     """Parse and return command line arguments."""
     parser = argparse.ArgumentParser(description='GAN для сегментации ледовых торосов')
-    parser.add_argument('--preprocess', action='store_true')
     parser.add_argument('--train', type=str)
     parser.add_argument('--input_path', type=str)
     parser.add_argument('--epochs', type=int, default=1000)
@@ -82,7 +81,6 @@ def main():
     cfg = Utils.from_json(CONFIG)
     train_conf = cfg[ExecPhase.TRAIN.value]
     test_conf = cfg[ExecPhase.TEST.value]
-
     dataset_preprocessor = DataPreprocessor(
         MASKS_FOLDER_PATH, 
         PREPROCESSED_MASKS_FOLDER_PATH, 
@@ -90,10 +88,8 @@ def main():
         PREPROCESSORS
     )
     
-    if args.preprocess:
-        print('Препроцессинг данных...')
-        dataset_preprocessor.process_folder()
-
+    dataset_metadata = dataset_preprocessor.get_metadata()
+    
     # Training
     if args.train:
         config = train_conf[args.train]
@@ -112,26 +108,29 @@ def main():
                 processing_strats=processing_strats
             )
             transforms = tf2.Compose(CustomGenerator.get_transforms(config['target_image_size']))
-
+            
         if args.load_weights:
             checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
             load_checkpoint(model, checkpoint_path)
         
+
         ds_creator = DatasetCreator(
-            input_preprocessor=dataset_preprocessor,
-            masking_processor=masking_processor,
-            model_transforms=transforms,
-            augs_per_img=args.augs
+            metadata=dataset_metadata,
+            mask_processor=masking_processor,
+            transforms=transforms,
+            augs_per_img=args.augs,
+            shuffle=True,
+            batch_size=args.batch_size,
+            workers=4,
         )
         
         trainer = Trainer(
             device=DEVICE,
             model=model,
-            dataset=ds_creator,
+            dataloaders=ds_creator.create_loaders(val_ratio=0.2),
             output_path=WEIGHTS_PATH,
             epochs=args.epochs,
-            batch_size=args.batch_size,
-            val_ratio=args.val_rat
+            checkpoints_ratio=5
         )
         trainer.run()
     
