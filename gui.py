@@ -1,13 +1,3 @@
-import tkinter as tk
-from tkinter import filedialog, messagebox
-from PIL import Image, ImageTk
-import os
-import cv2
-import torch
-from datetime import datetime
-
-from src.dataset.dataset import InferenceMaskingProcessor
-from src.dataset.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 
 # 
 # ЖЕСКА ДОРАБОТАТЬ!!!!!!

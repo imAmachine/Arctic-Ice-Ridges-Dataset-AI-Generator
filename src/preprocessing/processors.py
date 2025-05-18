@@ -1,31 +1,16 @@
 import cv2
 import numpy as np
 import torch
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type
 
-class IProcessor(ABC):
-    """Интерфейс процессора изображения."""
-
-    dependencies: List[Type["IProcessor"]] = []
-
-    def __init__(self, name: str = None):
-        self.name = name or self.__class__.__name__
-
-    @abstractmethod
-    def process(self, image: Any, metadata: Dict[str, Any]) -> Any:
-        pass
-
-    def get_metadata_value(self) -> str:
-        return "True"
+from src.preprocessing.base import Processor
 
 
-class Crop(IProcessor):
+class Crop(Processor):
     def __init__(self, k: float = 1.0):
         super().__init__()
         self.k = k
 
-    def process(self, image: np.ndarray, metadata: Dict[str, Any]) -> np.ndarray:
+    def process(self, image: np.ndarray) -> np.ndarray:
         mask = image > 0
         if not mask.any():
             return image
@@ -43,8 +28,8 @@ class Crop(IProcessor):
         return image[rows[0]:rows[-1]+1, cols[0]:cols[-1]+1]
 
 
-class AdjustToContent(IProcessor):
-    def process(self, image: np.ndarray, metadata: Dict[str, Any]) -> np.ndarray:
+class AdjustToContent(Processor):
+    def process(self, image: np.ndarray) -> np.ndarray:
         coords = np.argwhere(image > 0)
         if coords.size == 0:
             return image
@@ -54,12 +39,12 @@ class AdjustToContent(IProcessor):
         return image[y_min:y_max, x_min:x_max]
 
 
-class RotateMask(IProcessor):
+class RotateMask(Processor):
     def __init__(self):
         super().__init__()
         self._angle = 0.0
 
-    def process(self, image: np.ndarray, metadata: Dict[str, Any]) -> np.ndarray:
+    def process(self, image: np.ndarray) -> np.ndarray:
         ys, xs = np.where(image > 0)
         if len(xs) < 2:
             self._angle = 0.0
@@ -85,11 +70,11 @@ class RotateMask(IProcessor):
         return str(round(self._angle, 2))
 
 
-class TensorConverter(IProcessor):
+class TensorConverter(Processor):
     def __init__(self, device: str = "cpu"):
         super().__init__()
         self.device = device
 
-    def process(self, image: np.ndarray, metadata: Dict[str, Any]) -> torch.Tensor:
+    def process(self, image: np.ndarray) -> torch.Tensor:
         tensor = torch.from_numpy(image).float().to(self.device)
         return tensor.unsqueeze(0) if tensor.ndim == 2 else tensor

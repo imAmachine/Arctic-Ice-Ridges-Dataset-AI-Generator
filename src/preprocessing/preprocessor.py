@@ -3,24 +3,24 @@ from typing import Any, Dict, List
 from cv2 import imwrite, IMREAD_GRAYSCALE
 import numpy as np
 
-from src.preprocessing.processors import IProcessor
 from src.common.utils import Utils
+from src.preprocessing.base import Processor
 
 
-class IceRidgeDatasetPreprocessor:
-    def __init__(self, input_folder_path: str, output_folder_path: str, files_extensions: List[str], processors: List[IProcessor]):
+class DataPreprocessor:
+    def __init__(self, input_folder_path: str, output_folder_path: str, files_extensions: List[str], processors: List[Processor]):
         self.metadata: Dict[str, Dict[str, Any]] = {}
         self.input_path = input_folder_path
         self.output_path = output_folder_path
         self.metadata_json_path = os.path.join(self.output_path, 'metadata.json')
         
         self.files_extensions = files_extensions
-        self.processors: List[IProcessor] = processors if processors else []
+        self.processors: List[Processor] = processors if processors else []
 
-    def add_processor(self, processor: IProcessor) -> None:
+    def add_processor(self, processor: Processor) -> None:
         self.processors.append(processor)
 
-    def add_processors(self, processors: List[IProcessor]) -> None:
+    def add_processors(self, processors: List[Processor]) -> None:
         self.processors.extend(processors)
 
     def process_image(self, image: np.ndarray, filename: str = "", file_output_path: str = "") -> np.ndarray:
@@ -81,6 +81,6 @@ class IceRidgeDatasetPreprocessor:
                 self._process_file(filename)
 
         if len(self.metadata) == 0:
-            raise ValueError(f'[{IceRidgeDatasetPreprocessor.__class__.__name__}] Метаданные после предобработки пусты. Остановка.')
+            raise ValueError(f'[{DataPreprocessor.__class__.__name__}] Метаданные после предобработки пусты. Остановка.')
         
         Utils.to_json(self.metadata, self.metadata_json_path)

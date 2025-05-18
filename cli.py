@@ -1,19 +1,24 @@
 import os
 import argparse
 
+from torch import cuda
 import torchvision.transforms.v2 as tf2
-from settings import *
 
-from src.dataset.structs import ProcessingStrategies
-from src.dataset.mask_strats import RandomHoleStrategy
-from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
-from src.models.gan.gan_evaluators import *
-from src.models.train import GAN, Trainer
-from src.models.gan.gan_arch import WGanGenerator
-from src.common.utils import Utils
+from config.default import DEFAULT_TEST_CONF, DEFAULT_TRAIN_CONF
+from config.preprocess import MASKS_FILE_EXTENSIONS, PREPROCESSORS
+from config.path import *
+
+from src.common import Utils
 from src.common.enums import ExecPhase
-from src.dataset.dataset import DatasetCreator, DatasetMaskingProcessor
-from src.models.tester import ParamGridTester
+from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
+from src.dataset.strategies import RandomHoleStrategy
+from src.dataset.structs import ProcessingStrategies
+from src.models.gan.architecture import CustomGenerator
+from src.models.models import GAN
+from src.models.train import Trainer
+from src.preprocessing.preprocessor import DataPreprocessor
+
+DEVICE = 'cuda' if cuda.is_available() else 'cpu'
 
 
 def validate_or_reset_section(config: dict, section: str, defaults: dict) -> None:
@@ -23,7 +28,6 @@ def validate_or_reset_section(config: dict, section: str, defaults: dict) -> Non
         ans = input(f"Конфигурация '{section}' некорректна. Перезаписать стандартными значениями? (Y/N): ")
         if ans.strip().upper() == 'Y':
             config[section] = defaults
-
 
 def init_config():
     default_test_conf = {
@@ -49,7 +53,6 @@ def init_config():
     validate_or_reset_section(cfg, ExecPhase.TEST.value, default_test_conf)
     Utils.to_json(cfg, CONFIG)
     
-
 def load_checkpoint(model: GAN, checkpoint_path: str) -> None:
     """Load model weights from checkpoint if exists."""
     if os.path.exists(checkpoint_path):
@@ -78,9 +81,9 @@ def main():
     init_config()
     cfg = Utils.from_json(CONFIG)
     train_conf = cfg[ExecPhase.TRAIN.value]
-    test_conf = cfg[ExecPhase.TEST]
+    test_conf = cfg[ExecPhase.TEST.value]
 
-    dataset_preprocessor = IceRidgeDatasetPreprocessor(
+    dataset_preprocessor = DataPreprocessor(
         MASKS_FOLDER_PATH, 
         PREPROCESSED_MASKS_FOLDER_PATH, 
         MASKS_FILE_EXTENSIONS, 
@@ -108,7 +111,7 @@ def main():
                 mask_params=config['mask_params'],
                 processing_strats=processing_strats
             )
-            transforms = tf2.Compose(WGanGenerator.get_train_transforms(config['target_image_size']))
+            transforms = tf2.Compose(CustomGenerator.get_transforms(config['target_image_size']))
 
         if args.load_weights:
             checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
@@ -159,15 +162,15 @@ def main():
             mask_params=test_conf['mask_params'],
             processing_strats=processing_strats
         )
-        transforms = tf2.Compose(WGanGenerator.get_train_transforms(test_conf['target_image_size']))
+        transforms = tf2.Compose(CustomGenerator.get_transforms(test_conf['target_image_size']))
         
-        tester = ParamGridTester(
-            param_grid_config=config,
-            trainer=trainer,
-            output_folder_path=WEIGHTS_PATH,
-            seed=42,
-        )
-        tester.run_grid_tests()
+        # tester = ParamGridTester(
+        #     param_grid_config=config,
+        #     trainer=trainer,
+        #     output_folder_path=WEIGHTS_PATH,
+        #     seed=42,
+        # )
+        # tester.run_grid_tests()
 
 if __name__ == '__main__':
     main()

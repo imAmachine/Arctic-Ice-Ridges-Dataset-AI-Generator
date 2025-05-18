@@ -12,7 +12,7 @@ import numpy as np
 
 from src.dataset.structs import MaskRegion, ProcessingStrategies
 from src.common.enums import ExecPhase
-from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
+from src.preprocessing.preprocessor import DataPreprocessor
 from src.common.utils import Utils
 
 
@@ -112,7 +112,7 @@ class IceRidgeDataset(Dataset):
 class DatasetCreator:
     def __init__(
             self,
-            input_preprocessor: IceRidgeDatasetPreprocessor,
+            input_preprocessor: DataPreprocessor,
             masking_processor: DatasetMaskingProcessor,
             model_transforms: 'torchvision.transforms.Compose', 
             augs_per_img: int = 1, 

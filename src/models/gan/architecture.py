@@ -1,8 +1,9 @@
-import random
 from typing import List
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2 as T
+
+from src.models.gan.custom_transforms import OneOf, RandomRotate
 
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, use_batchnorm=True):
@@ -66,9 +67,9 @@ class UpConvBlock(nn.Module):
         x = self.conv(x)
         return self.se(x)
 
-class WGanGenerator(nn.Module):
+class CustomGenerator(nn.Module):
     def __init__(self, input_channels=1, feature_maps=64):
-        super(WGanGenerator, self).__init__()
+        super(CustomGenerator, self).__init__()
 
         self.enc1 = ConvBlock(input_channels, feature_maps, use_batchnorm=False)
         self.enc2 = ConvBlock(feature_maps, feature_maps * 2)
@@ -110,7 +111,7 @@ class WGanGenerator(nn.Module):
         return output
     
     @staticmethod
-    def get_train_transforms(target_img_size) -> List[T.Transform]:
+    def get_transforms(target_img_size) -> List[T.Transform]:
         max_crop = 1024
         return [
             T.ToImage(),
@@ -126,9 +127,9 @@ class WGanGenerator(nn.Module):
         ]
 
 
-class WGanCritic(nn.Module):
+class CustomDiscriminator(nn.Module):
     def __init__(self, input_channels=1, feature_maps=64):
-        super(WGanCritic, self).__init__()
+        super(CustomDiscriminator, self).__init__()
         
         def conv_block(in_ch, out_ch, kernel_size=4, stride=2, padding=1, use_in=False):
             layers = [nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, bias=True)]
@@ -148,29 +149,3 @@ class WGanCritic(nn.Module):
     def forward(self, x):
         out = self.net(x)
         return out
-
-
-class OneOf(torch.nn.Module):
-    def __init__(self, transforms, p=1.0):
-        super().__init__()
-        self.transforms = transforms
-        self.p = p
-
-    def forward(self, x):
-        if random.random() < self.p:
-            t = random.choice(self.transforms)
-            return t(x)
-        return x
-
- 
-class RandomRotate(torch.nn.Module):
-    def __init__(self, angles=(90, 180, 270), p=0.8):
-        super().__init__()
-        self.angles = angles
-        self.p = p
-
-    def forward(self, x):
-        if random.random() < self.p:
-            angle = random.choice(self.angles)
-            return T.functional.rotate(x, angle)
-        return x

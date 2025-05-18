@@ -1,17 +1,17 @@
-import os
-
-from torch import Tensor
-from src.models.evaluating import EvalProcessor, Evaluator
-from src.models.gan.gan_evaluators import *
-from src.common.enums import *
-from typing import Dict, List, Optional
-from matplotlib import pyplot as plt
-import pandas as pd
+from dataclasses import field
 from abc import ABC, abstractmethod
 from tabulate import tabulate
 
+import pandas as pd
+from torch import Tensor
+from typing import Dict, List, Optional
+
+from src.common.enums import *
+from src.models.checkpoint import CheckpointManager
+from src.models.gan.evaluators import *
+
 @dataclass
-class ArchModule:
+class Architecture:
     model_type: ModelType
     arch: 'torch.nn.Module'
     optimizer: 'torch.optim.Optimizer'
@@ -20,9 +20,24 @@ class ArchModule:
     eval_settings: Dict
 
 
+@dataclass
+class Evaluator:
+    """Датакласс для метрики или лосса и нужной логикой """
+    callable_fn: Callable
+    name: str
+    type: str
+    weight: float = field(default=1.0)
+    exec_phase: str = ExecPhase.ANY.value
+    
+    def __call__(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> 'torch.Tensor':   
+        if self.weight <= 0.0:
+            return torch.tensor(0.0, device=generated_sample.device)
+        return self.callable_fn(generated_sample, real_sample) * self.weight
+
+
 class ModuleTrainer:
     """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
-    def __init__(self,device: torch.device, module: 'ArchModule'):
+    def __init__(self,device: torch.device, module: 'Architecture'):
         self.module = module
         self.evaluate_processor = EvalProcessor(device=device, evaluators=self.__build_evaluators())
     
@@ -49,6 +64,60 @@ class ModuleTrainer:
                                           real_sample=real_sample,
                                           history_key=ExecPhase.VALID)
         return loss_tensor.item()
+
+
+class EvalProcessor:
+    """Нужен для подсчёта метрик и лоссов внутри ModuleTrainer"""
+    def __init__(self, device: torch.device, evaluators: List[Evaluator] = []):
+        self.device = device
+        self.evaluators = evaluators
+        self.evaluators_history: Dict[ExecPhase, List] = {
+            ExecPhase.TRAIN: [], ExecPhase.VALID: []
+        }
+
+    def _update_history(self, eval_type: str, phase: ExecPhase, name: str, value: 'torch.Tensor') -> None:
+        current_history = self.evaluators_history[phase][-1]
+        current_history[eval_type].update({name: value})
+
+    def process(self, generated_sample, real_sample, exec_phase: str) -> None:
+        evaluators_types = [member.value for member in EvaluatorType]
+        self.evaluators_history[exec_phase].append({e_type: {} for e_type in evaluators_types})
+        
+        for item in self.evaluators:
+            phase_value = exec_phase.value
+            if item.exec_phase == ExecPhase.ANY.value or item.exec_phase == phase_value:
+                weighted_tensor = item(generated_sample, real_sample)
+                self._update_history(item.type, exec_phase, item.name, weighted_tensor)
+
+    def reset_history(self):
+        self.evaluators_history = {ExecPhase.TRAIN: [], ExecPhase.VALID: []}
+    
+    def compute_epoch_summary(self) -> Dict[ExecPhase, Dict[str, Dict[str, float]]]:
+        full_result = {}
+
+        for phase, phase_history in self.evaluators_history.items():
+            if not phase_history:
+                full_result[phase] = {}
+                continue
+
+            summary = {}
+
+            for step_result in phase_history:
+                for eval_type, metrics in step_result.items():
+                    for name, val in metrics.items():
+                        summary.setdefault(eval_type, {}).setdefault(name, []).append(val.clone().detach())
+
+            averaged = {
+                eval_type: {
+                    name: torch.stack(values).mean().item()
+                    for name, values in metrics.items()
+                }
+                for eval_type, metrics in summary.items()
+            }
+
+            full_result[phase] = averaged
+
+        return full_result
 
 
 class EvaluatorsCollector:
@@ -115,68 +184,7 @@ class EvaluatorsCollector:
             mgr.evaluate_processor.reset_history()
 
 
-class Visualizer:
-    """Handles saving grids of input, generated, and target samples."""
-    def __init__(self, output_path: str):
-        self.output_path = output_path
-        os.makedirs(self.output_path, exist_ok=True)
-
-    def save(self, inp: Tensor, target: Tensor, gen: Tensor, phase: ExecPhase, samples: int = 3) -> None:
-        cols = min(samples, inp.size(0), 5)
-        plt.figure(figsize=(12, 12), dpi=300)
-        for row_idx, batch in enumerate((inp, gen, target)):
-            for col_idx in range(cols):
-                img = batch[col_idx].cpu().squeeze()
-                ax = plt.subplot(3, cols, row_idx * cols + col_idx + 1)
-                ax.imshow(img.cpu().numpy(), cmap='gray', vmin=0, vmax=1)
-                ax.set_title(f"{['Input', 'Gen', 'Target'][row_idx]} {col_idx+1}")
-                ax.axis('off')
-        plt.suptitle(f"Phase: {phase.value}", y=1.02)
-        plt.tight_layout(pad=3)
-        path = os.path.join(self.output_path, f"{phase.value}.png")
-        plt.savefig(path)
-        plt.close()
-
-
-class CheckpointManager:
-    """Сlass for saving and loading a model."""
-    def __init__(self, model: 'BaseModel', checkpoint_map: dict):
-        self.model = model
-        self.checkpoint_map = checkpoint_map
-
-    def _traverse_path(self, path: tuple):
-        """Рекурсивно проходит по пути из кортежа"""
-        obj = self.model
-        for item in path:
-            if isinstance(obj, dict):
-                obj = obj.get(item)
-            else:
-                obj = getattr(obj, item, None)
-            if obj is None:
-                raise ValueError(f"Invalid checkpoint path: {path}")
-        return obj
-
-    def save(self, path: str):
-        checkpoint = {}
-        for role, components in self.checkpoint_map.items():
-            checkpoint[role] = {}
-            for name, attr_path in components.items():
-                obj = self._traverse_path(attr_path)
-                checkpoint[role][name] = obj.state_dict()
-        
-        torch.save(checkpoint, path)
-        print(f"Checkpoint saved to {path}")
-
-    def load(self, path: str):
-        checkpoint = torch.load(path, map_location=self.model.device, weights_only=False)
-        for role, components in self.checkpoint_map.items():
-            for name, attr_path in components.items():
-                obj = self._traverse_path(attr_path)
-                obj.load_state_dict(checkpoint[role][name])
-        print(f"Checkpoint loaded from {path}")
-
-
-class BaseModel(ABC):
+class GenerativeModel(ABC):
     """Abstract base for generative models: defines training/validation steps."""
     def __init__(self, device: torch.device, checkpoint_map: Dict):
         self.device = device
@@ -193,7 +201,7 @@ class BaseModel(ABC):
         pass
     
     @abstractmethod
-    def _init_modules(self, config_section: dict) -> List[ArchModule]:
+    def _init_modules(self, config_section: dict) -> List[Architecture]:
         pass
     
     def model_step(self, inp: Tensor, target: Tensor, phase: ExecPhase):
