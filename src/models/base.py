@@ -1,10 +1,11 @@
 from dataclasses import field
 from abc import ABC, abstractmethod
+import os
 from tabulate import tabulate
 
 import pandas as pd
 from torch import Tensor
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from src.common.enums import *
 from src.models.checkpoint import CheckpointManager
@@ -123,63 +124,88 @@ class EvalProcessor:
 class EvaluatorsCollector:
     def __init__(self, managers: Dict[ModelType, ModuleTrainer]):
         self.managers = managers
-        self.history_epochs: List[Dict[ExecPhase, Dict[ModelType, Dict[str, Dict[str, float]]]]] = []
+        self.history: List[Dict[ExecPhase, Dict[ModelType, Dict[str, Dict[str, float]]]]] = []
 
-    def collect_epoch_summary(self) -> None:
-        summary = self.__summary_from_managers()
-        self.history_epochs.append(summary)
-        self.__reset_managers()
+    def collect(self) -> None:
+        """Собирает сводку по эпохе и сбрасывает историю в менеджерах."""
+        self.history.append(self._snapshot())
+        self._reset()
 
-    def summary_df(self, epoch_id: int) -> pd.DataFrame:
-        if epoch_id < 0 or epoch_id >= len(self.history_epochs):
-            return pd.DataFrame(columns=["Phase", "Model", "Evaluator Type", "Name", "Value"])
+    def summary_df(self, epoch: int) -> pd.DataFrame:
+        """Возвращает детальный DataFrame для заданной эпохи."""
+        if not (0 <= epoch < len(self.history)):
+            return pd.DataFrame(columns=[
+                "Phase", "Model", "Evaluator Type", "Name", "Value"
+            ])
 
-        epoch_summary = self.history_epochs[epoch_id]
-        rows = []
-        for ph, models_evaluators in epoch_summary.items():
-            for model_type, eval_groups in models_evaluators.items():
-                for eval_type, evaluators in eval_groups.items():
-                    for name, value in evaluators.items():
-                        rows.append({
-                            "Phase": ph.name,
-                            "Model": model_type.value,
-                            "Evaluator Type": eval_type,
-                            "Name": name,
-                            "Value": value
-                        })
-
-        df = pd.DataFrame(rows)
-        df = df.fillna("—")
+        records = [
+            {
+                "Phase": phase.name,
+                "Model": mt.value,
+                "Evaluator Type": etype,
+                "Name": name,
+                "Value": val
+            }
+            for phase, models in self.history[epoch].items()
+            for mt, groups in models.items()
+            for etype, items in groups.items()
+            for name, val in items.items()
+        ]
+        df = pd.DataFrame(records).fillna("—")
         return df.set_index(["Phase", "Model", "Evaluator Type", "Name"]).sort_index()
 
-    def print_summary(self, epoch_id: Optional[int] = None) -> None:
-        if epoch_id is None:
-            epoch_id = len(self.history_epochs) - 1
+    def print(self, epoch: Optional[int] = None) -> None:
+        """Печатает сводку по эпохе в табличном виде."""
+        idx = epoch if epoch is not None else len(self.history) - 1
+        df = self.summary_df(idx).reset_index()
+        for phase, sub in df.groupby("Phase"):
+            print(f"[{phase}] ОЦЕНКА, эпоха: {idx + 1}")
+            print(tabulate(
+                sub[["Model", "Evaluator Type", "Name", "Value"]],
+                headers="keys", tablefmt="fancy_grid", floatfmt=".4f"
+            ))
 
-        df = self.summary_df(epoch_id).reset_index()
+    def save_summary(self, output_path: Optional[str] = None, epoch: Optional[int] = None) -> None:        
+        # 1) Проверяем, что история не пуста
+        if not self.history:
+            raise RuntimeError("Нечего сохранять: вызовите collect() до save_summary().")
 
-        for phase_name in df["Phase"].unique():
-            phase_df = df[df["Phase"] == phase_name]
-            print(f"\[{phase_name}] ОЦЕНКА, эпоха: {epoch_id + 1}")
-            display_df = phase_df[["Model", "Evaluator Type", "Name", "Value"]]
-            print(tabulate(display_df, headers="keys", tablefmt="fancy_grid", floatfmt=".4f"))
+        idx = len(self.history) - 1 if epoch is None else epoch
+        if not (0 <= idx < len(self.history)):
+            raise IndexError(f"Epoch {idx} отсутствует в истории (0..{len(self.history)-1}).")
+
+        # 2) Берём все метрики в виде DataFrame
+        df = self.summary_df(idx).reset_index()
+        if df.empty:
+            raise RuntimeError(f"Epoch {idx+1} содержит 0 метрик — нечего сохранять.")
+
+        # 4) Собираем итоговую “горизонтальную” запись
+        row: Dict[str, Any] = {}
+        for _, r in df.iterrows():
+            col = f"{r['Phase']}.{r['Model']}.{r['Evaluator Type']}.{r['Name']}"
+            row[col] = r["Value"]
+
+        # 6) Пишем в CSV
+        row_df = pd.DataFrame([row])
+        write_header = not os.path.exists(output_path) or os.path.getsize(output_path) == 0
+        row_df.to_csv(output_path, mode="a", header=write_header, index=False)
 
     def reset_history(self) -> None:
-        self.history_epochs.clear()
+        """Очищает всю накопленную историю."""
+        self.history.clear()
 
-    def __summary_from_managers(self) -> Dict[ExecPhase, Dict[ModelType, Dict[str, Dict[str, float]]]]:
-        result: Dict[ExecPhase, Dict[ModelType, Dict[str, Dict[str, float]]]] = {}
-        for phase in [ExecPhase.TRAIN, ExecPhase.VALID]:
-            phase_summary: Dict[ModelType, Dict[str, Dict[str, float]]] = {}
-            for model_type, mgr in self.managers.items():
-                full_summary = mgr.evaluate_processor.compute_epoch_summary()
-                
-                evaluators_for_phase = full_summary.get(phase, {})
-                phase_summary[model_type] = evaluators_for_phase
-            result[phase] = phase_summary
-        return result
-    
-    def __reset_managers(self) -> None:
+    def _snapshot(self) -> Dict:
+        """Забирает из менеджеров текущие summary-а по фазам."""
+        return {
+            phase: {
+                mt: mgr.evaluate_processor.compute_epoch_summary().get(phase, {})
+                for mt, mgr in self.managers.items()
+            }
+            for phase in (ExecPhase.TRAIN, ExecPhase.VALID)
+        }
+
+    def _reset(self) -> None:
+        """Сбрасывает историю evaluators в менеджерах."""
         for mgr in self.managers.values():
             mgr.evaluate_processor.reset_history()
 
@@ -189,7 +215,7 @@ class GenerativeModel(ABC):
     def __init__(self, device: torch.device, checkpoint_map: Dict):
         self.device = device
         self.checkpoint_manager = CheckpointManager(self, checkpoint_map)
-        self.evaluators = None
+        self.evaluators_collector = None
         self.trainers = None
     
     @abstractmethod
@@ -211,10 +237,10 @@ class GenerativeModel(ABC):
             self._valid_step(inp, target)
     
     def collect_epoch_evaluators(self):
-        self.evaluators.collect_epoch_summary()
+        self.evaluators_collector.collect()
     
     def print_epoch_evaluators(self, epoch_id):
-        self.evaluators.print_summary(epoch_id)
+        self.evaluators_collector.print(epoch_id)
     
     def build(self, config_section: dict) -> None:
         modules = self._init_modules(config_section)
@@ -224,12 +250,15 @@ class GenerativeModel(ABC):
             for module in modules
         }
         
-        self.evaluators = EvaluatorsCollector(self.trainers)
+        self.evaluators_collector = EvaluatorsCollector(self.trainers)
     
-    def save(self, path: str) -> None:
+    def evaluators_save(self, output_path, epoch_id=None):
+        self.evaluators_collector.save_summary(output_path, epoch_id)
+    
+    def checkpoint_save(self, path: str) -> None:
         self.checkpoint_manager.save(path)
 
-    def load(self, path: str) -> None:
+    def checkpoint_load(self, path: str) -> None:
         self.checkpoint_manager.load(path)
 
     def __call__(self, inp: Tensor) -> Tensor:

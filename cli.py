@@ -58,7 +58,7 @@ def load_checkpoint(model: GAN, checkpoint_path: str) -> None:
     """Load model weights from checkpoint if exists."""
     if os.path.exists(checkpoint_path):
         print(f"Загрузка весов из {checkpoint_path}")
-        model.load(checkpoint_path)
+        model.checkpoint_load(checkpoint_path)
     else:
         print(f"Файл чекпоинта {checkpoint_path} не найден. Обучение с нуля.")
 

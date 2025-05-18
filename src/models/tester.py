@@ -1,37 +1,69 @@
+import itertools
 import os
 import random
 import numpy as np
 import torch
 
 from config.path import *
-from typing import Dict
+from typing import Dict, List
 
 from src.common.utils import Utils
 from src.dataset.loader import DatasetCreator
-from src.models.csv_saver import TestResultSaver
 from src.models.train import Trainer
-from src.models.param_combination import ParamGridCombination
-        
+
+
+class ParamGridCombination:
+    def __init__(self, grid_config: Dict):
+        self.grid_config = grid_config
+
+    def generate_combination(self) -> List[Dict]:
+        flat_params = self._flatten("", self.grid_config)
+        keys, values = zip(*flat_params.items())
+        combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
+        return [self._unflatten(combo) for combo in combinations]
+
+    def _flatten(self, prefix: str, params: Dict) -> Dict[str, List]:
+        flat = {}
+        for name, value in params.items():
+            full_key = f"{prefix}.{name}" if prefix else name
+            if isinstance(value, dict):
+                flat.update(self._flatten(full_key, value))
+            else:
+                flat[full_key] = value if isinstance(value, list) else [value]
+        return flat
+
+    def _unflatten(self, flat: Dict) -> Dict:
+        nested = {}
+        for compound_key, value in flat.items():
+            keys = compound_key.split('.')
+            current_level = nested
+            for key in keys[:-1]:
+                current_level = current_level.setdefault(key, {})
+            current_level[keys[-1]] = value
+        return nested
+
+
 class ParamGridTester:
     def __init__(self, param_grid_config: Dict, trainer: Trainer, dataset: DatasetCreator, output_folder_path: str, seed: int = 42):
-        self.output_folder_path = os.path.join(output_folder_path, 'test')
-
         self.trainer = trainer
         self.dataset = dataset
-        self.result_logger = TestResultSaver(os.path.join(self.output_folder_path, 'results.csv'))
         self.param_generator = ParamGridCombination(param_grid_config)
         self.param_combinations = self.param_generator.generate_combination()
 
         self._fix_seed(seed)
+        self.output_folder_path = os.path.join(output_folder_path, 'tests')
 
     def run(self):
         for i, params in enumerate(self.param_combinations):
-            print(f"\n=== [{i+1}/{len(self.param_combinations)}] ===\nParams: {params}")
+            print(f"\n=== [{i+1}/{len(self.param_combinations)}] ===  ТЕСТИРОВАНИЕ")
             folder = self._create_output_path(i)
+            result_path = os.path.join(self.output_folder_path, 'results.csv')
+            
             self._reinitialize_components(params, folder)
             self._create_config_json(params, folder)
             self.trainer.run()
-            self.result_logger.save(folder, params, self.trainer)
+            
+            self.trainer.model.evaluators_save(result_path)
 
     def _create_config_json(self, params, folder_path):
         Utils.to_json(data=params, path=os.path.join(folder_path, "config.json"))

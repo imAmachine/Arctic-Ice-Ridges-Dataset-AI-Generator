@@ -66,4 +66,4 @@ class Trainer:
                 self.visualizer.save(inp, target, gen, phase)
             
             if (epoch_id + 1) % self.checkpoints_ratio == 0:
-                self.model.save(os.path.join(self.weight_path, 'training_checkpoint.pt'))
+                self.model.checkpoint_save(os.path.join(self.weight_path, 'training_checkpoint.pt'))
