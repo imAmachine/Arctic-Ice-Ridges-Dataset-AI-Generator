@@ -93,17 +93,16 @@ def main():
     # Training
     if args.train:
         config = train_conf[args.train]
-        modules = None
         model = None
         masking_processor = None
         transforms = None
         
         print(f"Обучение модели {args.train} на {args.epochs} эпохах...")
         if args.train=='gan':
-            modules = GAN.build_modules(config)
-            model = GAN(DEVICE, modules, n_critic=5)
-            processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
+            model = GAN(DEVICE, n_critic=5)
+            model.build(config)
             
+            processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
             masking_processor = DatasetMaskingProcessor(
                 mask_params=config['mask_params'],
                 processing_strats=processing_strats

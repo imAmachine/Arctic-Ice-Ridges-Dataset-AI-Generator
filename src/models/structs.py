@@ -1,10 +1,12 @@
+from collections import defaultdict
+from functools import wraps
 import os
 
 from torch import Tensor
 from src.models.evaluating import EvalProcessor, Evaluator
 from src.models.gan.gan_evaluators import *
 from src.common.enums import *
-from typing import Dict, List
+from typing import Dict, List, Optional
 from matplotlib import pyplot as plt
 import pandas as pd
 from abc import ABC, abstractmethod
@@ -22,9 +24,7 @@ class ArchModule:
 
 class ModuleTrainer:
     """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
-    def __init__(self,
-                 device: torch.device,
-                 module: 'ArchModule'):
+    def __init__(self,device: torch.device, module: 'ArchModule'):
         self.module = module
         self.evaluate_processor = EvalProcessor(device=device, evaluators=self.__build_evaluators())
     
@@ -53,28 +53,69 @@ class ModuleTrainer:
         return loss_tensor.item()
 
 
-class MetricsCollector:
-    """Aggregates and prints evaluation metrics from module trainers."""
+class EvaluatorsCollector:
     def __init__(self, managers: Dict[ModelType, ModuleTrainer]):
         self.managers = managers
+        self.history_epochs: List[Dict[ExecPhase, Dict[ModelType, Dict[str, Dict[str, float]]]]] = []
 
-    def summary(self, phase: ExecPhase) -> pd.DataFrame:
+    def collect_epoch_summary(self) -> None:
+        summary = self.__summary_from_managers()
+        self.history_epochs.append(summary)
+        self.__reset_managers()
+
+    def summary_df(self,epoch_id: int) -> pd.DataFrame:
+        if epoch_id < 0 or epoch_id >= len(self.history_epochs):
+            return pd.DataFrame(columns=["Phase", "Model", "Evaluator Type", "Name", "Value"])
+
+        epoch_summary = self.history_epochs[epoch_id]
         rows = []
-        for mtype, mgr in self.managers.items():
-            summary = mgr.evaluate_processor.compute_epoch_summary(phase)
-            for et, metrics in summary.items():
-                for name, value in metrics.items():
-                    rows.append({"Eval Type": et, "Metric": name, mtype.value: value})
+        for ph, models_evaluators in epoch_summary.items():
+            for model_type, eval_groups in models_evaluators.items():
+                for eval_type, evaluators in eval_groups.items():
+                    for name, value in evaluators.items():
+                        rows.append({
+                            "Phase": ph.name,
+                            "Model": model_type.value,
+                            "Evaluator Type": eval_type,
+                            "Name": name,
+                            "Value": value
+                        })
+
         df = pd.DataFrame(rows)
-        return df.set_index(["Eval Type", "Metric"]).sort_index()
+        df = df.fillna("—")
+        return df.set_index(["Phase", "Model", "Evaluator Type", "Name"]).sort_index()
 
-    def print(self, phase: ExecPhase) -> None:
-        df = self.summary(phase).reset_index()
-        print(tabulate(df, headers="keys", tablefmt="fancy_grid", floatfmt=".4f"))
+    def print_summary(self, epoch_id: Optional[int] = None) -> None:
+        if epoch_id is None:
+            epoch_id = len(self.history_epochs) - 1
 
-    def reset(self) -> None:
+        df = self.summary_df(epoch_id).reset_index()
+
+        for phase_name in df["Phase"].unique():
+            phase_df = df[df["Phase"] == phase_name]
+            print(f"\Evaluators for phase: {phase_name}, epoch: {epoch_id + 1}")
+            display_df = phase_df[["Model", "Evaluator Type", "Name", "Value"]]
+            print(tabulate(display_df, headers="keys", tablefmt="fancy_grid", floatfmt=".4f"))
+
+    def reset_history(self) -> None:
+        self.history_epochs.clear()
+
+    def __summary_from_managers(self) -> Dict[ExecPhase, Dict[ModelType, Dict[str, Dict[str, float]]]]:
+        result: Dict[ExecPhase, Dict[ModelType, Dict[str, Dict[str, float]]]] = {}
+        for phase in [ExecPhase.TRAIN, ExecPhase.VALID]:
+            phase_summary: Dict[ModelType, Dict[str, Dict[str, float]]] = {}
+            for model_type, mgr in self.managers.items():
+                full_summary = mgr.evaluate_processor.compute_epoch_summary()
+                
+                evaluators_for_phase = full_summary.get(phase, {})
+                phase_summary[model_type] = evaluators_for_phase
+            result[phase] = phase_summary
+        return result
+    
+    def __reset_managers(self) -> None:
         for mgr in self.managers.values():
             mgr.evaluate_processor.reset_history()
+
 
 
 class Visualizer:
@@ -140,19 +181,46 @@ class CheckpointManager:
 
 class BaseModel(ABC):
     """Abstract base for generative models: defines training/validation steps."""
-    def __init__(self, device: torch.device, modules: List[ArchModule], checkpoint_map: Dict):
-        self.trainers = {module.model_type: ModuleTrainer(device, module) for module in modules}
-        self.checkpoint_manager = CheckpointManager(self, checkpoint_map)
+    def __init__(self, device: torch.device, checkpoint_map: Dict):
         self.device = device
-
+        self.checkpoint_manager = CheckpointManager(self, checkpoint_map)
+        self.evaluators = None
+        self.trainers = None
+    
     @abstractmethod
-    def train_step(self, inp: Tensor, target: Tensor) -> None:
+    def _train_step(self, inp: Tensor, target: Tensor) -> None:
         pass
 
     @abstractmethod
-    def valid_step(self, inp: Tensor, target: Tensor) -> None:
+    def _valid_step(self, inp: Tensor, target: Tensor) -> None:
         pass
-
+    
+    @abstractmethod
+    def _init_modules(self, config_section: dict) -> List[ArchModule]:
+        pass
+    
+    def model_step(self, inp: Tensor, target: Tensor, phase: ExecPhase):
+        if phase is ExecPhase.TRAIN:
+            self._train_step(inp, target)
+        else:
+            self._valid_step(inp, target)
+    
+    def collect_epoch_evaluators(self):
+        self.evaluators.collect_epoch_summary()
+    
+    def print_evaluators(self, epoch_id):
+        self.evaluators.print_summary(epoch_id)
+    
+    def build(self, config_section: dict) -> None:
+        modules = self._init_modules(config_section)
+        
+        self.trainers = {
+            module.model_type: ModuleTrainer(self.device, module)
+            for module in modules
+        }
+        
+        self.evaluators = EvaluatorsCollector(self.trainers)
+    
     def save(self, path: str) -> None:
         self.checkpoint_manager.save(path)
 
@@ -160,5 +228,7 @@ class BaseModel(ABC):
         self.checkpoint_manager.load(path)
 
     def __call__(self, inp: Tensor) -> Tensor:
+        if self.trainers is None:
+            raise ValueError('Need to init_modules method firts')
         return self.trainers[ModelType.GENERATOR].module.arch(inp)
     

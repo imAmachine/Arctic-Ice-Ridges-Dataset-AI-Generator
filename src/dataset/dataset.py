@@ -11,7 +11,7 @@ import numpy as np
 
 
 from src.dataset.structs import MaskRegion, ProcessingStrategies
-from src.common.enums import ExecPhase as phases
+from src.common.enums import ExecPhase
 from src.preprocessing.preprocessor import IceRidgeDatasetPreprocessor
 from src.common.utils import Utils
 
@@ -106,7 +106,7 @@ class IceRidgeDataset(Dataset):
         
         print(f"{len(train_origins)} обучающих, {len(val_origins)} валидационных данных")
         
-        return {phases.TRAIN: train_metadata if len(train_origins) > 0 else None, phases.VALID: val_metadata if len(val_origins) > 0 else None}
+        return {ExecPhase.TRAIN: train_metadata if len(train_origins) > 0 else None, ExecPhase.VALID: val_metadata if len(val_origins) > 0 else None}
 
 
 class DatasetCreator:
@@ -144,7 +144,7 @@ class DatasetCreator:
             
             return loader
     
-    def get_dataloaders(self, batch_size, shuffle, workers, val_ratio=0.2) -> Dict[phases, Dict]:
+    def get_dataloaders(self, batch_size, shuffle, workers, val_ratio=0.2) -> Dict[ExecPhase, Dict]:
         # предобработка входных снимков
         dataset_metadata = defaultdict()
         
@@ -155,11 +155,14 @@ class DatasetCreator:
             dataset_metadata = Utils.from_json(self.preprocessor.metadata_json_path)
         
         splitted = IceRidgeDataset.split_dataset_legacy(dataset_metadata, val_ratio=val_ratio)
-        train_metadata, valid_metadata = splitted.get(phases.TRAIN), splitted.get(phases.VALID)
+        train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN), splitted.get(ExecPhase.VALID)
         
         print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
         
         train_loader = self.create_loader(train_metadata, batch_size, shuffle, workers)
         valid_loader = self.create_loader(valid_metadata, batch_size, shuffle, workers)
         
-        return train_loader, valid_loader
+        return {
+            ExecPhase.TRAIN: train_loader, 
+            ExecPhase.VALID: valid_loader
+        }

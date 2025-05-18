@@ -97,7 +97,7 @@ class ParamGridTester:
         return val
 
     def _get_new_trainer(self, params: Dict) -> 'Trainer':
-        modules = GAN.build_modules(params) 
+        modules = GAN._init_modules(params) 
         model = GAN(DEVICE, modules, n_critic=params["n_critic"])
 
         ds_creator = DatasetCreator(
