@@ -11,7 +11,7 @@ from src.models.gan.gan_evaluators import *
 from src.models.train import GAN, Trainer
 from src.models.gan.gan_arch import WGanGenerator
 from src.common.utils import Utils
-from src.common.enums import ExecPhase as phases
+from src.common.enums import ExecPhase
 from src.dataset.dataset import DatasetCreator, DatasetMaskingProcessor
 from src.models.tester import ParamGridTester
 
@@ -36,15 +36,17 @@ def init_config():
 
     if not os.path.exists(CONFIG):
         print('Создаем файл конфигурации по умолчанию')
-        Utils.to_json({phases.TRAIN.value: DEFAULT_TRAIN_CONF,
-                       phases.TEST.value: default_test_conf}, CONFIG)
+        Utils.to_json({
+            ExecPhase.TRAIN.value: DEFAULT_TRAIN_CONF,
+            ExecPhase.TEST.value: default_test_conf
+        }, CONFIG)
         return
+    
     cfg = Utils.from_json(CONFIG)
-
-    validate_or_reset_section(cfg, phases.TRAIN.value, DEFAULT_TRAIN_CONF)
+    validate_or_reset_section(cfg, ExecPhase.TRAIN.value, DEFAULT_TRAIN_CONF)
     
     # Валидация секции TEST с учетом дефолтных значений
-    validate_or_reset_section(cfg, phases.TEST.value, default_test_conf)
+    validate_or_reset_section(cfg, ExecPhase.TEST.value, default_test_conf)
     Utils.to_json(cfg, CONFIG)
     
 
@@ -55,7 +57,6 @@ def load_checkpoint(model: GAN, checkpoint_path: str) -> None:
         model.load(checkpoint_path)
     else:
         print(f"Файл чекпоинта {checkpoint_path} не найден. Обучение с нуля.")
-
 
 def parse_arguments() -> argparse.Namespace:
     """Parse and return command line arguments."""
@@ -71,13 +72,13 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--test', type=str)
     return parser.parse_args()
 
-
 def main():
     args = parse_arguments()
 
     init_config()
     cfg = Utils.from_json(CONFIG)
-    train_conf = cfg[phases.TRAIN.value]
+    train_conf = cfg[ExecPhase.TRAIN.value]
+    test_conf = cfg[ExecPhase.TEST]
 
     dataset_preprocessor = IceRidgeDatasetPreprocessor(
         MASKS_FOLDER_PATH, 
@@ -133,9 +134,25 @@ def main():
     
     if args.test:
         print("Запуск тестов...")
-        cfg = Utils.from_json(CONFIG)
-        test_conf = cfg[phases.TEST.value][args.test]
-
+        
+        ds_creator = DatasetCreator(
+            input_preprocessor=dataset_preprocessor,
+            masking_processor=masking_processor,
+            model_transforms=transforms,
+            augs_per_img=args.augs
+        )
+        
+        trainer = Trainer(
+            device=DEVICE,
+            model=model,
+            dataset=ds_creator,
+            output_path=WEIGHTS_PATH,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            val_ratio=args.val_rat
+        )
+        
+        config = test_conf[args.test]
         processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
             
         masking_processor = DatasetMaskingProcessor(
@@ -145,11 +162,10 @@ def main():
         transforms = tf2.Compose(WGanGenerator.get_train_transforms(test_conf['target_image_size']))
         
         tester = ParamGridTester(
-            config=test_conf,
-            output_root=os.path.join(WEIGHTS_PATH, 'grid_tests'),
-            dataset_preprocessor=dataset_preprocessor,
-            masking_processor=masking_processor,
-            transforms=transforms
+            param_grid_config=config,
+            trainer=trainer,
+            output_folder_path=WEIGHTS_PATH,
+            seed=42,
         )
         tester.run_grid_tests()
 

@@ -1,5 +1,3 @@
-from collections import defaultdict
-from functools import wraps
 import os
 
 from torch import Tensor
@@ -63,7 +61,7 @@ class EvaluatorsCollector:
         self.history_epochs.append(summary)
         self.__reset_managers()
 
-    def summary_df(self,epoch_id: int) -> pd.DataFrame:
+    def summary_df(self, epoch_id: int) -> pd.DataFrame:
         if epoch_id < 0 or epoch_id >= len(self.history_epochs):
             return pd.DataFrame(columns=["Phase", "Model", "Evaluator Type", "Name", "Value"])
 
@@ -93,7 +91,7 @@ class EvaluatorsCollector:
 
         for phase_name in df["Phase"].unique():
             phase_df = df[df["Phase"] == phase_name]
-            print(f"\Evaluators for phase: {phase_name}, epoch: {epoch_id + 1}")
+            print(f"\[{phase_name}] ОЦЕНКА, эпоха: {epoch_id + 1}")
             display_df = phase_df[["Model", "Evaluator Type", "Name", "Value"]]
             print(tabulate(display_df, headers="keys", tablefmt="fancy_grid", floatfmt=".4f"))
 
@@ -115,7 +113,6 @@ class EvaluatorsCollector:
     def __reset_managers(self) -> None:
         for mgr in self.managers.values():
             mgr.evaluate_processor.reset_history()
-
 
 
 class Visualizer:
@@ -208,7 +205,7 @@ class BaseModel(ABC):
     def collect_epoch_evaluators(self):
         self.evaluators.collect_epoch_summary()
     
-    def print_evaluators(self, epoch_id):
+    def print_epoch_evaluators(self, epoch_id):
         self.evaluators.print_summary(epoch_id)
     
     def build(self, config_section: dict) -> None:

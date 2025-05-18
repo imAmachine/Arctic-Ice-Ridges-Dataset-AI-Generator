@@ -6,7 +6,7 @@ from tqdm import tqdm
 import matplotlib
 import torch.nn as nn
 
-from src.models.structs import ArchModule, BaseModel, EvaluatorsCollector, Visualizer
+from src.models.structs import ArchModule, BaseModel, Visualizer
 from src.common.enums import ExecPhase, ModelType
 from src.dataset.dataset import DatasetCreator
 from src.models.gan.gan_evaluators import *
@@ -160,7 +160,7 @@ class Trainer:
                 self._run_epoch(phase, loader)
                 
             self.model.collect_epoch_evaluators()
-            self.model.print_evaluators(epoch_id)
+            self.model.print_epoch_evaluators(epoch_id)
             
             self._after_epoch(epoch_id)
     
