@@ -1,7 +1,7 @@
 import random
 from typing import Dict
 import numpy as np
-from src.dataset.structs import BaseProcessStrategy, MaskRegion
+from src.dataset.base import BaseProcessStrategy, MaskRegion
 
 
 class RandomHoleStrategy(BaseProcessStrategy):

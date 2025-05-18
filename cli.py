@@ -12,7 +12,7 @@ from src.common import Utils
 from src.common.enums import ExecPhase
 from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
 from src.dataset.strategies import RandomHoleStrategy
-from src.dataset.structs import ProcessingStrategies
+from src.dataset.base import ProcessingStrategies
 from src.models.gan.architecture import CustomGenerator
 from src.models.models import GAN
 from src.models.train import Trainer

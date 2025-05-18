@@ -89,7 +89,6 @@ class CustomGenerator(nn.Module):
 
         self.final = nn.Sequential(
             nn.ConvTranspose2d(feature_maps, 1, kernel_size=3, stride=1, padding=1),
-            nn.Sigmoid()
         )
 
     def forward(self, x):

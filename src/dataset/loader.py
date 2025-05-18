@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader, Dataset
 import numpy as np
 
 
-from src.dataset.structs import MaskRegion, ProcessingStrategies
+from src.dataset.base import MaskRegion, ProcessingStrategies
 from src.common.enums import ExecPhase
 from src.preprocessing.preprocessor import DataPreprocessor
 from src.common.utils import Utils

@@ -107,7 +107,7 @@ class GAN(GenerativeModel):
         """Create dictionary of evaluation metrics and losses."""
         return {
             LossName.ADVERSARIAL.value: AdversarialLoss(discriminator),
-            LossName.BCE.value: nn.BCELoss(),
+            LossName.BCE.value: nn.BCEWithLogitsLoss(),
             LossName.L1.value: nn.L1Loss(),
             LossName.WASSERSTEIN.value: WassersteinLoss(discriminator),
             LossName.GP.value: GradientPenalty(discriminator),
