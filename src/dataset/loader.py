@@ -80,11 +80,12 @@ class IceRidgeDataset(Dataset):
  
 
 class DatasetCreator:
-    def __init__(self, metadata, mask_processor, transforms, augs_per_img, shuffle, batch_size, workers):
+    def __init__(self, metadata, mask_processor, transforms, augs_per_img, valid_size_p, shuffle, batch_size, workers):
         self.metadata = metadata
         self.mask_processor = mask_processor
         self.transforms = transforms
         self.augs_per_img = augs_per_img
+        self.valid_size_p = valid_size_p
         self.shuffle = shuffle
         self.batch_size = batch_size
         self.workers = workers
@@ -109,8 +110,8 @@ class DatasetCreator:
             
         return loader
     
-    def create_loaders(self, val_ratio=0.2) -> Dict[ExecPhase, Dict]:        
-        splitted = DatasetCreator.split_dataset_legacy(self.metadata, val_ratio=val_ratio)
+    def create_loaders(self) -> Dict[ExecPhase, Dict]:        
+        splitted = DatasetCreator.split_dataset_legacy(self.metadata, valid_size_p=self.valid_size_p)
         train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN), splitted.get(ExecPhase.VALID)
         
         # print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
@@ -121,7 +122,7 @@ class DatasetCreator:
         }
 
     @staticmethod
-    def split_dataset_legacy(metadata: Dict[str, Dict], val_ratio: float) -> Dict[str, Optional[Dict[str, Dict]]]:
+    def split_dataset_legacy(metadata: Dict[str, Dict], valid_size_p: float) -> Dict[str, Optional[Dict[str, Dict]]]:
         """
         Разделяет метаданные на обучающую и валидационную выборки,
         так чтобы данные одного оригинального изображения не оказывались в обеих выборках.
@@ -135,8 +136,8 @@ class DatasetCreator:
         val_size = 0
         train_origins, val_origins = [], []
         
-        if val_ratio > 0.0:
-            val_size = max(1, int(len(unique_origins) * val_ratio))
+        if valid_size_p > 0.0:
+            val_size = max(1, int(len(unique_origins) * valid_size_p))
 
         train_origins = unique_origins[val_size:]
         val_origins = unique_origins[:val_size]

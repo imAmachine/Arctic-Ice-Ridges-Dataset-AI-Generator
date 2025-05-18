@@ -119,6 +119,7 @@ def main():
             mask_processor=masking_processor,
             transforms=transforms,
             augs_per_img=args.augs,
+            valid_size_p=0.2,
             shuffle=True,
             batch_size=args.batch_size,
             workers=4,
@@ -127,7 +128,7 @@ def main():
         trainer = Trainer(
             device=DEVICE,
             model=model,
-            dataloaders=ds_creator.create_loaders(val_ratio=0.2),
+            dataloaders=ds_creator.create_loaders(),
             output_path=WEIGHTS_PATH,
             epochs=args.epochs,
             checkpoints_ratio=5
