@@ -9,7 +9,7 @@ from config.preprocess import MASKS_FILE_EXTENSIONS, PREPROCESSORS
 from config.path import *
 
 from src.common import Utils
-from src.common.enums import ExecPhase
+from src.common.enums import ExecPhase, ModelType
 from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor, IceRidgeDataset
 from src.dataset.strategies import RandomHoleStrategy
 from src.dataset.base import ProcessingStrategies
@@ -73,6 +73,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--val_rat', type=float, default=0.2)
     parser.add_argument('--load_weights', action='store_true')
     parser.add_argument('--test', type=str)
+    parser.add_argument('--get_generator', action='store_true')
     return parser.parse_args()
 
 def main():
@@ -90,6 +91,22 @@ def main():
     )
     
     dataset_metadata = dataset_preprocessor.get_metadata()
+
+    if args.get_generator:
+        config = train_conf['gan']
+        checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
+
+        checkpoint_map = {
+            ModelType.GENERATOR: {
+                'model': ('trainers', ModelType.GENERATOR, 'module', 'arch'),
+            }
+        }
+
+        model = GAN(DEVICE, n_critic=5, checkpoint_map=checkpoint_map)
+        model.build_train_modules(config)
+
+        load_checkpoint(model, checkpoint_path)
+        model.checkpoint_save(os.path.join(WEIGHTS_PATH, 'generator.pt'))
     
     # Training
     if args.train:

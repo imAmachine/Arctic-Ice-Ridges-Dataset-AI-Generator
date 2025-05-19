@@ -11,8 +11,8 @@ from src.models.gan.evaluators import *
 
 class GAN(GenerativeModel):
     """Wasserstein GAN logic with multiple critic updates per generator update."""
-    def __init__(self, device: device, n_critic: int = 5):
-        checkpoint_map = {
+    def __init__(self, device: device, n_critic: int = 5, checkpoint_map: Dict=None):
+        checkpoint_map_final = checkpoint_map if checkpoint_map is not None else {
             ModelType.GENERATOR: {
                 'model': ('trainers', ModelType.GENERATOR, 'module', 'arch'),
                 'optimizer': ('trainers', ModelType.GENERATOR, 'module', 'optimizer'),
@@ -25,7 +25,7 @@ class GAN(GenerativeModel):
             }
         }
 
-        super().__init__(device, checkpoint_map)
+        super().__init__(device, checkpoint_map_final)
         self.n_critic = n_critic
 
     def _train_step(self, inp: Tensor, target: Tensor) -> None:
