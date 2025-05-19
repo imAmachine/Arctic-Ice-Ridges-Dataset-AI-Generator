@@ -30,7 +30,7 @@ class DataPreprocessor:
                 if dep.__name__ not in metadata:
                     raise RuntimeError(f"Processor '{processor.name}' requires '{dep.__name__}' to be applied first.")
 
-            image = processor.process(image, metadata)
+            image = processor.process(image)
             metadata[processor.name] = processor.get_metadata_value()
 
         metadata["path"] = file_output_path
@@ -56,7 +56,10 @@ class DataPreprocessor:
         self._write_processed_img(processed_image, file_output_path)
 
     def is_metadata_exist(self) -> bool:
-        metadata = Utils.from_json(self.metadata_json_path)
+        metadata = None
+
+        if os.path.exists(self.metadata_json_path):
+            metadata = Utils.from_json(self.metadata_json_path)
         
         if metadata is None:
             return False
