@@ -82,7 +82,7 @@ class ParamGridTester:
         return folder_path
     
     def _reinitialize_components(self, params: Dict, folder_path: str) -> None:
-        self.trainer.model.build(params)
+        self.trainer.model.build_train_modules(params)
 
         self.dataset.__init__(
             metadata=self.dataset.metadata,

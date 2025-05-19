@@ -101,7 +101,7 @@ def main():
         print(f"Обучение модели {args.train} на {args.epochs} эпохах...")
         if args.train=='gan':
             model = GAN(DEVICE, n_critic=5)
-            model.build(config)
+            model.build_train_modules(config)
             
             processing_strats = ProcessingStrategies([RandomHoleStrategy(strategy_name="holes")])
             masking_processor = DatasetMaskingProcessor(
@@ -132,7 +132,7 @@ def main():
             dataloaders=ds_creator.create_loaders(),
             output_path=WEIGHTS_PATH,
             epochs=args.epochs,
-            checkpoints_ratio=5
+            checkpoints_ratio=config["checkpoints_ratio"]
         )
         trainer.run()
     

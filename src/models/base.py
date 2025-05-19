@@ -242,7 +242,7 @@ class GenerativeModel(ABC):
     def print_epoch_evaluators(self, epoch_id):
         self.evaluators_collector.print(epoch_id)
     
-    def build(self, config_section: dict) -> None:
+    def build_train_modules(self, config_section: dict) -> None:
         modules = self._init_modules(config_section)
         
         self.trainers = {

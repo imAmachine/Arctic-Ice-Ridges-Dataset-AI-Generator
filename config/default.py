@@ -7,6 +7,7 @@ DEFAULT_TRAIN_CONF = {
         "target_image_size": 256,
         "model_base_features": 64,
         "n_critic": 5,
+        "checkpoints_ratio": 25,
         "evaluators_info": {
             ModelType.GENERATOR.value: {
                 LossName.ADVERSARIAL.value: {
