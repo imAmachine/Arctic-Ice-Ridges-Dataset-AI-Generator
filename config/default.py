@@ -1,6 +1,6 @@
 from src.preprocessing.processors import *
 from src.common.enums import *
-
+from src.dataset.strategies import *
 
 DEFAULT_TRAIN_CONF = {
     "gan": {
@@ -57,14 +57,14 @@ DEFAULT_TRAIN_CONF = {
             "mode": "max",
             "lr": 0.0005
         },
-        "mask_params": {
-            "padding": 0.15,
-            "processors": {
-                "holes": {
-                    "count": 1,
-                    "min_size": 30,
-                    "max_size": 50
-                }
+        "mask_processors": {
+            Padding.__name__: {
+                "ratio": 0.2,
+            },
+            RandomHoles.__name__: {
+                "count": 1,
+                "min_sz": 30,
+                "max_sz": 50
             }
         }
     },

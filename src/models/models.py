@@ -49,13 +49,13 @@ class GAN(GenerativeModel):
     def _init_modules(self, config_section: dict) -> List[Architecture]:
         """Construct ArchModule list for GAN model."""
         gen = CustomGenerator(
-            input_channels=1,
-            feature_maps=config_section['model_base_features']
+            in_ch=1,
+            f_base=config_section['model_base_features']
         ).to(self.device)
         
         disc = CustomDiscriminator(
-            input_channels=1,
-            feature_maps=config_section['model_base_features']
+            in_ch=1,
+            f_base=config_section['model_base_features']
         ).to(self.device)
         
         g_optimizer = GAN._create_optimizer(gen.parameters(), config_section['optimization_params']['lr'], betas=(0.0, 0.9))

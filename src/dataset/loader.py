@@ -9,37 +9,24 @@ import torchvision
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
 
-
-from src.dataset.base import MaskRegion, ProcessingStrategies
 from src.common.enums import ExecPhase
-from src.preprocessing.preprocessor import DataPreprocessor
+from src.dataset.base import BaseProcessStrategy
 from src.common.utils import Utils
 
 
 class DatasetMaskingProcessor:
-    def __init__(self, mask_params: Dict, processing_strats: ProcessingStrategies):
-        self.mask_params = mask_params
-        self.processing_strats = processing_strats
-    
-    def _create_mask_region(self, height: int, width: int, device, dtype) -> MaskRegion:
-        bh = int(height * (1 - self.mask_params['padding']))
-        bw = int(width  * (1 - self.mask_params['padding']))
-        top  = (height - bh) // 2
-        left = (width  - bw) // 2
+    def __init__(self, processors: List[BaseProcessStrategy]):
+        self.processors = processors
 
-        mask = np.ones((height, width), device=device, dtype=dtype)
-        mask[top:top + bh, left:left + bw] = 0.0
+    def process(self, image: torch.Tensor) -> torch.Tensor:
+        img = image.clone()
+        _, h, w = img.shape
 
-        return MaskRegion(mask, top, left, bh, bw)
-    
-    def process(self, image: np.ndarray) -> torch.Tensor:
-        processed_img = image.copy()
-        _, h, w = processed_img.shape
-        
-        region = self._create_mask_region(h, w, device=image.device, dtype=image.dtype)
-        self.processing_strats.apply_all(region, self.mask_params['processors'])
-        
-        return processed_img * (1 - region.mask)    
+        mask = torch.zeros((h, w), dtype=torch.float32, device=img.device)
+        for proc in self.processors:
+            mask = proc(mask)
+
+        return img * (1 - mask)
 
 
 class IceRidgeDataset(Dataset):
@@ -57,7 +44,7 @@ class IceRidgeDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_keys) * self.augmentations_per_image
     
-    def __getitem__(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor]:
         img_idx = (idx // self.augmentations_per_image)
         key = self.image_keys[img_idx]
         orig_path = self.metadata[key]['path']
@@ -65,18 +52,14 @@ class IceRidgeDataset(Dataset):
         
         return self._get_processed_batch(orig_img)
     
-    def _process_img(self, img: np.ndarray) -> 'List[np.ndarray]':
-        transformed_trg = self.model_transforms(img).numpy()
+    def _process_img(self, img: torch.Tensor) -> 'List[torch.Tensor]':
+        transformed_trg = self.model_transforms(img)
         inp = self.masking_processor.process(transformed_trg)
         return inp, transformed_trg
     
-    def _get_processed_batch(self, img: np.ndarray) -> Tuple[torch.Tensor,]:
-        original = img.astype(np.float32)
-        
-        batch = self._process_img(original)
-        inp, trg = [Utils.binarize_by_threshold(el, threshold=el.std(), max_val=1.0) for el in batch]
-
-        return inp, trg
+    def _get_processed_batch(self, img: torch.Tensor) -> Tuple[torch.Tensor]:
+        batch = self._process_img(img)
+        return [(el >= el.std()).float() for el in batch]
  
 
 class DatasetCreator:
