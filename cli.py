@@ -130,10 +130,6 @@ def main():
         model = GAN(DEVICE, n_critic=5)
         masking_processor = init_mask_processors(config=model_cfg["mask_processors"])
         transforms = tf2.Compose(CustomGenerator.get_transforms(model_cfg['target_image_size']))
-    
-        if args.load_weights:
-            checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
-            load_checkpoint(model, checkpoint_path)
         
         ds_creator = DatasetCreator(
             metadata=dataset_metadata,
@@ -170,6 +166,10 @@ def main():
         # Training
         print(f"Обучение модели {args.model} на {args.epochs} эпохах...")
         model.build_train_modules(model_cfg)
+
+        if args.load_weights:
+            checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
+            load_checkpoint(model, checkpoint_path)
         trainer.run()
 
 if __name__ == '__main__':
