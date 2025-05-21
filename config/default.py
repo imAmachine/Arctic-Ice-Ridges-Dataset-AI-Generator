@@ -61,10 +61,14 @@ DEFAULT_TRAIN_CONF = {
             Padding.__name__: {
                 "ratio": 0.2,
             },
+            EllipsoidPadding.__name__: {
+                "ratio": 0.2,
+            },
             RandomHoles.__name__: {
                 "count": 1,
                 "min_sz": 30,
-                "max_sz": 50
+                "max_sz": 50,
+                "inversed": False
             }
         }
     },

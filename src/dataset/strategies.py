@@ -6,7 +6,7 @@ from src.dataset.base import BaseProcessStrategy
 
 
 class Padding(BaseProcessStrategy):
-    def __init__(self, ratio: float):
+    def __init__(self, ratio: float = .2):
         self.ratio = ratio
     
     def _realization(self, mask: torch.Tensor):
@@ -21,8 +21,7 @@ class Padding(BaseProcessStrategy):
 
 
 class EllipsoidPadding(BaseProcessStrategy):
-    def __init__(self, ratio: float = .15):
-        super().__init__()
+    def __init__(self, ratio: float = .2):
         self.ratio = ratio
 
     def _sample_axes(self, h: int, w: int) -> Tuple[float, float]:
@@ -56,26 +55,41 @@ class EllipsoidPadding(BaseProcessStrategy):
 
 
 class RandomHoles(BaseProcessStrategy):
-    def __init__(self, count: int, min_sz: int, max_sz: int):
+    def __init__(self,
+                 count: int = 1,
+                 min_sz: int = 30,
+                 max_sz: int = 40,
+                 inversed: bool = False):
         self.count = count
         self.min_sz = min_sz
         self.max_sz = max_sz
-        
-    def _realization(self, mask: torch.Tensor) -> None:
-        ys, xs = torch.nonzero(mask == 0, as_tuple=True)
-        
-        if ys.numel() == 0:
-            return
-        
-        top,  bottom = ys.min().item(), ys.max().item()
-        left, right  = xs.min().item(), xs.max().item()
-        bh, bw       = bottom - top + 1, right - left + 1
+        self.inversed = inversed
+
+    def _realization(self, mask: torch.Tensor) -> torch.Tensor:
+        h, w = mask.shape
+
+        if self.inversed:
+            mask.fill_(1.0)
+            top, left, bh, bw = 0, 0, h, w
+            hole_val = 0.0
+        else:
+            ys, xs = torch.nonzero(mask == 0, as_tuple=True)
+            
+            if ys.numel() == 0:
+                return mask
+            
+            top,  bottom = ys.min().item(), ys.max().item()
+            left, right = xs.min().item(), xs.max().item()
+            bh, bw = bottom - top + 1, right - left + 1
+            hole_val = 1.0
 
         for _ in range(self.count):
-            h = random.randint(self.min_sz, min(self.max_sz, bh))
-            w = random.randint(self.min_sz, min(self.max_sz, bw))
-            y = random.randint(top,  top + bh - h)
-            x = random.randint(left, left + bw - w)
-            mask[y : y + h, x : x + w] = 1.0
-        
+            hole_h = random.randint(self.min_sz, min(self.max_sz, bh))
+            hole_w = random.randint(self.min_sz, min(self.max_sz, bw))
+
+            y = random.randint(top,  top + bh - hole_h)
+            x = random.randint(left, left + bw - hole_w)
+
+            mask[y:y + hole_h, x:x + hole_w] = hole_val
+
         return mask

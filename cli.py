@@ -76,13 +76,11 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 def init_mask_processors(config):
-    processing_strats = [
-        Padding(**config[Padding.__name__]),
-        RandomHoles(**config[RandomHoles.__name__]),
-    ]
-    
     masking_processor = DatasetMaskingProcessor(
-        processors=processing_strats
+        processors=[
+            # EllipsoidPadding(**config[Padding.__name__]),
+            RandomHoles(**config[RandomHoles.__name__]),
+        ]
     )
     
     return masking_processor
