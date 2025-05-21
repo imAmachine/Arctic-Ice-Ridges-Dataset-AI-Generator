@@ -135,20 +135,20 @@ class CustomGenerator(nn.Module):
         self.o = nn.ConvTranspose2d(f_base, 1, 3, 1, 1)
     
     def forward(self, x):
-        m = (x>0).float()
+        m = (x > 0).float()
         e1, m1 = self.e1(x, m)
         e2, m2 = self.e2(e1, m1)
         e3, m3 = self.e3(e2, m2)
         e4, m4 = self.e4(e3, m3)
-        b, mb = self.res[0](e4, m4)
         
+        b, mb = self.res[0](e4, m4)
         for blk in self.res[1:]:
             b, mb = blk(b, mb)
         
-        d4, md5 = self.d4(torch.cat([b, e4], 1), mb)
-        d3, _ = self.d3(torch.cat([d4, e3], 1), md5)
-        d2, _ = self.d2(torch.cat([d3, e2], 1), m2)
-        d1, _ = self.d1(torch.cat([d2, e1], 1), m1)
+        d4, md4 = self.d4(torch.cat([b, e4], 1), mb)
+        d3, md3 = self.d3(torch.cat([d4, e3], 1), md4)
+        d2, md2 = self.d2(torch.cat([d3, e2], 1), md3)
+        d1, _ = self.d1(torch.cat([d2, e1], 1), md2)
         
         return self.o(d1)
 

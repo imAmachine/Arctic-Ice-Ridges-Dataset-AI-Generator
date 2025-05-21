@@ -11,22 +11,30 @@ DEFAULT_TRAIN_CONF = {
         "evaluators_info": {
             ModelType.GENERATOR.value: {
                 LossName.ADVERSARIAL.value: {
-                    "weight": 1.0,
                     "exec_phase": ExecPhase.ANY.value,
                     "type": EvaluatorType.LOSS.value,
                 },
                 LossName.BCE.value: {
-                    "weight": 0.1,
+                    "weight": 0.2,
+                    "exec_phase": ExecPhase.ANY.value,
+                    "type": EvaluatorType.LOSS.value,
+                },
+                LossName.FOCAL.value: {
+                    "weight": 0.4,
+                    "exec_phase": ExecPhase.ANY.value,
+                    "type": EvaluatorType.LOSS.value,
+                },
+                LossName.DICE.value: {
+                    "weight": 0.6,
                     "exec_phase": ExecPhase.ANY.value,
                     "type": EvaluatorType.LOSS.value,
                 },
                 LossName.L1.value: {
-                    "weight": 1.0,
+                    "weight": 0.0,
                     "exec_phase": ExecPhase.ANY.value,
                     "type": EvaluatorType.LOSS.value,
                 },
                 MetricName.PRECISION.value: {
-                    "weight": 1.0,
                     "exec_phase": ExecPhase.ANY.value,
                     "type": EvaluatorType.METRIC.value,
                 },
@@ -41,7 +49,6 @@ DEFAULT_TRAIN_CONF = {
             },
             ModelType.DISCRIMINATOR.value: {
                 LossName.WASSERSTEIN.value: {
-                    "weight": 1.0,
                     "exec_phase": ExecPhase.ANY.value,
                     "type": EvaluatorType.LOSS.value,
                 },
@@ -59,15 +66,15 @@ DEFAULT_TRAIN_CONF = {
         },
         "mask_processors": {
             Padding.__name__: [{
-                "ratio": 0.2,
+                "ratio": 0.15,
             }, True],
             EllipsoidPadding.__name__: [{
-                "ratio": 0.2,
+                "ratio": 0.15,
             }, False],
             RandomHoles.__name__: [{
                 "count": 1,
-                "min_sz": 30,
-                "max_sz": 50,
+                "min_sz": 40,
+                "max_sz": 60,
                 "inversed": False
             }, False]
         }

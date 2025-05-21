@@ -26,6 +26,8 @@ class LossName(Enum):
     ADVERSARIAL = "Adversarial"
     BCE = "BCE"
     L1 = "L1"
+    FOCAL = "Focal"
+    DICE = "Dice"
     WASSERSTEIN = "Wasserstein"
     GP = "Gradient Penalty"
 

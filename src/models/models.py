@@ -109,6 +109,8 @@ class GAN(GenerativeModel):
             LossName.ADVERSARIAL.value: AdversarialLoss(discriminator),
             LossName.BCE.value: nn.BCEWithLogitsLoss(),
             LossName.L1.value: nn.L1Loss(),
+            LossName.FOCAL.value: FocalLoss(),
+            LossName.DICE.value: DiceLoss(),
             LossName.WASSERSTEIN.value: WassersteinLoss(discriminator),
             LossName.GP.value: GradientPenalty(discriminator),
             MetricName.PRECISION.value: sklearn_wrapper(precision_score, device),

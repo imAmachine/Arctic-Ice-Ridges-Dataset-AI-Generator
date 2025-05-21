@@ -32,7 +32,7 @@ class Evaluator:
     
     def __call__(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> 'torch.Tensor':   
         if self.weight <= 0.0:
-            return torch.tensor(0.0, device=generated_sample.device)
+            return None
         return self.callable_fn(generated_sample, real_sample) * self.weight
 
 
@@ -88,6 +88,8 @@ class EvalProcessor:
             phase_value = exec_phase.value
             if item.exec_phase == ExecPhase.ANY.value or item.exec_phase == phase_value:
                 weighted_tensor = item(generated_sample, real_sample)
+                if weighted_tensor is None:
+                    continue
                 self._update_history(item.type, exec_phase, item.name, weighted_tensor)
 
     def reset_history(self):

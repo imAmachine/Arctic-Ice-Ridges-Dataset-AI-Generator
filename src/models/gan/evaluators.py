@@ -5,6 +5,7 @@ from typing import Callable
 from torch.autograd import grad
 from sklearn.metrics import f1_score, jaccard_score, precision_score
 from src.common.analyze_tools import FractalAnalyzerGPU
+import torch.nn.functional as F
 import torch
 
 @dataclass
@@ -89,3 +90,37 @@ class AdversarialLoss:
 
     def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         return -torch.mean(self.model(fake_samples))
+
+
+@dataclass
+class DiceLoss:
+    smooth: float = 1e-6
+
+    def __call__(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        prob = torch.sigmoid(pred)
+        prob_flat   = prob.view(prob.size(0), -1)
+        target_flat = target.view(target.size(0), -1)
+        intersection = (prob_flat * target_flat).sum(dim=1)
+        denom = prob_flat.sum(dim=1) + target_flat.sum(dim=1)
+        dice_score = (2.0 * intersection + self.smooth) / (denom + self.smooth)
+        return 1.0 - dice_score.mean()
+
+
+@dataclass
+class FocalLoss:
+    alpha: float = 0.25
+    gamma: float = 2.0
+    reduction: str = "mean"  # "mean" | "sum" | "none"
+
+    def __call__(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        bce = F.binary_cross_entropy_with_logits(pred, target, reduction="none")
+        prob = torch.sigmoid(pred)
+        p_t = target * prob + (1.0 - target) * (1.0 - prob)
+        loss = self.alpha * (1.0 - p_t).pow(self.gamma) * bce
+
+        if self.reduction == "mean":
+            return loss.mean()
+        elif self.reduction == "sum":
+            return loss.sum()
+        else:
+            return loss
