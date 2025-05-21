@@ -22,7 +22,7 @@ class DatasetMaskingProcessor:
         img = image.clone()
         _, h, w = img.shape
 
-        mask = torch.zeros((h, w), dtype=torch.float32, device=img.device)
+        mask = torch.zeros((h, w), dtype=torch.float32, device=img.device, requires_grad=False)
         for proc in self.processors:
             mask = proc(mask)
 

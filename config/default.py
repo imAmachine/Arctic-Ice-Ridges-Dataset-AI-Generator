@@ -58,18 +58,18 @@ DEFAULT_TRAIN_CONF = {
             "lr": 0.0005
         },
         "mask_processors": {
-            Padding.__name__: {
+            Padding.__name__: [{
                 "ratio": 0.2,
-            },
-            EllipsoidPadding.__name__: {
+            }, True],
+            EllipsoidPadding.__name__: [{
                 "ratio": 0.2,
-            },
-            RandomHoles.__name__: {
+            }, False],
+            RandomHoles.__name__: [{
                 "count": 1,
                 "min_sz": 30,
                 "max_sz": 50,
                 "inversed": False
-            }
+            }, False]
         }
     },
 }

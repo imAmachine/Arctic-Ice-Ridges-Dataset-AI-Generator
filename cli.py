@@ -1,16 +1,18 @@
 import os
 import argparse
+from typing import Dict
 
 from torch import cuda
 import torchvision.transforms.v2 as tf2
 
+from config.registry import MASK_PROCESSORS
 from config.default import DEFAULT_TEST_CONF, DEFAULT_TRAIN_CONF
 from config.preprocess import MASKS_FILE_EXTENSIONS, PREPROCESSORS
 from config.path import *
 
 from src.common import Utils
 from src.common.enums import ExecPhase, ModelType
-from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor, IceRidgeDataset
+from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
 from src.dataset.strategies import *
 from src.models.gan.architecture import CustomGenerator
 from src.models.models import GAN
@@ -75,15 +77,19 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--get_generator', action='store_true')
     return parser.parse_args()
 
-def init_mask_processors(config):
-    masking_processor = DatasetMaskingProcessor(
-        processors=[
-            # EllipsoidPadding(**config[Padding.__name__]),
-            RandomHoles(**config[RandomHoles.__name__]),
-        ]
-    )
-    
-    return masking_processor
+def init_mask_processors(config: Dict):
+    processors = []
+
+    for name, params in config.items():
+        enabled = params[1]
+        if enabled:
+            cls = MASK_PROCESSORS.get(name)
+            processors.append(cls(**params[0]))
+
+    if not processors:
+        raise RuntimeError("[masking] Ни одного валидного процессора не создано")
+
+    return DatasetMaskingProcessor(processors=processors)
 
 def main():
     args = parse_arguments()
