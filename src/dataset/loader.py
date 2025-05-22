@@ -7,7 +7,6 @@ import torch
 import cv2
 import torchvision
 from torch.utils.data import DataLoader, Dataset
-import numpy as np
 
 from src.common.enums import ExecPhase
 from src.dataset.base import BaseProcessStrategy
@@ -23,8 +22,8 @@ class DatasetMaskingProcessor:
         _, h, w = img.shape
 
         mask = torch.zeros((h, w), dtype=torch.float32, device=img.device, requires_grad=False)
-        for proc in self.processors:
-            mask = proc(mask)
+        for processor in self.processors:
+            processor(mask)
 
         return img * (1 - mask)
 

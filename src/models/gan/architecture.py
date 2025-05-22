@@ -102,10 +102,13 @@ class ResidualPConv(nn.Module):
     def forward(self, x, m):
         y, m = self.c1(x, m)
         y = self.a(y)
-        y, m = self.c2(y, m)
         y = self.drop(y)
+        y, m = self.c2(y, m)
+        
         out = x + y
         out = self.a(out)
+        out = self.drop(out)
+        
         return out, m
 
 

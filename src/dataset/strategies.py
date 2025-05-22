@@ -16,8 +16,6 @@ class Padding(BaseProcessStrategy):
         bh, bw = h - 2 * top, w - 2 * left
         mask.fill_(1.0)
         mask[top : top + bh, left : left + bw] = 0.0
-        
-        return mask
 
 
 class EllipsoidPadding(BaseProcessStrategy):
@@ -30,7 +28,7 @@ class EllipsoidPadding(BaseProcessStrategy):
         b = (h * scale) / 2 * random.uniform(.9, 1.1)
         return a, b
 
-    def _realization(self, mask: torch.Tensor) -> torch.Tensor:
+    def _realization(self, mask: torch.Tensor):
         h, w = mask.shape
         cy, cx = h / 2.0, w / 2.0
         a, b   = self._sample_axes(h, w)
@@ -50,38 +48,45 @@ class EllipsoidPadding(BaseProcessStrategy):
 
         mask.fill_(1.0)
         mask[inside] = 0.0
+
+
+class RandomWindow(BaseProcessStrategy):
+    def __init__(self, window_size: int=120):
+        self.window_size = window_size
         
-        return mask
+    def _realization(self, mask):
+        h, w = mask.shape
+        
+        mask.fill_(1.0)
+        top, left, bh, bw = 0, 0, h, w
+        window_val = 0.0
+        
+        y = random.randint(top,  top + bh - self.window_size)
+        x = random.randint(left, left + bw - self.window_size)
+
+        mask[y:y + self.window_size, x:x + self.window_size] = window_val
+    
 
 
 class RandomHoles(BaseProcessStrategy):
     def __init__(self,
                  count: int = 1,
                  min_sz: int = 30,
-                 max_sz: int = 40,
-                 inversed: bool = False):
+                 max_sz: int = 40):
         self.count = count
         self.min_sz = min_sz
         self.max_sz = max_sz
-        self.inversed = inversed
 
-    def _realization(self, mask: torch.Tensor) -> torch.Tensor:
-        h, w = mask.shape
-
-        if self.inversed:
-            mask.fill_(1.0)
-            top, left, bh, bw = 0, 0, h, w
-            hole_val = 0.0
-        else:
-            ys, xs = torch.nonzero(mask == 0, as_tuple=True)
-            
-            if ys.numel() == 0:
-                return mask
-            
-            top,  bottom = ys.min().item(), ys.max().item()
-            left, right = xs.min().item(), xs.max().item()
-            bh, bw = bottom - top + 1, right - left + 1
-            hole_val = 1.0
+    def _realization(self, mask: torch.Tensor):
+        ys, xs = torch.nonzero(mask == 0, as_tuple=True)
+        
+        if ys.numel() == 0:
+            return mask
+        
+        top,  bottom = ys.min().item(), ys.max().item()
+        left, right = xs.min().item(), xs.max().item()
+        bh, bw = bottom - top + 1, right - left + 1
+        hole_val = 1.0
 
         for _ in range(self.count):
             hole_h = random.randint(self.min_sz, min(self.max_sz, bh))
@@ -91,5 +96,3 @@ class RandomHoles(BaseProcessStrategy):
             x = random.randint(left, left + bw - hole_w)
 
             mask[y:y + hole_h, x:x + hole_w] = hole_val
-
-        return mask

@@ -71,7 +71,7 @@ DEFAULT_TRAIN_CONF = {
         },
         "mask_processors": {
             Padding.__name__: {
-                "enabled": True,
+                "enabled": False,
                 "params": {
                     "ratio": 0.15,
                 }
@@ -82,13 +82,18 @@ DEFAULT_TRAIN_CONF = {
                     "ratio": 0.15,
                 }
             },
+            RandomWindow.__name__: {
+                "enabled": True,
+                "params": {
+                    "window_size": 120,
+                }
+            },
             RandomHoles.__name__: {
                 "enabled": False,
                 "params": {
                     "count": 1,
                     "min_sz": 60,
                     "max_sz": 80,
-                    "inversed": False
                 }
             }
         }
