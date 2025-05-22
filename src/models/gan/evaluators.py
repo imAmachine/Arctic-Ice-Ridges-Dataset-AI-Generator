@@ -116,7 +116,11 @@ class FocalLoss:
         bce = F.binary_cross_entropy_with_logits(pred, target, reduction="none")
         prob = torch.sigmoid(pred)
         p_t = target * prob + (1.0 - target) * (1.0 - prob)
-        loss = self.alpha * (1.0 - p_t).pow(self.gamma) * bce
+        
+        alpha_factor = target * self.alpha + (1 - target) * (1 - self.alpha)
+        focal_weight = (1.0 - p_t).pow(self.gamma)
+        
+        loss = alpha_factor * focal_weight * bce
 
         if self.reduction == "mean":
             return loss.mean()
@@ -124,3 +128,18 @@ class FocalLoss:
             return loss.sum()
         else:
             return loss
+
+import torch.nn as nn
+class EdgeLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        kx = torch.tensor([[[[-1,0,1],[-2,0,2],[-1,0,1]]]])
+        self.register_buffer('kernel_x', kx.float())
+        self.register_buffer('kernel_y', kx.transpose(2,3).float())
+
+    def forward(self, pred, target):
+        gx_gen = F.conv2d(pred, self.kernel_x, padding=1)
+        gy_gen = F.conv2d(pred, self.kernel_y, padding=1)
+        gx_tgt = F.conv2d(target, self.kernel_x, padding=1)
+        gy_tgt = F.conv2d(target, self.kernel_y, padding=1)
+        return F.l1_loss(gx_gen, gx_tgt) + F.l1_loss(gy_gen, gy_tgt)

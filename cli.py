@@ -80,11 +80,10 @@ def parse_arguments() -> argparse.Namespace:
 def init_mask_processors(config: Dict):
     processors = []
 
-    for name, params in config.items():
-        enabled = params[1]
-        if enabled:
+    for name, values in config.items():
+        if values["enabled"]:
             cls = MASK_PROCESSORS.get(name)
-            processors.append(cls(**params[0]))
+            processors.append(cls(**values["params"]))
 
     if not processors:
         raise RuntimeError("[masking] Ни одного валидного процессора не создано")

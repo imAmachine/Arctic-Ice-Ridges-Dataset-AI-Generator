@@ -15,7 +15,7 @@ DEFAULT_TRAIN_CONF = {
                     "type": EvaluatorType.LOSS.value,
                 },
                 LossName.BCE.value: {
-                    "weight": 0.2,
+                    "weight": 0.0,
                     "exec_phase": ExecPhase.ANY.value,
                     "type": EvaluatorType.LOSS.value,
                 },
@@ -65,18 +65,27 @@ DEFAULT_TRAIN_CONF = {
             "lr": 0.0005
         },
         "mask_processors": {
-            Padding.__name__: [{
-                "ratio": 0.15,
-            }, True],
-            EllipsoidPadding.__name__: [{
-                "ratio": 0.15,
-            }, False],
-            RandomHoles.__name__: [{
-                "count": 1,
-                "min_sz": 40,
-                "max_sz": 60,
-                "inversed": False
-            }, False]
+            Padding.__name__: {
+                "enabled": True,
+                "params": {
+                    "ratio": 0.15,
+                }
+            },
+            EllipsoidPadding.__name__: {
+                "enabled": False,
+                "params": {
+                    "ratio": 0.15,
+                }
+            },
+            RandomHoles.__name__: {
+                "enabled": False,
+                "params": {
+                    "count": 1,
+                    "min_sz": 60,
+                    "max_sz": 80,
+                    "inversed": False
+                }
+            }
         }
     },
 }

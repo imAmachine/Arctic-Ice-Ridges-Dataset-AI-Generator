@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List
+from typing import Dict
 from tqdm import tqdm
 import matplotlib
 
@@ -7,7 +7,6 @@ import torch
 from torch.utils.data import DataLoader
 
 from src.common.enums import *
-from src.dataset.loader import DatasetCreator
 from src.models.base import GenerativeModel
 from src.models.visualizer import Visualizer
 from src.models.gan.evaluators import *

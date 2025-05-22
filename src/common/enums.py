@@ -3,7 +3,6 @@ from enum import Enum
 
 class ExecPhase(Enum):
     TRAIN = "Train"
-    EVAL = "Eval"
     VALID = "Valid"
     TEST = 'Test'
     ANY = 'Any'
@@ -26,6 +25,7 @@ class LossName(Enum):
     ADVERSARIAL = "Adversarial"
     BCE = "BCE"
     L1 = "L1"
+    EDGE = "Edge"
     FOCAL = "Focal"
     DICE = "Dice"
     WASSERSTEIN = "Wasserstein"

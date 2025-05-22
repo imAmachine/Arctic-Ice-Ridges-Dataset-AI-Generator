@@ -34,35 +34,40 @@ class GAN(GenerativeModel):
         
         for _ in range(self.n_critic):
             with torch.no_grad():
-                fake = gen_mgr.module.arch(inp)
-            disc_mgr.optimization_step(target, fake)
+                fake = gen_mgr.module(inp)
+            disc_mgr.optimization_step(fake, target)
         
-        fake = gen_mgr.module.arch(inp)
-        gen_mgr.optimization_step(target, fake)
+        fake = gen_mgr.module(inp)
+        gen_mgr.optimization_step(fake, target)
 
     def _valid_step(self, inp: Tensor, target: Tensor) -> None:
         with torch.no_grad():
             fake = self(inp)
             for mgr in self.trainers.values():
-                mgr.valid_step(target, fake)
+                mgr.valid_step(fake, target)
     
     def _init_modules(self, config_section: dict) -> List[Architecture]:
         """Construct ArchModule list for GAN model."""
+        base_f = config_section['model_base_features']
+        optim_params = config_section['optimization_params']
+        optim_betas = (0.0, 0.9)
+        evaluators_info = config_section['evaluators_info']
+        
         gen = CustomGenerator(
             in_ch=1,
-            f_base=config_section['model_base_features']
+            f_base=base_f
         ).to(self.device)
         
         disc = CustomDiscriminator(
             in_ch=1,
-            f_base=config_section['model_base_features']
+            f_base=base_f
         ).to(self.device)
         
-        g_optimizer = GAN._create_optimizer(gen.parameters(), config_section['optimization_params']['lr'], betas=(0.0, 0.9))
-        g_scheduler = GAN._create_scheduler(g_optimizer, config_section['optimization_params']['mode'], factor=0.5, patience=6)
+        g_optimizer = GAN._create_optimizer(gen.parameters(), optim_params['lr'], betas=optim_betas)
+        g_scheduler = GAN._create_scheduler(g_optimizer, optim_params['mode'], factor=0.5, patience=6)
 
-        d_optimizer = GAN._create_optimizer(disc.parameters(), config_section['optimization_params']['lr'], betas=(0.0, 0.9))
-        d_scheduler = GAN._create_scheduler(d_optimizer, config_section['optimization_params']['mode'], factor=0.5, patience=6)
+        d_optimizer = GAN._create_optimizer(disc.parameters(), optim_params['lr'], betas=optim_betas)
+        d_scheduler = GAN._create_scheduler(d_optimizer, optim_params['mode'], factor=0.5, patience=6)
 
         evaluators = GAN._create_evaluators(self.device, disc)
 
@@ -73,7 +78,7 @@ class GAN(GenerativeModel):
                 optimizer=g_optimizer,
                 scheduler=g_scheduler,
                 eval_funcs=evaluators,
-                eval_settings=config_section['evaluators_info'][ModelType.GENERATOR.value]
+                eval_settings=evaluators_info[ModelType.GENERATOR.value]
             ),
             Architecture(
                 model_type=ModelType.DISCRIMINATOR,
@@ -81,16 +86,16 @@ class GAN(GenerativeModel):
                 optimizer=d_optimizer,
                 scheduler=d_scheduler,
                 eval_funcs=evaluators,
-                eval_settings=config_section['evaluators_info'][ModelType.DISCRIMINATOR.value]
+                eval_settings=evaluators_info[ModelType.DISCRIMINATOR.value]
             )
         ]
         
         return modules
     
     @staticmethod
-    def _create_optimizer(parameters, lr: float=0.0001, betas=(0.0, 0.9)):
+    def _create_optimizer(parameters, lr: float=1e-4, betas=(0.0, 0.9), eps: float=1e-8):
         """Create Adam optimizer with specified parameters."""
-        return torch.optim.Adam(parameters, lr=lr, betas=betas)
+        return torch.optim.Adam(parameters, lr=lr, betas=betas, eps=eps)
 
     @staticmethod
     def _create_scheduler(optimizer, mode: str, factor: float=0.5, patience: int=6):
@@ -109,7 +114,8 @@ class GAN(GenerativeModel):
             LossName.ADVERSARIAL.value: AdversarialLoss(discriminator),
             LossName.BCE.value: nn.BCEWithLogitsLoss(),
             LossName.L1.value: nn.L1Loss(),
-            LossName.FOCAL.value: FocalLoss(),
+            LossName.EDGE.value: EdgeLoss().to(device),
+            LossName.FOCAL.value: FocalLoss(alpha=0.75),
             LossName.DICE.value: DiceLoss(),
             LossName.WASSERSTEIN.value: WassersteinLoss(discriminator),
             LossName.GP.value: GradientPenalty(discriminator),

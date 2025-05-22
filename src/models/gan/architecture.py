@@ -97,12 +97,16 @@ class ResidualPConv(nn.Module):
         self.c1 = PartialConv2d(ch, ch, 3, 1, 1, bias = False, multi_channel = True, return_mask = True)
         self.c2 = PartialConv2d(ch, ch, 3, 1, 1, bias = False, multi_channel = True, return_mask = True)
         self.a = nn.ReLU(True)
+        self.drop = nn.Dropout(.25)
     
     def forward(self, x, m):
         y, m = self.c1(x, m)
         y = self.a(y)
         y, m = self.c2(y, m)
-        return x + y, m
+        y = self.drop(y)
+        out = x + y
+        out = self.a(out)
+        return out, m
 
 
 class UpBlock(nn.Module):
@@ -110,7 +114,7 @@ class UpBlock(nn.Module):
         super().__init__()
         self.u = nn.ConvTranspose2d(in_ch, out_ch, 4, 2, 1, bias = False)
         self.a = nn.ReLU(True)
-        self.d = nn.Dropout(0.5) if dropout else nn.Identity()
+        self.d = nn.Dropout(0.25) if dropout else nn.Identity()
     
     def forward(self, x, m):
         x = self.u(x)
@@ -128,7 +132,7 @@ class CustomGenerator(nn.Module):
         self.e3 = PConvBlock(f_base * 2, f_base * 4)
         self.e4 = PConvBlock(f_base * 4, f_base * 8)
         self.res = nn.Sequential(*[ResidualPConv(f_base * 8) for _ in range(3)])
-        self.d4 = UpBlock(f_base * 16, f_base * 8, dropout=True)
+        self.d4 = UpBlock(f_base * 16, f_base * 8)
         self.d3 = UpBlock(f_base * 12, f_base * 4)
         self.d2 = UpBlock(f_base * 6, f_base * 2)
         self.d1 = UpBlock(f_base * 3, f_base)
@@ -140,8 +144,8 @@ class CustomGenerator(nn.Module):
         e2, m2 = self.e2(e1, m1)
         e3, m3 = self.e3(e2, m2)
         e4, m4 = self.e4(e3, m3)
-        
         b, mb = self.res[0](e4, m4)
+        
         for blk in self.res[1:]:
             b, mb = blk(b, mb)
         
@@ -183,7 +187,7 @@ class CustomDiscriminator(nn.Module):
             conv_block(f_base, f_base * 2), 
             conv_block(f_base * 2, f_base * 4), 
             conv_block(f_base * 4, f_base * 8), 
-            nn.Conv2d(f_base * 8, 1, kernel_size = 3, stride = 1, padding = 1, bias = False), 
+            spectral_norm(nn.Conv2d(f_base * 8, 1, kernel_size = 3, stride = 1, padding = 1, bias = False)),
         )
     
     def forward(self, x):
