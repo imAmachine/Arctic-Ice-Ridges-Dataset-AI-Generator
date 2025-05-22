@@ -16,17 +16,22 @@ DEFAULT_TRAIN_CONF = {
                 },
                 LossName.BCE.value: {
                     "weight": 0.0,
-                    "exec_phase": ExecPhase.ANY.value,
+                    "exec_phase": ExecPhase.TRAIN.value,
                     "type": EvaluatorType.LOSS.value,
                 },
                 LossName.FOCAL.value: {
-                    "weight": 0.4,
-                    "exec_phase": ExecPhase.ANY.value,
+                    "weight": 0.2,
+                    "exec_phase": ExecPhase.TRAIN.value,
                     "type": EvaluatorType.LOSS.value,
                 },
                 LossName.DICE.value: {
-                    "weight": 0.6,
-                    "exec_phase": ExecPhase.ANY.value,
+                    "weight": 0.2,
+                    "exec_phase": ExecPhase.TRAIN.value,
+                    "type": EvaluatorType.LOSS.value,
+                },
+                LossName.EDGE.value: {
+                    "weight": 0.5,
+                    "exec_phase": ExecPhase.TRAIN.value,
                     "type": EvaluatorType.LOSS.value,
                 },
                 LossName.L1.value: {
@@ -35,15 +40,15 @@ DEFAULT_TRAIN_CONF = {
                     "type": EvaluatorType.LOSS.value,
                 },
                 MetricName.PRECISION.value: {
-                    "exec_phase": ExecPhase.ANY.value,
+                    "exec_phase": ExecPhase.VALID.value,
                     "type": EvaluatorType.METRIC.value,
                 },
                 MetricName.F1.value: {
-                    "exec_phase": ExecPhase.ANY.value,
+                    "exec_phase": ExecPhase.VALID.value,
                     "type": EvaluatorType.METRIC.value,
                 },
                 MetricName.IOU.value: {
-                    "exec_phase": ExecPhase.ANY.value,
+                    "exec_phase": ExecPhase.VALID.value,
                     "type": EvaluatorType.METRIC.value,
                 }
             },
