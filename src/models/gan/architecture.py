@@ -178,7 +178,7 @@ class CustomDiscriminator(nn.Module):
         super(CustomDiscriminator, self).__init__()
         
         def conv_block(in_ch, out_ch, kernel_size = 4, stride = 2, padding = 1):
-            layers = [nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, bias = True)]
+            layers = [spectral_norm(nn.Conv2d(in_ch, out_ch, kernel_size, stride, padding, bias = True))]
             layers.append(nn.LeakyReLU(0.2, inplace = True))
             return nn.Sequential(*layers)
         
@@ -187,7 +187,7 @@ class CustomDiscriminator(nn.Module):
             conv_block(f_base, f_base * 2), 
             conv_block(f_base * 2, f_base * 4), 
             conv_block(f_base * 4, f_base * 8), 
-            spectral_norm(nn.Conv2d(f_base * 8, 1, kernel_size = 3, stride = 1, padding = 1, bias = False)),
+            nn.Conv2d(f_base * 8, 1, kernel_size = 3, stride = 1, padding = 1, bias = False),
         )
     
     def forward(self, x):
