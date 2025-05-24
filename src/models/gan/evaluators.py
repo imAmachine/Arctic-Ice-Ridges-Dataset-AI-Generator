@@ -33,7 +33,7 @@ class FractalMetric:
 def sklearn_wrapper(fn, device, threshold: float = 0.5):
     def wrapper(gen: torch.Tensor, real: torch.Tensor) -> torch.Tensor:
         # снимем с графа и скопируем на CPU
-        y_pred = gen.detach().cpu().numpy().ravel()
+        y_pred = torch.sigmoid(gen).detach().cpu().numpy().ravel()
         y_true = real.detach().cpu().numpy().ravel()
 
         # порогуем и приводим к 0/1

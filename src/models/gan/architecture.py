@@ -85,10 +85,30 @@ class PConvBlock(nn.Module):
         super().__init__()
         self.p = PartialConv2d(in_ch, out_ch, ks, st, pad, bias = False, multi_channel = True, return_mask = True)
         self.a = nn.ReLU(True)
+        # self.norm = nn.InstanceNorm2d(out_ch, affine=True)
     
     def forward(self, x, m):
         x, m = self.p(x, m)
+        # x = self.norm(x)
         return self.a(x), m
+
+
+class SEBlock(nn.Module):
+    def __init__(self, channels, reduction=16):
+        super(SEBlock, self).__init__()
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Linear(channels, channels // reduction),
+            nn.ReLU(True),
+            nn.Linear(channels // reduction, channels),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        b, c, _, _ = x.size()
+        y = self.pool(x).view(b, c)
+        y = self.fc(y).view(b, c, 1, 1)
+        return x * y
 
 
 class ResidualPConv(nn.Module):
@@ -96,18 +116,17 @@ class ResidualPConv(nn.Module):
         super().__init__()
         self.c1 = PartialConv2d(ch, ch, 3, 1, 1, bias = False, multi_channel = True, return_mask = True)
         self.c2 = PartialConv2d(ch, ch, 3, 1, 1, bias = False, multi_channel = True, return_mask = True)
-        self.a = nn.ReLU(True)
+        self.relu = nn.ReLU(True)
         self.drop = nn.Dropout(.25)
     
     def forward(self, x, m):
         y, m = self.c1(x, m)
-        y = self.a(y)
+        y = self.relu(y)
         y = self.drop(y)
         y, m = self.c2(y, m)
         
         out = x + y
-        out = self.a(out)
-        out = self.drop(out)
+        out = self.relu(out)
         
         return out, m
 
@@ -118,11 +137,14 @@ class UpBlock(nn.Module):
         self.u = nn.ConvTranspose2d(in_ch, out_ch, 4, 2, 1, bias = False)
         self.a = nn.ReLU(True)
         self.d = nn.Dropout(0.25) if dropout else nn.Identity()
+        self.se = SEBlock(out_ch)
     
     def forward(self, x, m):
         x = self.u(x)
         x = self.a(x)
         x = self.d(x)
+        
+        x = self.se(x)
         m = F.interpolate(m, scale_factor = 2, mode = 'nearest')
         return x, m
 
@@ -139,7 +161,9 @@ class CustomGenerator(nn.Module):
         self.d3 = UpBlock(f_base * 12, f_base * 4)
         self.d2 = UpBlock(f_base * 6, f_base * 2)
         self.d1 = UpBlock(f_base * 3, f_base)
-        self.o = nn.ConvTranspose2d(f_base, 1, 3, 1, 1)
+        self.o = nn.ConvTranspose2d(f_base, 1, 3, 1, 1, bias=True)
+        nn.init.normal_(self.o.weight, mean=0.0, std=0.02)
+        nn.init.constant_(self.o.bias, -1.0)
     
     def forward(self, x):
         m = (x > 0).float()

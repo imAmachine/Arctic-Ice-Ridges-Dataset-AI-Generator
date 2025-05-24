@@ -61,7 +61,7 @@ class Trainer:
         with torch.no_grad():
             for phase, loader in self.dataloaders.items():
                 inp, target = [el.to(self.device) for el in next(iter(loader))]
-                gen = self.model.trainers[ModelType.GENERATOR].module.arch(inp)
+                gen = self.model.trainers[ModelType.GENERATOR].module(inp)
                 self.visualizer.save(inp, target, gen, phase)
             
             if (epoch_id + 1) % self.checkpoints_ratio == 0:

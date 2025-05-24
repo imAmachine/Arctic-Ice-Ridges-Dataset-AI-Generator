@@ -8,4 +8,4 @@ class BaseProcessStrategy(ABC):
         pass
     
     def __call__(self, mask: torch.Tensor) -> torch.Tensor:        
-        self._realization(mask)
+        return self._realization(mask)

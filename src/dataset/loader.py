@@ -17,15 +17,17 @@ class DatasetMaskingProcessor:
     def __init__(self, processors: List[BaseProcessStrategy]):
         self.processors = processors
 
-    def process(self, image: torch.Tensor) -> torch.Tensor:
-        img = image.clone()
-        _, h, w = img.shape
+    def create_mask(self, image: torch.Tensor):
+        _, h, w = image.shape
 
-        mask = torch.zeros((h, w), dtype=torch.float32, device=img.device, requires_grad=False)
+        mask = torch.zeros((h, w), dtype=torch.float32, device=image.device, requires_grad=False)
         for processor in self.processors:
             processor(mask)
+        
+        return mask
 
-        return img * (1 - mask)
+    def apply_mask(self, image: torch.Tensor, mask: torch.Tensor, is_inversed: bool=False) -> torch.Tensor:
+        return image * ((1 - mask) if not is_inversed else mask)
 
 
 class IceRidgeDataset(Dataset):
@@ -49,15 +51,20 @@ class IceRidgeDataset(Dataset):
         orig_path = self.metadata[key]['path']
         orig_img = Utils.cv2_load_image(orig_path, cv2.IMREAD_GRAYSCALE)
         
-        return self._get_processed_batch(orig_img)
+        transformed = self.model_transforms(orig_img)
+        
+        return self._get_processed_batch(transformed)
     
-    def _process_img(self, img: torch.Tensor) -> 'List[torch.Tensor]':
-        transformed_trg = self.model_transforms(img)
-        inp = self.masking_processor.process(transformed_trg)
-        return inp, transformed_trg
+    def _process_img(self, image: torch.Tensor) -> 'List[torch.Tensor]':
+        mask = self.masking_processor.create_mask(image)
+        
+        inp = self.masking_processor.apply_mask(image, mask)
+        trg = self.masking_processor.apply_mask(image, mask, True)
+        
+        return inp, trg
     
-    def _get_processed_batch(self, img: torch.Tensor) -> Tuple[torch.Tensor]:
-        batch = self._process_img(img)
+    def _get_processed_batch(self, image: torch.Tensor) -> Tuple[torch.Tensor]:
+        batch = self._process_img(image)
         return [(el >= el.std()).float() for el in batch]
  
 

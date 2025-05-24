@@ -95,7 +95,7 @@ class GAN(GenerativeModel):
     @staticmethod
     def _create_optimizer(parameters, lr: float=1e-4, betas=(0.0, 0.9), eps: float=1e-8):
         """Create Adam optimizer with specified parameters."""
-        return torch.optim.Adam(parameters, lr=lr, betas=betas, eps=eps)
+        return torch.optim.AdamW(parameters, lr=lr, betas=betas, eps=eps)
 
     @staticmethod
     def _create_scheduler(optimizer, mode: str, factor: float=0.5, patience: int=6):
@@ -112,8 +112,8 @@ class GAN(GenerativeModel):
         """Create dictionary of evaluation metrics and losses."""
         return {
             LossName.ADVERSARIAL.value: AdversarialLoss(discriminator),
-            LossName.BCE.value: nn.BCEWithLogitsLoss(),
-            LossName.L1.value: nn.L1Loss(),
+            LossName.BCE.value: nn.BCEWithLogitsLoss().to(device),
+            LossName.L1.value: nn.L1Loss().to(device),
             LossName.EDGE.value: EdgeLoss().to(device),
             LossName.FOCAL.value: FocalLoss(alpha=0.75),
             LossName.DICE.value: DiceLoss(),
