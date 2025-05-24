@@ -14,7 +14,7 @@ DEFAULT_TRAIN_CONF = {
                     "exec_phase": ExecPhase.ANY.value,
                     "type": EvaluatorType.LOSS.value,
                 },
-                LossName.BCE.value: {
+                LossName.BCE_Logits.value: {
                     "weight": 0.0,
                     "exec_phase": ExecPhase.TRAIN.value,
                     "type": EvaluatorType.LOSS.value,

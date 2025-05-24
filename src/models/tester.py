@@ -63,7 +63,7 @@ class ParamGridTester:
             self._create_config_json(params, folder)
             self.trainer.run()
             
-            self.trainer.model.evaluators_save(result_path)
+            self.trainer.model.evaluators_summary(result_path)
 
     def _create_config_json(self, params, folder_path):
         Utils.to_json(data=params, path=os.path.join(folder_path, "config.json"))

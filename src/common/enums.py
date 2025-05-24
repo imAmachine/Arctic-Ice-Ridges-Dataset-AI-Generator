@@ -23,6 +23,7 @@ class EvaluatorType(Enum):
 class LossName(Enum):
     TOTAL = "Total"
     ADVERSARIAL = "Adversarial"
+    BCE_Logits = "BCE_Logits"
     BCE = "BCE"
     L1 = "L1"
     EDGE = "Edge"

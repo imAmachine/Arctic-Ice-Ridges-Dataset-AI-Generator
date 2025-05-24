@@ -6,22 +6,9 @@ from tabulate import tabulate
 import pandas as pd
 from torch import Tensor
 from typing import Any, Dict, List, Optional
-
 from src.common.enums import *
 from src.models.checkpoint import CheckpointManager
 from src.models.gan.evaluators import *
-
-@dataclass
-class Architecture:
-    model_type: ModelType
-    arch: 'torch.nn.Module'
-    optimizer: 'torch.optim.Optimizer'
-    scheduler: 'torch.optim.lr_scheduler.LRScheduler'
-    eval_funcs: Dict[str, Callable]
-    eval_settings: Dict
-    
-    def __call__(self, inp):
-        return self.arch(inp)
 
 
 @dataclass
@@ -34,24 +21,28 @@ class Evaluator:
     exec_phase: str = ExecPhase.ANY.value
     
     def __call__(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> 'torch.Tensor':   
-        if self.weight <= 0.0:
-            return None
         return self.callable_fn(generated_sample, real_sample) * self.weight
+
+
+@dataclass
+class Architecture:
+    model_type: ModelType
+    arch: 'torch.nn.Module'
+    optimizer: 'torch.optim.Optimizer'
+    scheduler: 'torch.optim.lr_scheduler.LRScheduler'
+    evaluators: List[Evaluator]
+    
+    def __call__(self, inp):
+        return self.arch(inp)
 
 
 class ModuleTrainer:
     """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
-    def __init__(self,device: torch.device, module: 'Architecture'):
+    def __init__(self, device: torch.device, module: 'Architecture'):
         self.module = module
-        self.evaluate_processor = EvalProcessor(device=device, evaluators=self.__build_evaluators())
+        self.evaluate_processor = EvalProcessor(device=device, evaluators=self.module.evaluators)
     
-    def __build_evaluators(self) -> List[Evaluator]:
-        return [
-            Evaluator(callable_fn=self.module.eval_funcs[k], name=k, **v) 
-            for k, v in self.module.eval_settings.items()
-        ]
-    
-    def _process_losses(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor', history_key: ExecPhase) -> 'torch.Tensor':
+    def _process_losses(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor', history_key: str) -> 'torch.Tensor':
         self.evaluate_processor.process(
             generated_sample=generated_sample,
             real_sample=real_sample,
@@ -68,7 +59,7 @@ class ModuleTrainer:
         loss_tensor = self._process_losses(
             generated_sample, 
             real_sample, 
-            history_key=ExecPhase.TRAIN
+            history_key=ExecPhase.TRAIN.value
         )
         loss_tensor.backward()
         self.module.optimizer.step()
@@ -78,22 +69,27 @@ class ModuleTrainer:
         loss_tensor = self._process_losses(
             generated_sample=generated_sample,
             real_sample=real_sample,
-            history_key=ExecPhase.VALID
+            history_key=ExecPhase.VALID.value
         )
         return loss_tensor.item()
 
 
 class EvalProcessor:
     """Нужен для подсчёта метрик и лоссов внутри ModuleTrainer"""
-    def __init__(self, device: torch.device, evaluators: List[Evaluator] = []):
+    def __init__(self, device: torch.device, evaluators: List[Evaluator]):
         self.device = device
         self.evaluators = evaluators
-        self.evaluators_history: Dict[ExecPhase, List] = {
-            ExecPhase.TRAIN: [], 
-            ExecPhase.VALID: []
-        }
+        self.evaluators_history: Dict[ExecPhase, List] = None
+        
+        self._init_history_dict()
 
-    def _update_history(self, eval_type: str, phase: ExecPhase, name: str, value: 'torch.Tensor') -> None:
+    def _init_history_dict(self):
+        self.evaluators_history = {
+            ExecPhase.TRAIN.value: [], 
+            ExecPhase.VALID.value: []
+        }
+    
+    def _update_history(self, eval_type: str, phase: str, name: str, value: 'torch.Tensor') -> None:
         current_history = self.evaluators_history[phase][-1]
         current_history[eval_type].update({name: value})
 
@@ -102,33 +98,23 @@ class EvalProcessor:
             member.value
             for member in EvaluatorType
         ]
-        
+
         self.evaluators_history[exec_phase].append({
             e_type: {} 
             for e_type in evaluators_types
         })
         
         for item in self.evaluators:
-            phase_value = exec_phase.value
             
-            if item.exec_phase == ExecPhase.ANY.value or item.exec_phase == phase_value:
+            if item.exec_phase == ExecPhase.ANY.value or item.exec_phase == exec_phase:
                 weighted_tensor = item(generated_sample, real_sample)
                 
-                if weighted_tensor is None:
-                    continue
-                
                 self._update_history(
-                    item.type, 
-                    exec_phase, 
-                    item.name, 
-                    weighted_tensor
+                    eval_type=item.type, 
+                    phase=exec_phase, 
+                    name=item.name, 
+                    value=weighted_tensor
                 )
-
-    def reset_history(self):
-        self.evaluators_history = {
-            ExecPhase.TRAIN: [], 
-            ExecPhase.VALID: []
-        }
     
     def compute_epoch_summary(self) -> Dict[ExecPhase, Dict[str, Dict[str, float]]]:
         full_result = {}
@@ -141,8 +127,8 @@ class EvalProcessor:
             summary = {}
 
             for step_result in phase_history:
-                for eval_type, metrics in step_result.items():
-                    for name, val in metrics.items():
+                for eval_type, evaluators in step_result.items():
+                    for name, val in evaluators.items():
                         summary.setdefault(eval_type, {}) \
                         .setdefault(name, []) \
                         .append(val.clone().detach())
@@ -242,24 +228,22 @@ class EvaluatorsCollector:
         write_header = not os.path.exists(output_path) or os.path.getsize(output_path) == 0
         row_df.to_csv(output_path, mode="a", header=write_header, index=False)
 
-    def reset_history(self) -> None:
-        """Очищает всю накопленную историю."""
-        self.history.clear()
-
     def _snapshot(self) -> Dict:
         """Забирает из менеджеров текущие summary-а по фазам."""
-        return {
-            phase: {
-                mt: mgr.evaluate_processor.compute_epoch_summary().get(phase, {})
-                for mt, mgr in self.managers.items()
-            }
-            for phase in (ExecPhase.TRAIN, ExecPhase.VALID)
-        }
+        snapshots = {}
+        for phase in (ExecPhase.TRAIN, ExecPhase.VALID):
+            phase_snapshot: Dict[ModelType, Dict[str, Dict[str, float]]] = {}
+            for mt, mgr in self.managers.items():
+                manager_summary = mgr.evaluate_processor.compute_epoch_summary()
+                # compute_epoch_summary() keys are phase.value (e.g. "train", "valid")
+                phase_snapshot[mt] = manager_summary.get(phase.value, {})
+            snapshots[phase] = phase_snapshot
+        return snapshots
 
     def _reset(self) -> None:
         """Сбрасывает историю evaluators в менеджерах."""
         for mgr in self.managers.values():
-            mgr.evaluate_processor.reset_history()
+            mgr.evaluate_processor._init_history_dict()
 
 
 class GenerativeModel(ABC):
@@ -268,6 +252,7 @@ class GenerativeModel(ABC):
         self.device = device
         self.checkpoint_manager = CheckpointManager(self, checkpoint_map)
         self.evaluators_collector = None
+        self.evaluators: Dict[ModelType, List[Evaluator]] = None
         self.trainers: Dict[ModelType, ModuleTrainer] = None
     
     @abstractmethod
@@ -281,6 +266,30 @@ class GenerativeModel(ABC):
     @abstractmethod
     def _init_modules(self, config_section: dict) -> List[Architecture]:
         pass
+    
+    def _evaluators_from_config(self, config: Dict):
+        from config.registry import LOSSES
+        
+        for m_type, evals in config.items():
+            for eval_name, eval_params in evals.items():
+                exec_params = eval_params["execution"]
+                init_params = eval_params["init"]
+                
+                eval_type = EvaluatorType.LOSS.value
+                if eval_name in MetricName:
+                    eval_type = EvaluatorType.METRIC.value
+                
+                if exec_params['weight'] > 0.0:
+                    cls = LOSSES.get(eval_name)
+                    evaluator = Evaluator(
+                        callable_fn=cls(**init_params),
+                        name=eval_name,
+                        type=eval_type,
+                        exec_phase=exec_params["exec_phase"],
+                        weight=exec_params["weight"]
+                    )
+                    
+                    self.evaluators[m_type].append(evaluator)
     
     def model_step(self, inp: Tensor, target: Tensor, phase: ExecPhase):
         if phase is ExecPhase.TRAIN:
@@ -304,7 +313,7 @@ class GenerativeModel(ABC):
         
         self.evaluators_collector = EvaluatorsCollector(self.trainers)
     
-    def evaluators_save(self, output_path, epoch_id=None):
+    def evaluators_summary(self, output_path, epoch_id=None):
         self.evaluators_collector.save_summary(output_path, epoch_id)
     
     def checkpoint_save(self, path: str) -> None:

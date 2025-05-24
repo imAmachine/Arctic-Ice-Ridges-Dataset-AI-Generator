@@ -127,6 +127,7 @@ def main():
     
     if args.model == 'gan':
         model = GAN(DEVICE, n_critic=5)
+        
         masking_processor = init_mask_processors(config=model_cfg["mask_processors"])
         transforms = tf2.Compose(CustomGenerator.get_transforms(model_cfg['target_image_size']))
         
@@ -165,7 +166,8 @@ def main():
         # Training
         print(f"Обучение модели {args.model} на {args.epochs} эпохах...")
         model.build_train_modules(model_cfg)
-
+        model._evaluators_from_config(model_cfg['evaluators_info'])
+        
         if args.load_weights:
             checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
             load_checkpoint(model, checkpoint_path)
