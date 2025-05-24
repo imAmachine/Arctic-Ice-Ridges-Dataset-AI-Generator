@@ -7,6 +7,7 @@ from sklearn.metrics import f1_score, jaccard_score, precision_score
 from src.common.analyze_tools import FractalAnalyzerGPU
 import torch.nn.functional as F
 import torch
+import torch.nn as nn
 
 @dataclass
 class FractalMetric:
@@ -33,7 +34,7 @@ class FractalMetric:
 def sklearn_wrapper(fn, device, threshold: float = 0.5):
     def wrapper(gen: torch.Tensor, real: torch.Tensor) -> torch.Tensor:
         # снимем с графа и скопируем на CPU
-        y_pred = torch.sigmoid(gen).detach().cpu().numpy().ravel()
+        y_pred = torch.sigmoid(gen.detach()).cpu().numpy().ravel()
         y_true = real.detach().cpu().numpy().ravel()
 
         # порогуем и приводим к 0/1
@@ -129,7 +130,6 @@ class FocalLoss:
         else:
             return loss
 
-import torch.nn as nn
 class EdgeLoss(nn.Module):
     def __init__(self):
         super().__init__()

@@ -1,6 +1,8 @@
+from config.registry import LOSSES
 from src.preprocessing.processors import *
 from src.common.enums import *
 from src.dataset.strategies import *
+import inspect
 
 DEFAULT_TRAIN_CONF = {
     "gan": {
@@ -9,60 +11,21 @@ DEFAULT_TRAIN_CONF = {
         "n_critic": 5,
         "checkpoints_ratio": 25,
         "evaluators_info": {
-            ModelType.GENERATOR.value: {
-                LossName.ADVERSARIAL.value: {
-                    "exec_phase": ExecPhase.ANY.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
-                LossName.BCE_Logits.value: {
-                    "weight": 0.0,
-                    "exec_phase": ExecPhase.TRAIN.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
-                LossName.FOCAL.value: {
-                    "weight": 0.2,
-                    "exec_phase": ExecPhase.TRAIN.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
-                LossName.DICE.value: {
-                    "weight": 0.2,
-                    "exec_phase": ExecPhase.TRAIN.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
-                LossName.EDGE.value: {
-                    "weight": 0.5,
-                    "exec_phase": ExecPhase.TRAIN.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
-                LossName.L1.value: {
-                    "weight": 0.0,
-                    "exec_phase": ExecPhase.ANY.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
-                MetricName.PRECISION.value: {
-                    "exec_phase": ExecPhase.VALID.value,
-                    "type": EvaluatorType.METRIC.value,
-                },
-                MetricName.F1.value: {
-                    "exec_phase": ExecPhase.VALID.value,
-                    "type": EvaluatorType.METRIC.value,
-                },
-                MetricName.IOU.value: {
-                    "exec_phase": ExecPhase.VALID.value,
-                    "type": EvaluatorType.METRIC.value,
+            model.value: {
+                k: {
+                    "execution": {
+                        "weight": 0.0,
+                        "exec_phase": ExecPhase.TRAIN.value
+                    },
+                    "init": {
+                        name: param.default
+                        for name, param in inspect.signature(v.__init__).parameters.items()
+                        if name != "self" and param.default is not inspect._empty
+                    }
                 }
-            },
-            ModelType.DISCRIMINATOR.value: {
-                LossName.WASSERSTEIN.value: {
-                    "exec_phase": ExecPhase.ANY.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
-                LossName.GP.value: {
-                    "weight": 10.0,
-                    "exec_phase": ExecPhase.TRAIN.value,
-                    "type": EvaluatorType.LOSS.value,
-                },
+                for k, v in LOSSES.items()
             }
+            for model in [ModelType.GENERATOR, ModelType.DISCRIMINATOR]
         },
         "optimization_params": {
             EvaluatorType.METRIC.name: MetricName.IOU.value,
@@ -85,7 +48,7 @@ DEFAULT_TRAIN_CONF = {
             RandomWindow.__name__: {
                 "enabled": True,
                 "params": {
-                    "window_size": 120,
+                    "window_size": 200,
                 }
             },
             RandomHoles.__name__: {
