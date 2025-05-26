@@ -267,7 +267,7 @@ class GenerativeModel(ABC):
     def _init_modules(self, config_section: dict) -> List[Architecture]:
         pass
     
-    def _evaluators_from_config(self, config: Dict):
+    def _evaluators_from_config(self, config: Dict, device: torch.device):
         from config.registry import LOSSES
         
         for m_type, evals in config.items():
@@ -282,7 +282,7 @@ class GenerativeModel(ABC):
                 if exec_params['weight'] > 0.0:
                     cls = LOSSES.get(eval_name)
                     evaluator = Evaluator(
-                        callable_fn=cls(**init_params),
+                        callable_fn=cls(**init_params).to(device),
                         name=eval_name,
                         type=eval_type,
                         exec_phase=exec_params["exec_phase"],

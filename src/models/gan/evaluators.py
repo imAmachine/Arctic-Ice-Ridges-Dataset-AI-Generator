@@ -2,12 +2,11 @@ import math
 
 from dataclasses import dataclass
 from typing import Callable
-from torch.autograd import grad
+from torch import nn, autograd
 from sklearn.metrics import f1_score, jaccard_score, precision_score
 from src.common.analyze_tools import FractalAnalyzerGPU
 import torch.nn.functional as F
 import torch
-import torch.nn as nn
 
 @dataclass
 class FractalMetric:
@@ -47,57 +46,59 @@ def sklearn_wrapper(fn, device, threshold: float = 0.5):
     return wrapper
 
 
-@dataclass
-class GradientPenalty:
-    model: Callable
+class GradientPenalty(nn.Module):
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model  # зарегистрируется как подмодуль
 
-    def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
+    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         # α ~ U(0,1)
         shape = [real_samples.size(0)] + [1] * (real_samples.dim() - 1)
         alpha = torch.rand(shape, device=real_samples.device)
-        interpolates = alpha * real_samples + ((1 - alpha) * fake_samples)
+        interpolates = alpha * real_samples + (1 - alpha) * fake_samples
         interpolates.requires_grad_(True)
 
         d_interpolates = self.model(interpolates)
         
-        # градиенты по входу
-        grads = grad(
+        grads = autograd.grad(
             outputs=d_interpolates,
             inputs=interpolates,
             grad_outputs=torch.ones_like(d_interpolates),
             create_graph=True
         )[0]
         
-        # norm по каждому семплу
         grads = grads.view(grads.size(0), -1)
         grad_norm = grads.norm(2, dim=1)
-
         return torch.mean((grad_norm - 1) ** 2)
 
 
-@dataclass
-class WassersteinLoss:
-    model: Callable
+class WassersteinLoss(nn.Module):
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
 
-    def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
+    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         real_pred = self.model(real_samples)
         fake_pred = self.model(fake_samples)
-        return -torch.mean(real_pred) + torch.mean(fake_pred)
-        
-
-@dataclass
-class AdversarialLoss:
-    model: Callable
-
-    def __call__(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
-        return -torch.mean(self.model(fake_samples))
+        return -real_pred.mean() + fake_pred.mean()
 
 
-@dataclass
-class DiceLoss:
-    smooth: float = 1e-6
+class AdversarialLoss(nn.Module):
+    def __init__(self, model: nn.Module):
+        super().__init__()
+        self.model = model
 
-    def __call__(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor = None) -> torch.Tensor:
+        # real_samples не используется, но оставлено для единого интерфейса
+        return -self.model(fake_samples).mean()
+
+
+class DiceLoss(nn.Module):
+    def __init__(self, smooth: float = 1e-6):
+        super().__init__()
+        self.register_buffer('smooth', torch.tensor(smooth))
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         prob = torch.sigmoid(pred)
         prob_flat   = prob.view(prob.size(0), -1)
         target_flat = target.view(target.size(0), -1)
@@ -107,20 +108,25 @@ class DiceLoss:
         return 1.0 - dice_score.mean()
 
 
-@dataclass
-class FocalLoss:
-    alpha: float = 0.25
-    gamma: float = 2.0
-    reduction: str = "mean"  # "mean" | "sum" | "none"
+class FocalLoss(nn.Module):
+    def __init__(
+        self,
+        alpha: float = 0.25,
+        gamma: float = 2.0,
+        reduction: str = "mean"  # "mean" | "sum" | "none"
+    ):
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
 
-    def __call__(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         bce = F.binary_cross_entropy_with_logits(pred, target, reduction="none")
         prob = torch.sigmoid(pred)
-        p_t = target * prob + (1.0 - target) * (1.0 - prob)
+        p_t = target * prob + (1 - target) * (1 - prob)
         
         alpha_factor = target * self.alpha + (1 - target) * (1 - self.alpha)
         focal_weight = (1.0 - p_t).pow(self.gamma)
-        
         loss = alpha_factor * focal_weight * bce
 
         if self.reduction == "mean":

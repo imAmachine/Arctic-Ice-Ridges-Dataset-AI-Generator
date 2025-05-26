@@ -166,7 +166,7 @@ def main():
         # Training
         print(f"Обучение модели {args.model} на {args.epochs} эпохах...")
         model.build_train_modules(model_cfg)
-        model._evaluators_from_config(model_cfg['evaluators_info'])
+        model._evaluators_from_config(model_cfg['evaluators_info'], device=DEVICE)
         
         if args.load_weights:
             checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
