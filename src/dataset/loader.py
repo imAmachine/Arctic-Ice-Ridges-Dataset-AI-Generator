@@ -19,10 +19,10 @@ class DatasetMaskingProcessor:
 
     def create_mask(self, image: torch.Tensor):
         _, h, w = image.shape
-
         mask = torch.zeros((h, w), dtype=torch.float32, device=image.device, requires_grad=False)
+
         for processor in self.processors:
-            processor(mask)
+            mask = processor(mask)
         
         return mask
 
