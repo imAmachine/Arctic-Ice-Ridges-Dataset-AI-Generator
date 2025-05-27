@@ -83,7 +83,7 @@ class TensorConverter(Processor):
         return tensor.unsqueeze(0) if tensor.ndim == 2 else tensor
 
 
-class InferenceMaskingProcessor(Processor):
+class InferenceProcessor(Processor):
     def __init__(self, outpaint_ratio: float = 0.2):
         super().__init__()
         self.outpaint_ratio = outpaint_ratio

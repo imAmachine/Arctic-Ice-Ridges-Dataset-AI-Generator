@@ -169,7 +169,7 @@ def main():
 
     elif args.gui:
         root = tk.Tk()
-        _ = ImageGenerationApp(root, phase_cfg, WEIGHTS_PATH)
+        _ = ImageGenerationApp(root, phase_cfg)
         root.mainloop()
         return
     
