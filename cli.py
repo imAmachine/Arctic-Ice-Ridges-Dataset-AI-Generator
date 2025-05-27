@@ -1,5 +1,6 @@
 import os
 import argparse
+import tkinter as tk
 from typing import Dict
 
 from torch import cuda
@@ -10,6 +11,7 @@ from config.default import DEFAULT_TEST_CONF, DEFAULT_TRAIN_CONF
 from config.preprocess import MASKS_FILE_EXTENSIONS, PREPROCESSORS
 from config.path import *
 
+from gui.gui import ImageGenerationApp
 from src.common import Utils
 from src.common.enums import ExecPhase, ModelType
 from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
@@ -75,6 +77,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--val_rat', type=float, default=0.2)
     parser.add_argument('--load_weights', action='store_true')
     parser.add_argument('--get_generator', action='store_true')
+    parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
     return parser.parse_args()
 
 def init_mask_processors(config: Dict):
@@ -96,7 +99,8 @@ def main():
     init_config()
     cfg = Utils.from_json(CONFIG)
     phase_cfg = cfg[ExecPhase.TEST.value if args.test else ExecPhase.TRAIN.value]
-    model_cfg = phase_cfg[args.model]
+    if not args.gui:
+        model_cfg = phase_cfg[args.model]
     
     dataset_preprocessor = DataPreprocessor(
         MASKS_FOLDER_PATH, 
@@ -162,6 +166,13 @@ def main():
             seed=42,
         )
         tester.run()
+
+    elif args.gui:
+        root = tk.Tk()
+        _ = ImageGenerationApp(root, phase_cfg, WEIGHTS_PATH)
+        root.mainloop()
+        return
+    
     else:
         # Training
         print(f"Обучение модели {args.model} на {args.epochs} эпохах...")

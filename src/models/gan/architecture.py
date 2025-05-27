@@ -139,6 +139,14 @@ class CustomGenerator(nn.Module):
             T.Resize((target_img_size, target_img_size), interpolation = T.InterpolationMode.BILINEAR), 
             T.ToDtype(torch.float32, scale = True), 
         ]
+    
+    @staticmethod
+    def get_infer_transforms(target_img_size) -> List[T.Transform]:
+        return [
+            T.ToImage(),
+            T.Resize((target_img_size, target_img_size), interpolation = T.InterpolationMode.BILINEAR), 
+            T.ToDtype(torch.float32, scale = True), 
+        ]
 
 
 class CustomDiscriminator(nn.Module):
