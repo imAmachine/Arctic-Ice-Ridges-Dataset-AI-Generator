@@ -24,6 +24,8 @@ from src.tester import ParamGridTester
 from src.models import GAN
 
 DEVICE = 'cuda' if cuda.is_available() else 'cpu'
+CHECKPOINT_PATH = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
+MASKS_FILE_EXTENSIONS = ['.png']
 
 def validate_or_reset_section(config: dict, section: str, defaults: dict) -> None:
     """Ensure config[section] matches defaults; prompt to reset if not."""
@@ -56,14 +58,6 @@ def init_config():
     # Валидация секции TEST с учетом дефолтных значений
     validate_or_reset_section(cfg, ExecPhase.TEST.value, default_test_conf)
     Utils.to_json(cfg, CONFIG)
-    
-def load_checkpoint(model: GAN, checkpoint_path: str) -> None:
-    """Load model weights from checkpoint if exists."""
-    if os.path.exists(checkpoint_path):
-        print(f"Загрузка весов из {checkpoint_path}")
-        model.checkpoint_load(checkpoint_path)
-    else:
-        print(f"Файл чекпоинта {checkpoint_path} не найден. Обучение с нуля.")
 
 def parse_arguments() -> argparse.Namespace:
     """Parse and return command line arguments."""
@@ -76,69 +70,38 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--batch_size', type=int, default=3)
     parser.add_argument('--val_rat', type=float, default=0.2)
     parser.add_argument('--load_weights', action='store_true')
-    parser.add_argument('--get_generator', action='store_true')
+    # parser.add_argument('--get_generator', action='store_true')
     return parser.parse_args()
-
-def init_mask_processors(config: Dict):
-    processors = []
-
-    for name, values in config.items():
-        if values["enabled"]:
-            cls = MASK_PROCESSORS.get(name)
-            processors.append(cls(**values["params"]))
-
-    if not processors:
-        raise RuntimeError("[masking] Ни одного валидного процессора не создано")
-
-    return DatasetMaskingProcessor(processors=processors)
 
 def main():
     args = parse_arguments()
-
     init_config()
+    
     cfg = Utils.from_json(CONFIG)
     phase_cfg = cfg[ExecPhase.TEST.value if args.test else ExecPhase.TRAIN.value]
     model_cfg = phase_cfg[args.model]
     
-    PREPROCESSORS = [
+    preprocessors = [
         RotateMask(),
         AdjustToContent(),
         Crop(k=0.5),
     ]
-
-    MASKS_FILE_EXTENSIONS = ['.png']
     
     dataset_preprocessor = DataPreprocessor(
         MASKS_FOLDER_PATH, 
         PREPROCESSED_MASKS_FOLDER_PATH, 
         MASKS_FILE_EXTENSIONS, 
-        PREPROCESSORS
+        preprocessors
     )
     dataset_metadata = dataset_preprocessor.get_metadata()
     
-    if args.get_generator:
-        checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
-
-        checkpoint_map = {
-            GenerativeModules.GENERATOR: {
-                'model': ('trainers', GenerativeModules.GENERATOR, 'module', 'arch'),
-            }
-        }
-
-        model = GAN(DEVICE, n_critic=5, checkpoint_map=checkpoint_map)
-        model.build_train_modules(model_cfg)
-
-        load_checkpoint(model, checkpoint_path)
-        model.checkpoint_save(os.path.join(WEIGHTS_PATH, 'generator.pt'))
     
     model = None
-    masking_processor = None
+    masking_processor = DatasetMaskingProcessor(processors_dict=model_cfg["mask_processors"])
     transforms = None
     
     if args.model == 'gan':
         model = GAN(DEVICE, n_critic=5)
-        
-        masking_processor = init_mask_processors(config=model_cfg["mask_processors"])
         transforms = tf2.Compose(GAN.get_transforms(model_cfg['target_image_size']))
         
         ds_creator = DatasetCreator(
@@ -172,6 +135,7 @@ def main():
             seed=42,
         )
         tester.run()
+        
     else:
         # Training
         print(f"Обучение модели {args.model} на {args.epochs} эпохах...")
@@ -179,9 +143,22 @@ def main():
         model._evaluators_from_config(model_cfg['evaluators_info'], device=DEVICE)
         
         if args.load_weights:
-            checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
-            load_checkpoint(model, checkpoint_path)
+            model.checkpoint_load(CHECKPOINT_PATH)
         trainer.run()
 
 if __name__ == '__main__':
     main()
+
+
+# if args.get_generator:
+    #     checkpoint_map = {
+    #         GenerativeModules.GENERATOR: {
+    #             'model': ('trainers', GenerativeModules.GENERATOR, 'module', 'arch'),
+    #         }
+    #     }
+
+    #     model = GAN(DEVICE, n_critic=5, checkpoint_map=checkpoint_map)
+    #     model.build_train_modules(model_cfg)
+        
+    #     model.checkpoint_load(CHECKPOINT_PATH)
+    #     model.checkpoint_save(os.path.join(WEIGHTS_PATH, 'generator.pt'))

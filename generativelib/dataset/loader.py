@@ -7,20 +7,21 @@ import cv2
 import torchvision
 from torch.utils.data import DataLoader, Dataset
 
-from generativelib.dataset.base import BaseMaskProcessor
+from generativelib.dataset.base import MaskProcessorsFabric
 from generativelib.common.utils import Utils
 from generativelib.model.enums import ExecPhase
 
 
 class DatasetMaskingProcessor:
-    def __init__(self, processors: List[BaseMaskProcessor]):
-        self.processors = processors
+    def __init__(self, processors_dict: Dict):
+        self.processors_fabric = MaskProcessorsFabric()
+        self.processors_fabric.create_processors(processors_dict)
 
     def create_mask(self, image: torch.Tensor):
         _, h, w = image.shape
         mask = torch.zeros((h, w), dtype=torch.float32, device=image.device, requires_grad=False)
 
-        for processor in self.processors:
+        for processor in self.processors_fabric.processors:
             mask = processor(mask)
         
         return mask
