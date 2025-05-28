@@ -1,6 +1,6 @@
 from torch import nn, autograd
 import torch.nn.functional as F
-from torch import Tensor, tensor, rand, mean, ones_like, sigmoid
+import torch
 
 
 class GradientPenalty(nn.Module):
@@ -8,12 +8,12 @@ class GradientPenalty(nn.Module):
         super().__init__()
         self.model = model
 
-    def forward(self, fake_samples: Tensor, real_samples: Tensor) -> Tensor:
+    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         real = real_samples.detach()
         fake = fake_samples.detach()
         
         batch = real.size(0)
-        alpha = rand(batch, 1, 1, 1, device=real.device)
+        alpha = torch.rand(batch, 1, 1, 1, device=real.device)
         interpolates = real + alpha * (fake - real)
         interpolates.requires_grad_(True)
 
@@ -38,7 +38,7 @@ class WassersteinLoss(nn.Module):
         self.model = model
         self.drift_eps = 1e-3
 
-    def forward(self, fake_samples: Tensor, real_samples: Tensor) -> Tensor:
+    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         real_pred = self.model(real_samples)
         fake_pred = self.model(fake_samples)
         drift = self.drift_eps * (real_pred ** 2).mean()
@@ -51,17 +51,17 @@ class GeneratorLoss(nn.Module):
         super().__init__()
         self.model = model
 
-    def forward(self, fake_samples: Tensor, real_samples: Tensor = None) -> Tensor:
+    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor = None) -> torch.Tensor:
         return -self.model(fake_samples).mean()
 
 
 class DiceLoss(nn.Module):
     def __init__(self, smooth: float = 1e-6):
         super().__init__()
-        self.register_buffer('smooth', tensor(smooth))
+        self.register_buffer('smooth', torch.tensor(smooth))
 
-    def forward(self, pred: Tensor, target: Tensor) -> Tensor:
-        prob = sigmoid(pred)
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        prob = torch.sigmoid(pred)
         prob_flat   = prob.view(prob.size(0), -1)
         target_flat = target.view(target.size(0), -1)
         intersection = (prob_flat * target_flat).sum(dim=1)
@@ -82,9 +82,9 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
         self.reduction = reduction
 
-    def forward(self, pred: Tensor, target: Tensor) -> Tensor:
+    def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         bce = F.binary_cross_entropy_with_logits(pred, target, reduction="none")
-        prob = sigmoid(pred)
+        prob = torch.sigmoid(pred)
         p_t = target * prob + (1 - target) * (1 - prob)
         
         alpha_factor = target * self.alpha + (1 - target) * (1 - self.alpha)
@@ -102,7 +102,7 @@ class FocalLoss(nn.Module):
 class EdgeLoss(nn.Module):
     def __init__(self):
         super().__init__()
-        kx = tensor([[[[-1,0,1],[-2,0,2],[-1,0,1]]]])
+        kx = torch.tensor([[[[-1,0,1],[-2,0,2],[-1,0,1]]]])
         self.register_buffer('kernel_x', kx.float())
         self.register_buffer('kernel_y', kx.transpose(2,3).float())
 

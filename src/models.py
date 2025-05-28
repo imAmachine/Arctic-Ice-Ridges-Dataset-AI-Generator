@@ -43,7 +43,7 @@ class GAN(GenerativeModel):
             GenerativeModules.DISCRIMINATOR.value: []
         }
     
-    def _train_step(self, inp: Tensor, target: Tensor) -> None:
+    def _train_step(self, inp: torch.Tensor, target: torch.Tensor) -> None:
         gen_mgr = self.trainers[GenerativeModules.GENERATOR]
         disc_mgr = self.trainers[GenerativeModules.DISCRIMINATOR]
         
@@ -55,7 +55,7 @@ class GAN(GenerativeModel):
         fake = gen_mgr.module(inp)
         gen_mgr.optimization_step(fake, target)
 
-    def _valid_step(self, inp: Tensor, target: Tensor) -> None:
+    def _valid_step(self, inp: torch.Tensor, target: torch.Tensor) -> None:
         with torch.no_grad():
             fake = self(inp)
             for mgr in self.trainers.values():
