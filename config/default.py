@@ -1,7 +1,13 @@
-from config.registry import LOSSES
-from src.preprocessing.processors import *
-from src.common.enums import *
-from src.dataset.strategies import *
+from generativelib.model.evaluators.base import LOSSES
+
+# enums
+from generativelib.model.evaluators.enums import EvaluatorType, MetricName
+from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.enums import ExecPhase
+
+from generativelib.preprocessing.processors import *
+from generativelib.dataset.mask_processors import *
+
 import inspect
 
 DEFAULT_TRAIN_CONF = {
@@ -25,7 +31,7 @@ DEFAULT_TRAIN_CONF = {
                 }
                 for k, v in LOSSES.items()
             }
-            for model in [ModelType.GENERATOR, ModelType.DISCRIMINATOR]
+            for model in [GenerativeModules.GENERATOR, GenerativeModules.DISCRIMINATOR]
         },
         "optimization_params": {
             EvaluatorType.METRIC.name: MetricName.IOU.value,

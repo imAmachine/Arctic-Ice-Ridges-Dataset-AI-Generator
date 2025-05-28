@@ -5,23 +5,25 @@ from typing import Dict
 from torch import cuda
 import torchvision.transforms.v2 as tf2
 
-from config.registry import MASK_PROCESSORS
 from config.default import DEFAULT_TEST_CONF, DEFAULT_TRAIN_CONF
-from config.preprocess import MASKS_FILE_EXTENSIONS, PREPROCESSORS
 from config.path import *
 
-from src.common import Utils
-from src.common.enums import ExecPhase, ModelType
-from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
-from src.dataset.strategies import *
-from src.models.gan.architecture import CustomGenerator
-from src.models.models import GAN
-from src.models.tester import ParamGridTester
-from src.models.train import Trainer
-from src.preprocessing.preprocessor import DataPreprocessor
+from generativelib.common.utils import Utils
+from generativelib.dataset.mask_processors import MASK_PROCESSORS
+from generativelib.dataset.loader import DatasetCreator, DatasetMaskingProcessor
+from generativelib.dataset.mask_processors import *
+from generativelib.model.train.train import Trainer
+from generativelib.preprocessing.preprocessor import DataPreprocessor
+
+
+from generativelib.model.enums import ExecPhase
+from generativelib.model.arch.enums import GenerativeModules
+
+from generativelib.preprocessing.processors import *
+from src.tester import ParamGridTester
+from src.models import GAN
 
 DEVICE = 'cuda' if cuda.is_available() else 'cpu'
-
 
 def validate_or_reset_section(config: dict, section: str, defaults: dict) -> None:
     """Ensure config[section] matches defaults; prompt to reset if not."""
@@ -98,6 +100,14 @@ def main():
     phase_cfg = cfg[ExecPhase.TEST.value if args.test else ExecPhase.TRAIN.value]
     model_cfg = phase_cfg[args.model]
     
+    PREPROCESSORS = [
+        RotateMask(),
+        AdjustToContent(),
+        Crop(k=0.5),
+    ]
+
+    MASKS_FILE_EXTENSIONS = ['.png']
+    
     dataset_preprocessor = DataPreprocessor(
         MASKS_FOLDER_PATH, 
         PREPROCESSED_MASKS_FOLDER_PATH, 
@@ -110,8 +120,8 @@ def main():
         checkpoint_path = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
 
         checkpoint_map = {
-            ModelType.GENERATOR: {
-                'model': ('trainers', ModelType.GENERATOR, 'module', 'arch'),
+            GenerativeModules.GENERATOR: {
+                'model': ('trainers', GenerativeModules.GENERATOR, 'module', 'arch'),
             }
         }
 
@@ -129,7 +139,7 @@ def main():
         model = GAN(DEVICE, n_critic=5)
         
         masking_processor = init_mask_processors(config=model_cfg["mask_processors"])
-        transforms = tf2.Compose(CustomGenerator.get_transforms(model_cfg['target_image_size']))
+        transforms = tf2.Compose(GAN.get_transforms(model_cfg['target_image_size']))
         
         ds_creator = DatasetCreator(
             metadata=dataset_metadata,
