@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, Iterator, List
 import torch
 
 
@@ -29,3 +29,9 @@ class MaskProcessorsFabric:
 
         if not self.processors:
             raise RuntimeError("[masking] Ни одного валидного процессора не создано")
+    
+    def __iter__(self) -> Iterator[BaseMaskProcessor]:
+        """Возвращаем итератор по внутреннему списку процессоров."""
+        return iter(self.processors)
+    
+    

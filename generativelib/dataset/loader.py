@@ -21,7 +21,7 @@ class DatasetMaskingProcessor:
         _, h, w = image.shape
         mask = torch.zeros((h, w), dtype=torch.float32, device=image.device, requires_grad=False)
 
-        for processor in self.processors_fabric.processors:
+        for processor in self.processors_fabric:
             mask = processor(mask)
         
         return mask
