@@ -6,7 +6,7 @@ from torch.nn.utils import spectral_norm
 import torch.nn.functional as F
 import torchvision.transforms.v2 as T
 
-from src.models.gan.custom_transforms import OneOf, RandomRotate
+from src.models.gan.custom_transforms import OneOf, RandomRotate, BinarizeTransform
 
 
 class ConvBlock(nn.Module):
@@ -138,6 +138,7 @@ class CustomGenerator(nn.Module):
 
             T.Resize((target_img_size, target_img_size), interpolation = T.InterpolationMode.BILINEAR), 
             T.ToDtype(torch.float32, scale = True), 
+            BinarizeTransform()
         ]
     
     @staticmethod
@@ -146,8 +147,8 @@ class CustomGenerator(nn.Module):
             T.ToImage(),
             T.Resize((target_img_size, target_img_size), interpolation = T.InterpolationMode.BILINEAR), 
             T.ToDtype(torch.float32, scale = True), 
+            BinarizeTransform()
         ]
-
 
 class CustomDiscriminator(nn.Module):
     def __init__(self, in_ch = 1, f_base = 64):

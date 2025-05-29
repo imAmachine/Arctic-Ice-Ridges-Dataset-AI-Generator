@@ -27,3 +27,7 @@ class RandomRotate(nn.Module):
             angle = random.choice(self.angles)
             return T.functional.rotate(x, angle)
         return x
+
+class BinarizeTransform(nn.Module):
+    def forward(self, x):
+        return (x >= x.std()).float()
