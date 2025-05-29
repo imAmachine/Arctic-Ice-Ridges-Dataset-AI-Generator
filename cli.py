@@ -1,7 +1,7 @@
 import os
 import argparse
-import tkinter as tk
 from typing import Dict
+import sys
 
 from torch import cuda
 import torchvision.transforms.v2 as tf2
@@ -10,8 +10,9 @@ from config.registry import MASK_PROCESSORS
 from config.default import DEFAULT_TEST_CONF, DEFAULT_TRAIN_CONF
 from config.preprocess import MASKS_FILE_EXTENSIONS, PREPROCESSORS
 from config.path import *
+from PyQt5 import QtWidgets
 
-from gui.gui import ImageGenerationApp
+from gui.gui import InferenceWindow
 from src.common import Utils
 from src.common.enums import ExecPhase, ModelType
 from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
@@ -168,9 +169,10 @@ def main():
         tester.run()
 
     elif args.gui:
-        root = tk.Tk()
-        _ = ImageGenerationApp(root, phase_cfg)
-        root.mainloop()
+        app = QtWidgets.QApplication(sys.argv)
+        window = InferenceWindow(phase_cfg, INTERFACES)
+        window.show()
+        sys.exit(app.exec())
         return
     
     else:

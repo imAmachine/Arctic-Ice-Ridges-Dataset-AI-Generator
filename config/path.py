@@ -9,6 +9,9 @@ GEODATA_PATH = "./data/geo_data.csv"
 # путь к корневой директории для обработанных данных
 OUTPUT_FOLDER_PATH = "./data/processed_output/"
 
+# путь к файлам с интерфейсами
+INTERFACES = './gui/interfaces/'
+
 # пути к директориям для масок
 MASKS_FOLDER_PATH = "./data/masks/" # исходные маски
 PREPROCESSED_MASKS_FOLDER_PATH = os.path.join(OUTPUT_FOLDER_PATH, "preprocessed") # предобработанные входные маски
