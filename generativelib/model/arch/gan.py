@@ -66,8 +66,10 @@ class CustomGenerator(nn.Module):
         # Энкодер
         self.encoders = nn.ModuleList()
         ch = in_ch
+        features_limit = 512
+        
         for i in range(n_down):
-            out_ch = f_base * (2**i)
+            out_ch = min(f_base * (2**i), features_limit)
             self.encoders.append(ConvBlock(ch, out_ch))
             ch = out_ch
 
@@ -78,7 +80,7 @@ class CustomGenerator(nn.Module):
 
         # Декодер
         self.decoders = nn.ModuleList()
-        enc_channels = [f_base * (2**i) for i in range(n_down)]
+        enc_channels = [min(f_base * (2**i), features_limit) for i in range(n_down)]
         in_ch_dec = enc_channels[-1]
         for out_ch in reversed(enc_channels):
             self.decoders.append(UpBlock(in_ch_dec + out_ch, out_ch))
@@ -104,10 +106,10 @@ class CustomGenerator(nn.Module):
 
 
 class CustomDiscriminator(nn.Module):
-    def __init__(self, in_ch=1, f_base=64):
+    def __init__(self, in_ch=1, layers_count: int=6, f_base=64):
         super().__init__()
-        layers_count = 4
         out_ch = 1
+        features_limit = 512
         
         def layer(in_channels, out_channels, kernel_size=4, stride=2, padding=1):
             return nn.Sequential(
@@ -118,18 +120,15 @@ class CustomDiscriminator(nn.Module):
         def make_layers(in_channels, base_channels, count):
             blocks = []
             for i in range(count):
-                out_channels = base_channels * (2 ** i)
+                out_channels = min(base_channels * (2 ** i), features_limit)
                 blocks.append(layer(in_channels, out_channels))
                 in_channels = out_channels
             return nn.Sequential(*blocks)
         
         self.net = make_layers(in_ch, f_base, layers_count)
         
-        self.final = nn.Sequential(
-            nn.Conv2d(f_base * 2**(layers_count-1), out_ch, kernel_size=16, stride=1, padding=0, bias=False),
-            nn.Flatten()
-        )
+        self.final = nn.Conv2d(min(f_base * 2**(layers_count-1), features_limit), out_ch, kernel_size=4, stride=1, padding=0, bias=False)
     
     def forward(self, x):
         x = self.net(x)
-        return self.final(x)
+        return self.final(x).view(x.size(0), -1)
