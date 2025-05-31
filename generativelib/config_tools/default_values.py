@@ -14,7 +14,7 @@ def get_default_train_conf():
         "arch": {
             "img_size": 256,
             "in_ch": 1,
-            "f_base": 64,
+            "f_base": 32,
         },
         "train": {
             "epochs": 1000,
@@ -22,7 +22,7 @@ def get_default_train_conf():
         },
         "dataset": {
             "batch_size": 9,
-            "augs": 15,
+            "augs": 30,
             "validation_size": 0.2,
             "shuffle": True,
             "workers": 4
@@ -80,7 +80,7 @@ def get_default_train_conf():
         
     for module in GenerativeModules:
         models[ModelTypes.GAN.name]["modules"][module.name] = {
-            "evaluators_info": {
+            "evals": {
                 loss_name: {
                     "execution": {
                         "weight": 0.0,

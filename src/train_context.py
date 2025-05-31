@@ -61,15 +61,20 @@ class AppTrainContext:
             dataloaders=dataloaders,
         )
     
-    def init_train(self, model_type: str,):
+    def init_train(self, model_type: str):
         # предобработка и подгрузка метаданных
         metadata = self._preprocessor_metadata()
         
+        # получение текущего шаблона для обучения
         template, transforms = self._model_template(
             model_type, 
-            self.config_serializer.params_by_section(section="arch", keys='img_size'))
+            self.config_serializer.params_by_section(section="arch", keys='img_size')
+        )
         
         # создание менеджера датасета
         ds_creator = self._dataset_creator(metadata, transforms)
         
-        return self._train_manager(template, ds_creator.create_loaders())
+        return self._train_manager(
+            template, 
+            ds_creator.create_loaders()
+        )

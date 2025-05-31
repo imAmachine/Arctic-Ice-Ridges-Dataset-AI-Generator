@@ -6,7 +6,7 @@ from generativelib.dataset.base import BaseMaskProcessor
 from generativelib.dataset.mask_processors import MASK_PROCESSORS
 from generativelib.model.arch.enums import ModelTypes, GenerativeModules
 from generativelib.model.enums import ExecPhase
-from generativelib.model.evaluators.base import LOSSES, EvalItem, EvaluateProcessor
+from generativelib.model.evaluators.base import LOSSES, EvalItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType, MetricName
 from generativelib.model.train.base import Arch, ArchOptimizer, ArchOptimizersCollection, BaseTrainTemplate
 
@@ -39,11 +39,13 @@ class TrainConfigSerializer(ConfigModelSerializer):
             
             if exec_params['weight'] > 0.0:
                 cls = LOSSES.get(eval_name)
+                exec_phase = exec_params['exec_phase']
+                
                 evaluator = EvalItem(
                     callable_fn=cls(**init_params).to(device),
                     name=eval_name,
                     type=eval_type,
-                    exec_phase=exec_params["exec_phase"],
+                    exec_phase=ExecPhase[exec_phase],
                     weight=exec_params["weight"]
                 )
                 
@@ -61,9 +63,12 @@ class TrainConfigSerializer(ConfigModelSerializer):
         for m_name, module_info in modules.items():
             cls = GenerativeModules[m_name].value
             arch = Arch(GenerativeModules[m_name], cls(**arch_params).to(device))
-            evals = self._serialize_evaluators(device, module_info.get("evaluators_info"))
-            
-            eval_proc = EvaluateProcessor(evals)
-            arch_collect.append(ArchOptimizer(arch, eval_proc, optimization_params))
+            evals = self._serialize_evaluators(device, module_info.get("evals"))
+            arch_collect.append(
+                ArchOptimizer(
+                    arch_module=arch, 
+                    evals=evals, 
+                    optimization_params=optimization_params)
+            )
             
         return arch_collect, model_params

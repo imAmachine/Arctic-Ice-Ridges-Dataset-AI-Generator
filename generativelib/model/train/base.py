@@ -13,8 +13,9 @@ from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
 from generativelib.model.enums import ExecPhase
 
-from generativelib.model.evaluators.base import EvalItem, EvaluateProcessor
+from generativelib.model.evaluators.base import EvalItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType
+from generativelib.model.train.visualizer import Visualizer
 
 
 class Arch(torch.nn.Module):
@@ -33,41 +34,42 @@ class Arch(torch.nn.Module):
 
 class ArchOptimizer:
     """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
-    def __init__(self, arch_module: Arch, eval_processor: EvaluateProcessor, optimization_params: Dict):
+    def __init__(self, arch_module: Arch, evals: List[EvalItem], optimization_params: Dict):
         self.arch_module = arch_module
-        self.evaluate_processor = eval_processor
+        self.evals = evals
+        self.evals_collector = EvalsCollector()
+        
         self.optimizer = torch.optim.Adam(
             self.arch_module.parameters(),
-            lr=optimization_params['lr'],
+            lr=optimization_params.get('lr', .0005),
             betas=optimization_params.get('betas', (0.9, 0.999))
         )
     
     def loss(self, generated_sample: torch.Tensor, real_sample: torch.Tensor, exec_phase: ExecPhase) -> torch.Tensor:
-        self.evaluate_processor.process(
-            generated_sample=generated_sample,
-            real_sample=real_sample,
-            exec_phase=exec_phase
-        )
+        loss_tensors = []
+        loss_vals_for_history = []
 
-        last_epoch: Dict[str, Dict[str, torch.Tensor]] = self.evaluate_processor.evals_history[exec_phase][-1]
-        processed = last_epoch[EvaluatorType.LOSS].values()
-        return torch.stack([t.mean() for t in processed]).sum()
+        for item in self.evals:
+            if item.exec_phase == ExecPhase.ANY or item.exec_phase == exec_phase:
+                val = item(generated_sample, real_sample)
+                loss_tensors.append(val.mean())
+                loss_vals_for_history.append((item.type, item.name, val.detach().cpu().item()))
 
-    def optimize(self, generated_sample: torch.Tensor, real_sample: torch.Tensor) -> float:
+        self.evals_collector.collect(loss_vals_for_history, exec_phase)
+
+        return torch.stack(loss_tensors).sum()
+
+    def optimize(self, generated_sample: torch.Tensor, real_sample: torch.Tensor) -> None:
         self.optimizer.zero_grad()
-
         loss_tensor = self.loss(
             generated_sample,
             real_sample,
             exec_phase=ExecPhase.TRAIN
         )
-
         loss_tensor.backward()
         self.optimizer.step()
 
-        return loss_tensor.item()
-
-    def mode_to(self, phase: ExecPhase):
+    def mode_to(self, phase: ExecPhase) -> None:
         if phase == ExecPhase.TRAIN:
             self.arch_module.train()
         
@@ -81,114 +83,54 @@ class ArchOptimizersCollection(list[ArchOptimizer]):
             if arch_optimizer.arch_module.model_type == model_type:
                 return arch_optimizer
     
-    def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]):
+    def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]) -> None:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
-            cur_optimizer.evaluate_processor.evals.extend(evals_list)
+            cur_optimizer.evals.extend(evals_list)
     
-    def all_mode_to(self, phase: ExecPhase):
+    def all_mode_to(self, phase: ExecPhase) -> None:
         for optimizer in self:
             optimizer.mode_to(phase)
-
-
-class EvaluatorsCollector:
-    def __init__(self, modules_optimizers: Dict[ModelTypes, ArchOptimizer]):
-        self.managers = modules_optimizers
-        self.history: List[Dict[ExecPhase, Dict[ModelTypes, Dict[str, Dict[str, float]]]]] = []
-
-    def collect(self) -> None:
-        """Собирает сводку по эпохе и сбрасывает историю в менеджерах."""
-        self.history.append(self._snapshot())
-        self._reset()
-
-    def summary_df(self, epoch: int) -> pd.DataFrame:
-        """Возвращает детальный DataFrame для заданной эпохи."""
-        if not (0 <= epoch < len(self.history)):
-            return pd.DataFrame(columns=[
-                "Phase", 
-                "Model", 
-                "Evaluator Type", 
-                "Name", 
-                "Value"
-            ])
-
-        records = [
-            {
-                "Phase": phase.name,
-                "Model": mt.value,
-                "Evaluator Type": etype,
-                "Name": name,
-                "Value": val
-            }
-            for phase, models in self.history[epoch].items()
-            for mt, groups in models.items()
-            for etype, items in groups.items()
-            for name, val in items.items()
-        ]
+    
+    def all_clear_history(self) -> None:
+        for optimizer in self:
+            optimizer.evals_collector.reset_history()
+    
+    def all_print_epoch_summary(self, phase: ExecPhase) -> None:
+        # [METHOD AI GENERATED]
         
-        df = pd.DataFrame(records).fillna("—")
-        return df.set_index([
-            "Phase", 
-            "Model", 
-            "Evaluator Type", 
-            "Name"
-        ]).sort_index()
+        headers = ["Type", "Name", "Mean Value"]
+        # Получаем имя фазы для вывода и сравнения
+        if hasattr(phase, "name"):
+            phase_name = phase.name.capitalize()
+        else:
+            phase_name = str(phase).capitalize()
 
-    def print(self, epoch: Optional[int] = None) -> None:
-        """Печатает сводку по эпохе в табличном виде."""
-        idx = epoch if epoch is not None else len(self.history) - 1
-        df = self.summary_df(idx).reset_index()
-        
-        for phase, sub in df.groupby("Phase"):
-            print(f"[{phase}] ОЦЕНКА, эпоха: {idx + 1}")
-            print(
-                tabulate(
-                    sub[["Model", "Evaluator Type", "Name", "Value"]],
-                    headers="keys", tablefmt="fancy_grid", floatfmt=".4f"
-                )
-            )
+        for i, optimizer in enumerate(self):
+            opt_name = getattr(getattr(optimizer, "arch_module", None), "model_type", None)
+            if hasattr(opt_name, "name"):
+                opt_name = opt_name.name
+            elif opt_name is None:
+                opt_name = str(i)
+            summary = optimizer.evals_collector.compute_epoch_summary()
 
-    def save_summary(self, output_path: Optional[str] = None, epoch: Optional[int] = None) -> None:        
-        # 1) Проверяем, что история не пуста
-        if not self.history:
-            raise RuntimeError("Нечего сохранять: вызовите collect() до save_summary().")
+            # Собираем строки только по нужной фазе
+            rows = []
+            for key, mean_val in summary.items():
+                exec_phase, typ, name = key
+                
+                # Универсальное сравнение фаз
+                key_phase_name = exec_phase.name.capitalize() if hasattr(exec_phase, "name") else str(exec_phase).capitalize()
+                if key_phase_name != phase_name:
+                    continue
+                mean_str = f"{mean_val:.6f}" if mean_val is not None else "-"
+                row = [str(typ.name), str(name), mean_str]
+                rows.append(row)
 
-        idx = len(self.history) - 1 if epoch is None else epoch
-        if not (0 <= idx < len(self.history)):
-            raise IndexError(f"Epoch {idx} отсутствует в истории (0..{len(self.history)-1}).")
-
-        # 2) Берём все метрики в виде DataFrame
-        df = self.summary_df(idx).reset_index()
-        if df.empty:
-            raise RuntimeError(f"Epoch {idx+1} содержит 0 метрик — нечего сохранять.")
-
-        # 4) Собираем итоговую “горизонтальную” запись
-        row: Dict[str, Any] = {}
-        for _, r in df.iterrows():
-            col = f"{r['Phase']}.{r['Model']}.{r['Evaluator Type']}.{r['Name']}"
-            row[col] = r["Value"]
-
-        # 6) Пишем в CSV
-        row_df = pd.DataFrame([row])
-        write_header = not os.path.exists(output_path) or os.path.getsize(output_path) == 0
-        row_df.to_csv(output_path, mode="a", header=write_header, index=False)
-
-    def _snapshot(self) -> Dict:
-        """Забирает из менеджеров текущие summary-а по фазам."""
-        snapshots = {}
-        for phase in (ExecPhase.TRAIN, ExecPhase.VALID):
-            phase_snapshot: Dict[ModelTypes, Dict[str, Dict[str, float]]] = {}
-            for mt, mgr in self.managers.items():
-                manager_summary = mgr.evaluate_processor.compute_epoch_summary()
-                # compute_epoch_summary() keys are phase.value (e.g. "train", "valid")
-                phase_snapshot[mt] = manager_summary.get(phase.value, {})
-            snapshots[phase] = phase_snapshot
-        return snapshots
-
-    def _reset(self) -> None:
-        """Сбрасывает историю evaluators в менеджерах."""
-        for mgr in self.managers.values():
-            mgr.evaluate_processor._init_history_dict()
+            if rows:
+                print(f"\n=== Optimizer: {opt_name} ===\n")
+                print(tabulate(rows, headers=headers, tablefmt="github"))
+                print()
 
 
 class BaseTrainTemplate(ABC):
@@ -198,17 +140,24 @@ class BaseTrainTemplate(ABC):
         self.model_params = model_params
     
     @abstractmethod
-    def _train(self, inp: torch.Tensor, trg: torch.Tensor):
+    def _train_step(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
     
     @abstractmethod
-    def _valid(self, inp: torch.Tensor, trg: torch.Tensor):
+    def _valid_step(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
     
-    def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor):
+    def epoch(self, device: torch.device, phase: ExecPhase, loader) -> None:
+        self.arch_optimizers.all_clear_history()
         self.arch_optimizers.all_mode_to(phase)
-        if phase == ExecPhase.TRAIN:
-            self._train(inp, trg)
         
-        if phase == ExecPhase.VALID:
-            self._valid(inp, trg)
+        for inp, target in tqdm(loader):
+            inp, trg = inp.to(device), target.to(device)
+            
+            if phase == ExecPhase.TRAIN:
+                self._train_step(inp, trg)
+            
+            if phase == ExecPhase.VALID:
+                self._valid_step(inp, trg)
+        
+        self.arch_optimizers.all_print_epoch_summary(phase)

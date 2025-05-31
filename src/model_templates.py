@@ -29,7 +29,7 @@ class GANTrainTemplate(BaseTrainTemplate):
         
         self.arch_optimizers.add_evals(self._default_evaluators(self.discr_optim.arch_module))
     
-    def _train(self, inp: torch.Tensor, target: torch.Tensor) -> None:
+    def _train_step(self, inp: torch.Tensor, target: torch.Tensor) -> None:
         for _ in range(self.n_critic):
             with torch.no_grad():
                 fake = self.gen_optim.arch_module(inp)
@@ -38,7 +38,7 @@ class GANTrainTemplate(BaseTrainTemplate):
         fake = self.gen_optim.arch_module(inp)
         self.gen_optim.optimize(fake, target)
 
-    def _valid(self, inp: torch.Tensor, target: torch.Tensor) -> None:
+    def _valid_step(self, inp: torch.Tensor, target: torch.Tensor) -> None:
         with torch.no_grad():
             fake = self.gen_optim.arch_module(inp)
             for optimizer in self.arch_optimizers:

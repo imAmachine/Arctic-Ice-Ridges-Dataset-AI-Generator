@@ -37,73 +37,38 @@ class EvalItem:
     name: str
     type: EvaluatorType
     weight: float = 1.0
-    exec_phase: str = ExecPhase.ANY
+    exec_phase: ExecPhase = ExecPhase.ANY
     
     def __call__(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> 'torch.Tensor':
         return self.callable_fn(generated_sample, real_sample) * self.weight
 
 
-class EvaluateProcessor:
-    """Нужен для подсчёта метрик и лоссов"""
-    def __init__(self, evals: List[EvalItem]):
-        self.evals_history: Dict[ExecPhase, List] = None
-        self.evals = evals
-        self._init_history_dict()
+class EvalsCollector:
+    # [CLASS AI GENERATED]
+    def __init__(self):
+        self.reset_history()
 
-    def _init_history_dict(self):
-        self.evals_history = {
-            ExecPhase.TRAIN: [], 
-            ExecPhase.VALID: []
+    def reset_history(self):
+        self.epoch_history = {
+            ExecPhase.TRAIN: {},
+            ExecPhase.VALID: {},
         }
-    
-    def _update_history(self, eval_type: EvaluatorType, phase: ExecPhase, name: str, value: 'torch.Tensor') -> None:
-        current_history = self.evals_history[phase][-1]
-        current_history[eval_type][name] = value
 
-    def process(self, generated_sample, real_sample, exec_phase: ExecPhase) -> None:
-        evals_types = [member for member in EvaluatorType]
+    def collect(self, values: List[tuple], exec_phase: ExecPhase) -> None:
+        if exec_phase not in self.epoch_history:
+            self.epoch_history[exec_phase] = {}
+        phase_hist = self.epoch_history[exec_phase]
+        for typ, name, val in values:
+            key = (typ, name)
+            phase_hist.setdefault(key, []).append(val)
 
-        self.evals_history[exec_phase].append({
-            e_type: {} 
-            for e_type in evals_types
-        })
-        
-        for item in self.evals:
-            if item.exec_phase == ExecPhase.ANY or item.exec_phase == exec_phase:
-                weighted_tensor = item(generated_sample, real_sample)
-
-                self._update_history(
-                    eval_type=item.type, 
-                    phase=exec_phase, 
-                    name=item.name, 
-                    value=weighted_tensor
-                )
-    
-    def compute_epoch_summary(self) -> Dict[ExecPhase, Dict[str, Dict[str, float]]]:
-        full_result = {}
-
-        for phase, phase_history in self.evals_history.items():
-            if not phase_history:
-                full_result[phase] = {}
-                continue
-
-            summary = {}
-
-            for step_result in phase_history:
-                for eval_type, evaluators in step_result.items():
-                    for name, val in evaluators.items():
-                        summary.setdefault(eval_type, {}) \
-                        .setdefault(name, []) \
-                        .append(val.clone().detach())
-
-            averaged = {
-                eval_type: {
-                    name: torch.stack(values).mean().item()
-                    for name, values in metrics.items()
-                }
-                for eval_type, metrics in summary.items()
-            }
-
-            full_result[phase] = averaged
-
-        return full_result
+    def compute_epoch_summary(self) -> Dict:
+        summary = {}
+        for phase, phase_hist in self.epoch_history.items():
+            for key, history in phase_hist.items():
+                count = len(history)
+                if count == 0:
+                    summary[(phase, *key)] = None
+                else:
+                    summary[(phase, *key)] = sum(history) / count
+        return summary

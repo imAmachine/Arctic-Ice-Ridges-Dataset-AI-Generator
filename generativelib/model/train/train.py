@@ -1,9 +1,7 @@
 from __future__ import annotations
-import os
 from typing import Dict
 
 import torch
-from tqdm import tqdm
 
 from generativelib.model.enums import ExecPhase
 from generativelib.model.train.base import BaseTrainTemplate
@@ -44,9 +42,5 @@ class TrainManager:
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
-                desc = phase.name
-        
-                print(f"\n=== Epoch {epoch_id + 1}/{epochs}")
-                for inp, target in tqdm(loader, desc=desc):
-                    inp, trg = inp.to(device), target.to(device)
-                    self.train_strategy.step(phase, inp, trg)
+                print(f"\n=== Epoch {epoch_id + 1}/{epochs}\n")
+                self.train_strategy.epoch(device, phase, loader)
