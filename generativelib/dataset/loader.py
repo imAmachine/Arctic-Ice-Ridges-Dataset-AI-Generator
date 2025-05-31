@@ -6,22 +6,22 @@ import torch
 import cv2
 import torchvision
 from torch.utils.data import DataLoader, Dataset
+import torchvision.transforms.v2
 
-from generativelib.dataset.base import MaskProcessorsFabric
+from generativelib.dataset.base import BaseMaskProcessor
 from generativelib.common.utils import Utils
 from generativelib.model.enums import ExecPhase
 
 
 class DatasetMaskingProcessor:
-    def __init__(self, processors_dict: Dict):
-        self.processors_fabric = MaskProcessorsFabric()
-        self.processors_fabric.create_processors(processors_dict)
+    def __init__(self, processors: List[BaseMaskProcessor]):
+        self.processors = processors
 
     def create_mask(self, image: torch.Tensor):
         _, h, w = image.shape
         mask = torch.zeros((h, w), dtype=torch.float32, device=image.device, requires_grad=False)
 
-        for processor in self.processors_fabric:
+        for processor in self.processors:
             mask = processor(mask)
         
         return mask
@@ -33,7 +33,7 @@ class DatasetMaskingProcessor:
 class IceRidgeDataset(Dataset):
     def __init__(self, 
                  metadata: Dict[str, Dict], 
-                 masking_processor: 'DatasetMaskingProcessor', 
+                 masking_processor: DatasetMaskingProcessor, 
                  augmentations_per_image: int = 1,
                  model_transforms: Optional[Callable] = None):
         self.metadata = metadata
@@ -69,15 +69,22 @@ class IceRidgeDataset(Dataset):
  
 
 class DatasetCreator:
-    def __init__(self, metadata, mask_processor, transforms, augs_per_img, valid_size_p, shuffle, batch_size, workers):
+    def __init__(
+        self, 
+        metadata: Dict, 
+        mask_processor: DatasetMaskingProcessor, 
+        transforms: torchvision.transforms.v2, 
+        dataset_params: Dict):
+        
         self.metadata = metadata
         self.mask_processor = mask_processor
         self.transforms = transforms
-        self.augs_per_img = augs_per_img
-        self.valid_size_p = valid_size_p
-        self.shuffle = shuffle
-        self.batch_size = batch_size
-        self.workers = workers
+       
+        self.augs_per_img = dataset_params.get("augs", 1)
+        self.valid_size_p = dataset_params.get("validation_size", 0.2)
+        self.shuffle = dataset_params.get("shuffle", True)
+        self.batch_size = dataset_params.get("batch_size", 3)
+        self.workers = dataset_params.get("workers", 4)
     
     def create_loader(self, metadata):
         loader = None

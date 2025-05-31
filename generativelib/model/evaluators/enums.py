@@ -1,26 +1,26 @@
-from enum import Enum
+from enum import Enum, auto
 
 
 class EvaluatorType(Enum):
-    LOSS = "Loss"
-    METRIC = "Metric"
+    LOSS = auto()
+    METRIC = auto()
 
 
 class LossName(Enum):
-    TOTAL = "Total"
-    ADVERSARIAL = "Generator"
-    BCE_Logits = "BCE_Logits"
-    BCE = "BCE"
-    L1 = "L1"
-    EDGE = "Edge"
-    FOCAL = "Focal"
-    DICE = "Dice"
-    WASSERSTEIN = "Wasserstein"
-    GP = "Gradient Penalty"
+    TOTAL = auto()
+    ADVERSARIAL = auto()
+    BCE_Logits = auto()
+    BCE = auto()
+    L1 = auto()
+    EDGE = auto()
+    FOCAL = auto()
+    DICE = auto()
+    WASSERSTEIN = auto()
+    GRADIENT_PENALTY = auto()
 
 
 class MetricName(Enum):
-    PRECISION = "Precision"
-    F1 = "F1"
-    IOU = "IoU"
-    FD = "FD"
+    PRECISION = auto()
+    F1 = auto()
+    IOU = auto()
+    FRACTAL_DIMENSION = auto()

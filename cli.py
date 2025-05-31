@@ -3,152 +3,119 @@ import argparse
 from typing import Dict
 
 from torch import cuda
-import torchvision.transforms.v2 as tf2
 
-from config.default import DEFAULT_TEST_CONF, DEFAULT_TRAIN_CONF
-from config.path import *
-
-from generativelib.common.utils import Utils
-from generativelib.dataset.mask_processors import MASK_PROCESSORS
+from generativelib.config_tools.base import ConfigReader
+from src.config_wrappers import TrainConfigSerializer
 from generativelib.dataset.loader import DatasetCreator, DatasetMaskingProcessor
 from generativelib.dataset.mask_processors import *
-from generativelib.model.train.train import Trainer
+from generativelib.model.train.train import TrainConfigurator, TrainManager
 from generativelib.preprocessing.preprocessor import DataPreprocessor
 
-
 from generativelib.model.enums import ExecPhase
-from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.arch.enums import ModelTypes, GenerativeModules
 
 from generativelib.preprocessing.processors import *
 from src.tester import ParamGridTester
-from src.models import GAN
+from src.model_templates import GANTrainTemplate
+
+# Enable cuDNN autotuner for potential performance boost
+torch.backends.cudnn.benchmark = True
 
 DEVICE = 'cuda' if cuda.is_available() else 'cpu'
-CHECKPOINT_PATH = os.path.join(WEIGHTS_PATH, 'training_checkpoint.pt')
-MASKS_FILE_EXTENSIONS = ['.png']
+configs_folder_path = './configs'
 
-def validate_or_reset_section(config: dict, section: str, defaults: dict) -> None:
-    """Ensure config[section] matches defaults; prompt to reset if not."""
-    sec = config.get(section, {})
-    if not isinstance(sec, dict) or set(sec.keys()) != set(defaults.keys()):
-        ans = input(f"Конфигурация '{section}' некорректна. Перезаписать стандартными значениями? (Y/N): ")
-        if ans.strip().upper() == 'Y':
-            config[section] = defaults
-
-def init_config():
-    default_test_conf = {
-        model_name: {
-            **DEFAULT_TRAIN_CONF[model_name],
-            **DEFAULT_TEST_CONF[model_name]
-        }
-        for model_name in DEFAULT_TRAIN_CONF
-    }
-
-    if not os.path.exists(CONFIG):
-        print('Создаем файл конфигурации по умолчанию')
-        Utils.to_json({
-            ExecPhase.TRAIN.value: DEFAULT_TRAIN_CONF,
-            ExecPhase.TEST.value: default_test_conf
-        }, CONFIG)
-        return
-    
-    cfg = Utils.from_json(CONFIG)
-    validate_or_reset_section(cfg, ExecPhase.TRAIN.value, DEFAULT_TRAIN_CONF)
-    
-    # Валидация секции TEST с учетом дефолтных значений
-    validate_or_reset_section(cfg, ExecPhase.TEST.value, default_test_conf)
-    Utils.to_json(cfg, CONFIG)
+train_cs = TrainConfigSerializer(configs_folder_path, ExecPhase.TRAIN)
+test_config = ConfigReader(configs_folder_path, ExecPhase.TEST)
 
 def parse_arguments() -> argparse.Namespace:
-    """Parse and return command line arguments."""
-    parser = argparse.ArgumentParser(description='GAN для сегментации ледовых торосов')
+    parser = argparse.ArgumentParser()
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--model', type=str)
-    parser.add_argument('--input_path', type=str)
-    parser.add_argument('--epochs', type=int, default=1000)
-    parser.add_argument('--augs', type=int, default=1)
-    parser.add_argument('--batch_size', type=int, default=3)
-    parser.add_argument('--val_rat', type=float, default=0.2)
     parser.add_argument('--load_weights', action='store_true')
-    # parser.add_argument('--get_generator', action='store_true')
     return parser.parse_args()
+
+def init_dataset_metadata() -> Dict:
+    dataset_preprocessor = DataPreprocessor(
+        train_cs.get_global_param_by_section(section='paths',key='masks_path'),
+        train_cs.get_global_param_by_section(section='paths',key='dataset_path'), 
+        files_extensions=['.png'], 
+        processors=[
+            RotateMask(),
+            AdjustToContent(),
+            Crop(k=0.5),
+        ]
+    )
+    return dataset_preprocessor.get_metadata()
+
+def get_model_train_template(model_type: str, img_size: int):
+    train_template = None
+    transforms = None
+    
+    if ModelTypes[model_type.upper()] == ModelTypes.GAN:
+        transforms = GANTrainTemplate.get_transforms(img_size)
+        arch_collection, model_params = train_cs.serialize_model(DEVICE, ModelTypes.GAN)
+        train_template = GANTrainTemplate(model_params, arch_collection)
+    
+    return train_template, transforms
 
 def main():
     args = parse_arguments()
-    init_config()
+    masking_processor = DatasetMaskingProcessor(processors=train_cs.serialize_mask_processors())
+    train_configurator = TrainConfigurator(
+                            device=DEVICE, 
+                            **train_cs.get_global_section('train'),
+                            visualizer_path=train_cs.get_global_param_by_section(section='paths', key='vizualizations'),
+                            weights_path=train_cs.get_global_param_by_section(section='paths', key='weights')
+                        )
     
-    cfg = Utils.from_json(CONFIG)
-    phase_cfg = cfg[ExecPhase.TEST.value if args.test else ExecPhase.TRAIN.value]
-    model_cfg = phase_cfg[args.model]
+    dataset_metadata = init_dataset_metadata()
+    dataset_params = train_cs.get_global_section("dataset")
     
-    preprocessors = [
-        RotateMask(),
-        AdjustToContent(),
-        Crop(k=0.5),
-    ]
-    
-    dataset_preprocessor = DataPreprocessor(
-        MASKS_FOLDER_PATH, 
-        PREPROCESSED_MASKS_FOLDER_PATH, 
-        MASKS_FILE_EXTENSIONS, 
-        preprocessors
+    train_template, transforms = get_model_train_template(
+        model_type=args.model, 
+        img_size=train_cs.get_global_param_by_section(section="arch", key='image_size')
     )
-    dataset_metadata = dataset_preprocessor.get_metadata()
     
+    ds_creator = DatasetCreator(
+        metadata=dataset_metadata,
+        mask_processor=masking_processor,
+        transforms=transforms,
+        dataset_params=dataset_params
+    ) 
     
-    model = None
-    masking_processor = DatasetMaskingProcessor(processors_dict=model_cfg["mask_processors"])
-    transforms = None
+    tr_man = TrainManager(
+        train_template=train_template,
+        train_configurator=train_configurator,
+        dataloaders=ds_creator.create_loaders(),
+    )
     
-    if args.model == 'gan':
-        model = GAN(DEVICE, n_critic=5)
-        transforms = tf2.Compose(GAN.get_transforms(model_cfg['target_image_size']))
-        
-        ds_creator = DatasetCreator(
-            metadata=dataset_metadata,
-            mask_processor=masking_processor,
-            transforms=transforms,
-            augs_per_img=args.augs,
-            valid_size_p=0.2,
-            shuffle=True,
-            batch_size=args.batch_size,
-            workers=4,
-        )
-        
-        trainer = Trainer(
-            device=DEVICE,
-            model=model,
-            dataloaders=ds_creator.create_loaders(),
-            output_path=WEIGHTS_PATH,
-            epochs=args.epochs,
-            checkpoints_ratio=model_cfg["checkpoints_ratio"]
-        )
-    
-    if args.test:
-        # Testing
-        print("Запуск тестов...")
-        tester = ParamGridTester(
-            param_grid_config=model_cfg,
-            trainer=trainer,
-            dataset=ds_creator,
-            output_folder_path=WEIGHTS_PATH,
-            seed=42,
-        )
-        tester.run()
-        
-    else:
-        # Training
-        print(f"Обучение модели {args.model} на {args.epochs} эпохах...")
-        model.build_train_modules(model_cfg)
-        model._evaluators_from_config(model_cfg['evaluators_info'], device=DEVICE)
-        
-        if args.load_weights:
-            model.checkpoint_load(CHECKPOINT_PATH)
-        trainer.run()
+    tr_man.run()
 
 if __name__ == '__main__':
     main()
 
+
+# if args.test:
+#     # Testing
+#     print("Запуск тестов...")
+#     tester = ParamGridTester(
+#         param_grid_config=model_cfg,
+#         trainer=trainer,
+#         dataset=ds_creator,
+#         output_folder_path=WEIGHTS_PATH,
+#         seed=42,
+#     )
+#     tester.run()
+    
+# else:
+# Training
+# print(f"Обучение модели {args.model} на {args.epochs} эпохах...")
+# train_template.build_train_modules(model_cfg)
+# train_template._evaluators_from_config(model_cfg['evaluators_info'], device=DEVICE)
+
+# if args.load_weights:
+#     train_template.checkpoint_load(CHECKPOINT_PATH)
+# trainer.run()
 
 # if args.get_generator:
     #     checkpoint_map = {

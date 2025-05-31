@@ -5,12 +5,11 @@ import random
 import numpy as np
 import torch
 
-from config.path import *
 from typing import Dict, List
 
 from generativelib.common.utils import Utils
 from generativelib.dataset.loader import DatasetCreator
-from generativelib.model.train.train import Trainer
+from generativelib.model.train.train import TrainManager
 
 
 class ParamGridCombination:
@@ -45,7 +44,7 @@ class ParamGridCombination:
 
 
 class ParamGridTester:
-    def __init__(self, param_grid_config: Dict, trainer: Trainer, dataset: DatasetCreator, output_folder_path: str, seed: int = 42):
+    def __init__(self, param_grid_config: Dict, trainer: TrainManager, dataset: DatasetCreator, output_folder_path: str, seed: int = 42):
         self.trainer = trainer
         self.dataset = dataset
         self.param_generator = ParamGridCombination(param_grid_config)

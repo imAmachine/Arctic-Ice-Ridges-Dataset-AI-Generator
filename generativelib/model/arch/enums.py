@@ -1,11 +1,13 @@
-from enum import Enum
+from enum import Enum, auto
+
+from generativelib.model.arch.gan import GanDiscriminator, GanGenerator
 
 
 class GenerativeModules(Enum):
-    GENERATOR = "Generator"
-    DISCRIMINATOR = "Discriminator"
+    GAN_GENERATOR = GanGenerator
+    GAN_DISCRIMINATOR = GanDiscriminator
 
 
 class ModelTypes(Enum):
-    GAN = "GAN"
-    DIFFUSION = "Diffusion"
+    GAN = auto()
+    DIFFUSION = auto()

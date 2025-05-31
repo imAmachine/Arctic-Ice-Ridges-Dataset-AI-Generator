@@ -5,60 +5,99 @@ from tabulate import tabulate
 
 import torch
 import pandas as pd
+from tqdm import tqdm
 from typing import Any, Dict, List, Optional
-from generativelib.model.callbacks.checkpoint import CheckpointManager
-from generativelib.model.evaluators.base import LOSSES, EvaluateProcessor, Evaluator
 
 # Enums
-from generativelib.model.evaluators.enums import EvaluatorType, MetricName
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
+from generativelib.model.enums import ExecPhase
 
-from generativelib.model.arch.base import Architecture
+from generativelib.model.evaluators.base import EvalItem, EvaluateProcessor
+from generativelib.model.evaluators.enums import EvaluatorType
 
 
-class ModuleTrainer:
-    """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
-    def __init__(self, device: torch.device, module: 'Architecture'):
+class Arch(torch.nn.Module):
+    def __init__(
+        self,
+        model_type: GenerativeModules,
+        module: torch.nn.Module
+    ):
+        super().__init__()
+        self.model_type = model_type
         self.module = module
-        self.evaluate_processor = EvaluateProcessor(device=device, evaluators=self.module.evaluators)
+
+    def forward(self, x):
+        return self.module(x)
     
-    def _process_losses(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor', history_key: str) -> 'torch.Tensor':
+
+class ArchOptimizer:
+    """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
+    def __init__(self, arch_module: Arch, eval_processor: EvaluateProcessor, optimization_params: Dict):
+        self.arch_module = arch_module
+        self.evaluate_processor = eval_processor
+        self.optimizer = torch.optim.Adam(
+            self.arch_module.parameters(),
+            lr=optimization_params['lr'],
+            betas=optimization_params.get('betas', (0.9, 0.999))
+        )
+    
+    def loss(self, generated_sample: torch.Tensor, real_sample: torch.Tensor, exec_phase: ExecPhase) -> torch.Tensor:
         self.evaluate_processor.process(
             generated_sample=generated_sample,
             real_sample=real_sample,
-            exec_phase=history_key
+            exec_phase=exec_phase
         )
-        
-        last_epoch: Dict[str, List[torch.Tensor]] = self.evaluate_processor.evaluators_history[history_key][-1] # словарь лоссов за последнюю эпоху
-        processed: List[torch.Tensor] = last_epoch[EvaluatorType.LOSS.value].values() # список тензоров лоссов
-        loss = torch.stack([t.mean() for t in processed]).sum() # total loss тензор для backward
-        
-        return loss
-    
-    def optimization_step(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> float:
-        self.module.optimizer.zero_grad()
-        loss_tensor = self._process_losses(
-            generated_sample, 
-            real_sample, 
-            history_key=ExecPhase.TRAIN.value
+
+        last_epoch: Dict[str, Dict[str, torch.Tensor]] = self.evaluate_processor.evals_history[exec_phase][-1]
+        processed = last_epoch[EvaluatorType.LOSS].values()
+        return torch.stack([t.mean() for t in processed]).sum()
+
+    def optimize(self, generated_sample: torch.Tensor, real_sample: torch.Tensor) -> float:
+        self.optimizer.zero_grad()
+
+        loss_tensor = self.loss(
+            generated_sample,
+            real_sample,
+            exec_phase=ExecPhase.TRAIN
         )
+
         loss_tensor.backward()
-        self.module.optimizer.step()
+        self.optimizer.step()
+
         return loss_tensor.item()
+
+    def mode_to(self, phase: ExecPhase):
+        if phase == ExecPhase.TRAIN:
+            self.arch_module.train()
+        
+        if phase == ExecPhase.VALID:
+            self.arch_module.eval()
     
-    def valid_step(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> float:
-        loss_tensor = self._process_losses(
-            generated_sample=generated_sample,
-            real_sample=real_sample,
-            history_key=ExecPhase.VALID.value
-        )
-        return loss_tensor.item()
+
+class ArchOptimizersCollection(list[ArchOptimizer]):
+    def by_type(self, model_type: GenerativeModules) -> ArchOptimizer:
+        for arch_optimizer in self:
+            if arch_optimizer.arch_module.model_type == model_type:
+                return arch_optimizer
+    
+    def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]):
+        for model_type, evals_list in evals.items():
+            cur_optimizer = self.by_type(model_type)
+            cur_optimizer.evaluate_processor.evals.extend(evals_list)
+    
+    def all_mode_to(self, phase: ExecPhase):
+        for optimizer in self:
+            if phase == ExecPhase.TRAIN:
+                optimizer.arch_module.train()
+            
+            if phase == ExecPhase.VALID:
+                optimizer.arch_module.eval()
 
 
 class EvaluatorsCollector:
-    def __init__(self, managers: Dict[ModelTypes, ModuleTrainer]):
-        self.managers = managers
+    def __init__(self, modules_optimizers: Dict[ModelTypes, ArchOptimizer]):
+        self.managers = modules_optimizers
         self.history: List[Dict[ExecPhase, Dict[ModelTypes, Dict[str, Dict[str, float]]]]] = []
 
     def collect(self) -> None:
@@ -156,82 +195,24 @@ class EvaluatorsCollector:
             mgr.evaluate_processor._init_history_dict()
 
 
-class GenerativeModel(ABC):
-    """Abstract base for generative models: defines training/validation steps."""
-    def __init__(self, device: torch.device, checkpoint_map: Dict):
-        self.device = device
-        self.checkpoint_manager = CheckpointManager(self, checkpoint_map)
-        self.evaluators_collector = None
-        self.evaluators: Dict[ModelTypes, List[Evaluator]] = None
-        self.trainers: Dict[ModelTypes, ModuleTrainer] = None
+class BaseTrainTemplate(ABC):
+    def __init__(self, model_params: Dict, arch_optimizers: ArchOptimizersCollection):
+        super().__init__()
+        self.arch_optimizers = arch_optimizers
+        self.model_params = model_params
     
     @abstractmethod
-    def _train_step(self, inp: torch.Tensor, target: torch.Tensor) -> None:
-        pass
-
-    @abstractmethod
-    def _valid_step(self, inp: torch.Tensor, target: torch.Tensor) -> None:
+    def _train(self, inp: torch.Tensor, trg: torch.Tensor):
         pass
     
     @abstractmethod
-    def _init_modules(self, config_section: dict) -> List[Architecture]:
+    def _valid(self, inp: torch.Tensor, trg: torch.Tensor):
         pass
     
-    def _evaluators_from_config(self, config: Dict, device: torch.device):
-        for m_type, evals in config.items():
-            for eval_name, eval_params in evals.items():
-                exec_params = eval_params["execution"]
-                init_params = eval_params["init"]
-                
-                eval_type = EvaluatorType.LOSS.value
-                if eval_name in MetricName:
-                    eval_type = EvaluatorType.METRIC.value
-                
-                if exec_params['weight'] > 0.0:
-                    cls = LOSSES.get(eval_name)
-                    evaluator = Evaluator(
-                        callable_fn=cls(**init_params).to(device),
-                        name=eval_name,
-                        type=eval_type,
-                        exec_phase=exec_params["exec_phase"],
-                        weight=exec_params["weight"]
-                    )
-                    
-                    self.evaluators[m_type].append(evaluator)
-    
-    def model_step(self, inp: torch.Tensor, target: torch.Tensor, phase: ExecPhase):
-        if phase is ExecPhase.TRAIN:
-            self._train_step(inp, target)
-        else:
-            self._valid_step(inp, target)
-    
-    def collect_epoch_evaluators(self):
-        self.evaluators_collector.collect()
-    
-    def print_epoch_evaluators(self, epoch_id):
-        self.evaluators_collector.print(epoch_id)
-    
-    def build_train_modules(self, config_section: dict) -> None:
-        modules = self._init_modules(config_section)
+    def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor):
+        self.arch_optimizers.all_mode_to(phase)
+        if phase == ExecPhase.TRAIN:
+            self._train(inp, trg)
         
-        self.trainers = {
-            module.model_type: ModuleTrainer(self.device, module)
-            for module in modules
-        }
-        
-        self.evaluators_collector = EvaluatorsCollector(self.trainers)
-    
-    def evaluators_summary(self, output_path, epoch_id=None):
-        self.evaluators_collector.save_summary(output_path, epoch_id)
-    
-    def checkpoint_save(self, path: str) -> None:
-        self.checkpoint_manager.save(path)
-
-    def checkpoint_load(self, path: str) -> None:
-        self.checkpoint_manager.load(path)
-
-    def __call__(self, inp: torch.Tensor) -> torch.Tensor:
-        if self.trainers is None:
-            raise ValueError('Need to init_modules method firts')
-        return self.trainers[GenerativeModules.GENERATOR].module(inp)
-    
+        if phase == ExecPhase.VALID:
+            self._valid(inp, trg)

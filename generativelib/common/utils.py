@@ -48,7 +48,7 @@ class Utils:
     
     @staticmethod
     def to_json(data, path):
-        with open(path, 'w+', encoding='utf8') as f:
+        with open(path, 'w', encoding='utf8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
     
     @staticmethod

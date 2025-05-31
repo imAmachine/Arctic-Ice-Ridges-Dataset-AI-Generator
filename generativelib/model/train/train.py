@@ -1,72 +1,52 @@
 from __future__ import annotations
 import os
 from typing import Dict
-from tqdm import tqdm
-import matplotlib
 
 import torch
+from tqdm import tqdm
+
+from generativelib.model.enums import ExecPhase
+from generativelib.model.train.base import BaseTrainTemplate
 from torch.utils.data import DataLoader
 
-from generativelib.model.callbacks.visualizer import Visualizer
-from generativelib.model.arch.enums import GenerativeModules
 
-from generativelib.model.train.base import GenerativeModel
-from generativelib.model.enums import ExecPhase
-
-
-# Enable cuDNN autotuner for potential performance boost
-torch.backends.cudnn.benchmark = True
-matplotlib.use('Agg')
-
-
-class Trainer:
-    """Coordinates data loading, model steps, evaluation, and visualization."""
+class TrainConfigurator:
     def __init__(
         self,
         device: torch.device,
-        model: GenerativeModel,
-        dataloaders: Dict[ExecPhase, DataLoader],
-        output_path: str,
-        epochs: int,
-        checkpoints_ratio: int = 15
+        epochs: int=1000,
+        checkpoint_ratio: int=25,
+        visualizer_path: str='',
+        weights_path: str='',
     ):
         self.device = device
-        self.model = model
+        self.epochs= epochs
+        self.checkpoint_ratio = checkpoint_ratio
+        
+        self.visualizations_path = visualizer_path
+        self.weights_path = weights_path
 
-        self.visualizer = Visualizer(output_path)
-        self.epochs = epochs
-        
-        self.weight_path = output_path
-        self.checkpoints_ratio = checkpoints_ratio
-        
+
+class TrainManager:
+    def __init__(
+        self,
+        train_template: BaseTrainTemplate,
+        train_configurator: TrainConfigurator,
+        dataloaders: Dict[ExecPhase, DataLoader],
+    ):
+        self.train_strategy = train_template
         self.dataloaders = dataloaders
-
-    def run(self) -> None:
-        for epoch_id in range(self.epochs):
-            print(f"\n=== Epoch {epoch_id + 1}/{self.epochs}")
-            for phase, loader in self.dataloaders.items():
-                self._run_epoch(phase, loader)
-                
-            self.model.collect_epoch_evaluators()
-            self.model.print_epoch_evaluators(epoch_id)
-            
-            self._after_epoch(epoch_id)
+        self.train_configurator = train_configurator
     
-    def _run_epoch(self, phase: ExecPhase, loader: DataLoader) -> None:
-        """Метод определяет алгоритм одной эпохи, с автоматическим подсчётом метрик"""
-        desc = phase.value.capitalize()
-        for inp, target in tqdm(loader, desc=desc):
-            inp, target = inp.to(self.device), target.to(self.device)
-            self.model.model_step(inp, target, phase)
-
-    def _after_epoch(self, epoch_id: int):
-        with torch.no_grad():
+    def run(self) -> None:
+        device = self.train_configurator.device
+        epochs = self.train_configurator.epochs
+        
+        for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
-                inp, target = [el.to(self.device) for el in next(iter(loader))]
-                gen = self.model.trainers[GenerativeModules.GENERATOR].module(inp)
-                
-                if (epoch_id + 1) % self.checkpoints_ratio == 0:
-                    self.visualizer.save(torch.sigmoid(inp), target, gen, phase)
-            
-            if (epoch_id + 1) % self.checkpoints_ratio == 0:
-                self.model.checkpoint_save(os.path.join(self.weight_path, 'training_checkpoint.pt'))
+                desc = phase.name
+        
+                print(f"\n=== Epoch {epoch_id + 1}/{epochs}")
+                for inp, target in tqdm(loader, desc=desc):
+                    inp, trg = inp.to(device), target.to(device)
+                    self.train_strategy.step(phase, inp, trg)

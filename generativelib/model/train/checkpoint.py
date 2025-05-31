@@ -1,19 +1,16 @@
 import torch
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from generativelib.model.train.base import GenerativeModel
+from generativelib.model.train.base import ArchOptimizersCollection
     
 
-class CheckpointManager:
+class Checkpoint:
     """Сlass for saving and loading a model."""
-    def __init__(self, model: 'GenerativeModel', checkpoint_map: dict):
-        self.model = model
-        self.checkpoint_map = checkpoint_map
+    def __init__(self, optimizers: ArchOptimizersCollection):
+        self.optimizers = optimizers
 
     def _traverse_path(self, path: tuple):
         """Рекурсивно проходит по пути из кортежа"""
-        obj = self.model
+        obj = self.optimizers
         for item in path:
             if isinstance(obj, dict):
                 obj = obj.get(item)
@@ -35,7 +32,7 @@ class CheckpointManager:
         print(f"Checkpoint saved to {path}")
 
     def load(self, path: str):
-        checkpoint = torch.load(path, map_location=self.model.device, weights_only=False)
+        checkpoint = torch.load(path, map_location=self.optimizers.device, weights_only=False)
         for role, components in self.checkpoint_map.items():
             for name, attr_path in components.items():
                 obj = self._traverse_path(attr_path)

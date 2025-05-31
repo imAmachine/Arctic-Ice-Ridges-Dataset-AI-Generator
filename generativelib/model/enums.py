@@ -1,9 +1,9 @@
-from enum import Enum
+from enum import Enum, auto
 
 
 class ExecPhase(Enum):
-    TRAIN = "Train"
-    VALID = "Valid"
-    TEST = "Test"
-    INFER = "Infer"
-    ANY = 'Any'
+    TRAIN = auto()
+    VALID = auto()
+    TEST = auto()
+    INFER = auto()
+    ANY = auto()

@@ -60,7 +60,7 @@ class UpBlock(nn.Module):
         x = self.up(x)
         return self.se(x)
 
-class CustomGenerator(nn.Module):
+class GanGenerator(nn.Module):
     def __init__(self, in_ch=1, f_base=64, n_down=4, n_residual=3):
         super().__init__()
         # Энкодер
@@ -105,8 +105,8 @@ class CustomGenerator(nn.Module):
         return self.final(x)
 
 
-class CustomDiscriminator(nn.Module):
-    def __init__(self, in_ch=1, layers_count: int=6, f_base=64):
+class GanDiscriminator(nn.Module):
+    def __init__(self, in_ch=1, f_base=64, layers_count: int=6):
         super().__init__()
         out_ch = 1
         features_limit = 512
