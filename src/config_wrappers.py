@@ -55,8 +55,8 @@ class TrainConfigSerializer(ConfigReader):
         optimization_params: Dict = model_dict.get("optimization_params")
         model_params = model_dict.get("model_params")
         modules: Dict = model_dict.get("modules")
-        in_ch = self.get_global_param_by_section(section='arch', key='in_ch')
-        f_base = self.get_global_param_by_section(section='arch', key='f_maps')
+        in_ch = self.param_by_section(section='arch', key='in_ch')
+        f_base = self.param_by_section(section='arch', key='f_maps')
         
         arch_collect = ArchOptimizersCollection()
         for m_name, module_info in modules.items():

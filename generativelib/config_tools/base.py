@@ -1,6 +1,6 @@
 from collections import defaultdict
 import os
-from typing import Dict
+from typing import Dict, List
 
 from generativelib.common.utils import Utils
 from generativelib.config_tools.default_values import get_default_conf
@@ -39,7 +39,7 @@ class ConfigReader:
         
         return cur_section
     
-    def get_global_param_by_section(self, section: str, key: str) -> Dict:
+    def param_by_section(self, section: str, key: str) -> Dict:
         if len(self.global_params) == 0:
             return {}
         
@@ -52,3 +52,20 @@ class ConfigReader:
             raise ValueError('global param is None')
         
         return cur_val
+    
+    def params_by_section(self, section: str, keys: List[str]) -> Dict:
+        if len(self.global_params) == 0:
+            return {}
+        
+        cur_section: Dict = self.global_params.get(section)
+        if cur_section is None:
+            raise ValueError('section is None')
+        
+        values = {}
+        
+        for key in keys:
+            cur_val = cur_section.get(key, None)
+            if cur_val:
+                values.update({key: cur_val})
+            
+        return values
