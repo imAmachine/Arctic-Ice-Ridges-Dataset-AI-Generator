@@ -12,7 +12,7 @@ from config.preprocess import MASKS_FILE_EXTENSIONS, PREPROCESSORS
 from config.path import *
 from PyQt5 import QtWidgets
 
-from gui.gui import InferenceWindow
+from gui.main_window import MainWindow
 from src.common import Utils
 from src.common.enums import ExecPhase, ModelType
 from src.dataset.loader import DatasetCreator, DatasetMaskingProcessor
@@ -170,7 +170,7 @@ def main():
 
     elif args.gui:
         app = QtWidgets.QApplication(sys.argv)
-        window = InferenceWindow(phase_cfg, INTERFACES)
+        window = MainWindow(phase_cfg, INTERFACES)
         window.show()
         sys.exit(app.exec())
         return

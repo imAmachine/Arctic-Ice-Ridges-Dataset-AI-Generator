@@ -9,11 +9,12 @@ from io import BytesIO
 from src.models.inference import InferenceManager
 
 class InferenceWindow(QtWidgets.QMainWindow):
-    def __init__(self, config, interfaces):
-        super().__init__()
+    def __init__(self, config, interfaces, parent=None):
+        super().__init__(parent)
         path = os.path.join(interfaces, 'inference.ui')
         uic.loadUi(path, self)
 
+        self.parent_window = parent
         self.generator = InferenceManager(config)
 
         self._setup_ui()
@@ -30,9 +31,20 @@ class InferenceWindow(QtWidgets.QMainWindow):
         self.comboBox.setCurrentIndex(-1)
         self.comboBox.currentTextChanged.connect(self.select_model)
 
+        back_action = QtWidgets.QAction("Назад", self)
+        back_action.triggered.connect(self.back_to_main)
+        menu = self.menubar.addMenu("Навигация")
+        menu.addAction(back_action)
+
     def log(self, message):
         timestamp = datetime.now().strftime("[%H:%M:%S]")
         self.log.append(f"{timestamp} {message}")
+
+    def back_to_main(self):
+        """Возвращает в главное окно"""
+        if self.parent_window:
+            self.parent_window.show_main()
+        self.close()
 
     def select_model(self, choice):
         try:
