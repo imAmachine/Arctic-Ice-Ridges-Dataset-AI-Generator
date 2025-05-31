@@ -12,9 +12,9 @@ from generativelib.dataset.mask_processors import *
 def get_default_train_conf():
     global_params = {
         "arch": {
-            "image_size": 256,
+            "img_size": 256,
             "in_ch": 1,
-            "f_maps": 64,
+            "f_base": 64,
         },
         "train": {
             "epochs": 1000,
@@ -27,7 +27,7 @@ def get_default_train_conf():
             "shuffle": True,
             "workers": 4
         },
-        "paths": {
+        "path": {
             "masks": "./data/masks",
             "dataset": "./data/preprocessed",
             "processed": "./data/processed",

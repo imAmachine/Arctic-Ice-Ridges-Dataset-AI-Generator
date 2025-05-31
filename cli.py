@@ -35,10 +35,11 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 def init_dataset_metadata() -> Dict:
+    paths = train_cs.params_by_section(section='path', keys=['masks', 'dataset'])
+    
     dataset_preprocessor = DataPreprocessor(
-        train_cs.param_by_section(section='paths',key='masks_path'),
-        train_cs.param_by_section(section='paths',key='dataset_path'), 
-        files_extensions=['.png'], 
+        *paths.values(),
+        files_extensions=['.png'],
         processors=[
             RotateMask(),
             AdjustToContent(),
@@ -64,7 +65,7 @@ def main():
     train_configurator = TrainConfigurator(
                             device=DEVICE, 
                             **train_cs.get_global_section('train'),
-                            **train_cs.params_by_section(section='paths', keys=['vizualizations', 'weights'])
+                            **train_cs.params_by_section(section='path', keys=['vizualizations', 'weights'])
                         )
     
     dataset_metadata = init_dataset_metadata()
@@ -72,7 +73,7 @@ def main():
     
     train_template, transforms = get_model_train_template(
         model_type=args.model, 
-        img_size=train_cs.param_by_section(section="arch", key='image_size')
+        **train_cs.params_by_section(section="arch", keys='img_size')
     )
     
     ds_creator = DatasetCreator(

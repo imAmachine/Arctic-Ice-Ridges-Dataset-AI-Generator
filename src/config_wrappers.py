@@ -55,13 +55,12 @@ class TrainConfigSerializer(ConfigReader):
         optimization_params: Dict = model_dict.get("optimization_params")
         model_params = model_dict.get("model_params")
         modules: Dict = model_dict.get("modules")
-        in_ch = self.param_by_section(section='arch', key='in_ch')
-        f_base = self.param_by_section(section='arch', key='f_maps')
-        
         arch_collect = ArchOptimizersCollection()
+        
+        arch_params = self.params_by_section(section='arch', keys=['in_ch', 'f_maps'])
         for m_name, module_info in modules.items():
             cls = GenerativeModules[m_name].value
-            arch = Arch(GenerativeModules[m_name], cls(in_ch, f_base).to(device))
+            arch = Arch(GenerativeModules[m_name], cls(**arch_params).to(device))
             evals = self.serialize_evaluators(device, module_info.get("evaluators_info"))
             
             eval_proc = EvaluateProcessor(evals)

@@ -1,6 +1,6 @@
 from collections import defaultdict
 import os
-from typing import Dict, List
+from typing import Any, Dict, List, Optional, Union
 
 from generativelib.common.utils import Utils
 from generativelib.config_tools.default_values import get_default_conf
@@ -29,43 +29,25 @@ class ConfigReader:
         
         self.config = Utils.from_json(self.conf_path)
 
-    def get_global_section(self, section: str) -> Dict:
-        if len(self.global_params) == 0:
+    def get_global_section(self, section: str) -> Dict[str, Any]:
+        if not self.global_params:
             return {}
             
         cur_section: Dict = self.global_params.get(section)
         if cur_section is None:
-            raise ValueError('section is None')
+            return {}
         
         return cur_section
     
-    def param_by_section(self, section: str, key: str) -> Dict:
+    def params_by_section(self, section: str, keys: Union[str, List[str]]) -> Dict[str, Any]:
         if len(self.global_params) == 0:
             return {}
-        
+
         cur_section: Dict = self.global_params.get(section)
         if cur_section is None:
-            raise ValueError('section is None')
-        
-        cur_val = cur_section.get(key, None)
-        if cur_section is None:
-            raise ValueError('global param is None')
-        
-        return cur_val
-    
-    def params_by_section(self, section: str, keys: List[str]) -> Dict:
-        if len(self.global_params) == 0:
             return {}
-        
-        cur_section: Dict = self.global_params.get(section)
-        if cur_section is None:
-            raise ValueError('section is None')
-        
-        values = {}
-        
-        for key in keys:
-            cur_val = cur_section.get(key, None)
-            if cur_val:
-                values.update({key: cur_val})
-            
-        return values
+
+        if isinstance(keys, str):
+            keys = [keys]
+
+        return {key: cur_section[key] for key in keys if key in cur_section}

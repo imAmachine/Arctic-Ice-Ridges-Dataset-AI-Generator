@@ -16,15 +16,15 @@ class TrainConfigurator:
         device: torch.device,
         epochs: int=1000,
         checkpoint_ratio: int=25,
-        visualizer_path: str='',
-        weights_path: str='',
+        vizualizations: str='',
+        weights: str='',
     ):
         self.device = device
         self.epochs= epochs
         self.checkpoint_ratio = checkpoint_ratio
         
-        self.visualizations_path = visualizer_path
-        self.weights_path = weights_path
+        self.visualizations_path = vizualizations
+        self.weights_path = weights
 
 
 class TrainManager:
