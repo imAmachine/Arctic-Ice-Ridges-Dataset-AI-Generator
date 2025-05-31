@@ -1,5 +1,3 @@
-
-from collections import defaultdict
 import random
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -101,8 +99,6 @@ class DatasetCreator:
     def create_loaders(self) -> Dict[ExecPhase, Dict]:        
         splitted = DatasetCreator.split_dataset_legacy(self.metadata, valid_size_p=self.valid_size_p)
         train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN), splitted.get(ExecPhase.VALID)
-        
-        # print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
         
         return {
             ExecPhase.TRAIN: self.create_loader(train_metadata), 

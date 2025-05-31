@@ -1,8 +1,8 @@
 import torch
-from torch import device, Tensor, nn
+from torch import device, Tensor
 from typing import Dict, List
 
-from src.common.enums import EvaluatorType, ExecPhase, LossName, MetricName, ModelType
+from src.common.enums import EvaluatorType, ExecPhase, LossName, ModelType
 from src.models.base import Architecture, Evaluator, GenerativeModel
 
 from src.models.gan.architecture import CustomDiscriminator, CustomGenerator
