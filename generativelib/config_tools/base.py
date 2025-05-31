@@ -1,17 +1,21 @@
+from abc import ABC, abstractmethod
 from collections import defaultdict
 import os
 from typing import Any, Dict, List, Optional, Union
 
+import torch
+
 from generativelib.common.utils import Utils
 from generativelib.config_tools.default_values import get_default_conf
+from generativelib.model.arch.enums import ModelTypes
 from generativelib.model.enums import ExecPhase
 
 
 class ConfigReader:
-    def __init__(self, config_folder_path: str, phase: ExecPhase):
+    def __init__(self, config_folder: str, phase: ExecPhase):
         self.config = defaultdict()
         self.phase = phase
-        self.conf_path = os.path.join(config_folder_path, f'{self.phase.name}_config.json')
+        self.conf_path = os.path.join(config_folder, f'{self.phase.name}_config.json')
         self.__init_config()
         
         self.global_params: Dict = self.config.get('global_params', {})
@@ -39,7 +43,7 @@ class ConfigReader:
         
         return cur_section
     
-    def params_by_section(self, section: str, keys: Union[str, List[str]]) -> Dict[str, Any]:
+    def params_by_section(self, section: str, keys: Union[str, List[str]]) -> Union[Dict[str, Any] | Any]:
         if len(self.global_params) == 0:
             return {}
 
@@ -48,6 +52,15 @@ class ConfigReader:
             return {}
 
         if isinstance(keys, str):
-            keys = [keys]
-
+            return cur_section[keys]
+        
         return {key: cur_section[key] for key in keys if key in cur_section}
+
+
+class ConfigModelSerializer(ABC, ConfigReader):
+    def __init__(self, config_folder: str, phase: ExecPhase):
+        super().__init__(config_folder, phase)
+    
+    @abstractmethod
+    def model_serialize(self, device: torch.device, model_type: ModelTypes):
+        pass
