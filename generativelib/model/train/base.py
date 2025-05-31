@@ -88,11 +88,7 @@ class ArchOptimizersCollection(list[ArchOptimizer]):
     
     def all_mode_to(self, phase: ExecPhase):
         for optimizer in self:
-            if phase == ExecPhase.TRAIN:
-                optimizer.arch_module.train()
-            
-            if phase == ExecPhase.VALID:
-                optimizer.arch_module.eval()
+            optimizer.mode_to(phase)
 
 
 class EvaluatorsCollector:
