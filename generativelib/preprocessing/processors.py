@@ -66,7 +66,7 @@ class RotateMask(Processor):
             borderValue=0
         )
 
-    def get_metadata_value(self) -> str:
+    def metadata_status_value(self) -> str:
         return str(round(self._angle, 2))
 
 

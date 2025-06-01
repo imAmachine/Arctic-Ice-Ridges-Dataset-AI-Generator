@@ -6,7 +6,8 @@ from generativelib.model.enums import ExecPhase
 
 from generativelib.preprocessing.processors import *
 from src.tester import ParamGridTester
-from src.train_context import AppTrainContext
+
+from src.gan.gan_context import GanTrainContext
 
 # Enable cuDNN autotuner for potential performance boost
 torch.backends.cudnn.benchmark = True
@@ -25,7 +26,7 @@ def parse_arguments() -> argparse.Namespace:
 
 def main():
     args = parse_arguments()    
-    train_context = AppTrainContext(train_config_serializer)
+    train_context = GanTrainContext(train_config_serializer)
     train_manager = train_context.init_train(args.model)
     train_manager.run()
 

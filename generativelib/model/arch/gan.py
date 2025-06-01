@@ -61,12 +61,12 @@ class UpBlock(nn.Module):
         return self.se(x)
 
 class GanGenerator(nn.Module):
-    def __init__(self, in_ch=1, f_base=64, n_down=4, n_residual=3):
+    def __init__(self, in_ch, f_base, n_down=4, n_residual=3):
         super().__init__()
         # Энкодер
         self.encoders = nn.ModuleList()
         ch = in_ch
-        features_limit = 512
+        features_limit = 2048
         
         for i in range(n_down):
             out_ch = min(f_base * (2**i), features_limit)
@@ -106,7 +106,7 @@ class GanGenerator(nn.Module):
 
 
 class GanDiscriminator(nn.Module):
-    def __init__(self, in_ch=1, f_base=64, layers_count: int=6):
+    def __init__(self, in_ch, f_base, layers_count: int=6):
         super().__init__()
         out_ch = 1
         features_limit = 512

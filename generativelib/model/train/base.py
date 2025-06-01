@@ -6,7 +6,7 @@ from tabulate import tabulate
 import torch
 import pandas as pd
 from tqdm import tqdm
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # Enums
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
@@ -15,7 +15,7 @@ from generativelib.model.enums import ExecPhase
 
 from generativelib.model.evaluators.base import EvalItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType
-from generativelib.model.train.visualizer import Visualizer
+from src.visualizer import Visualizer
 
 
 class Arch(torch.nn.Module):
@@ -96,7 +96,7 @@ class ArchOptimizersCollection(list[ArchOptimizer]):
         for optimizer in self:
             optimizer.evals_collector.reset_history()
     
-    def all_print_epoch_summary(self, phase: ExecPhase) -> None:
+    def all_print_phase_summary(self, phase: ExecPhase) -> None:
         # [METHOD AI GENERATED]
         
         headers = ["Type", "Name", "Mean Value"]
@@ -133,31 +133,34 @@ class ArchOptimizersCollection(list[ArchOptimizer]):
                 print()
 
 
-class BaseTrainTemplate(ABC):
+class BaseHook:
+    def __init__(self, interval: int):
+        self.interval = interval
+    
+    def on_phase_begin(self, epoch_id: int, phase: ExecPhase, loader):
+        pass
+    
+    def on_phase_end(self, epoch_id: int, phase: ExecPhase, loader):
+        pass
+
+
+class BaseOptimizationTemplate(ABC):
     def __init__(self, model_params: Dict, arch_optimizers: ArchOptimizersCollection):
         super().__init__()
         self.arch_optimizers = arch_optimizers
         self.model_params = model_params
-    
+        
     @abstractmethod
-    def _train_step(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
+    def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
     
     @abstractmethod
-    def _valid_step(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
+    def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
     
-    def epoch(self, device: torch.device, phase: ExecPhase, loader) -> None:
-        self.arch_optimizers.all_clear_history()
-        self.arch_optimizers.all_mode_to(phase)
+    def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor) -> None:
+        if phase == ExecPhase.TRAIN:
+            self._train(inp, trg)
         
-        for inp, target in tqdm(loader):
-            inp, trg = inp.to(device), target.to(device)
-            
-            if phase == ExecPhase.TRAIN:
-                self._train_step(inp, trg)
-            
-            if phase == ExecPhase.VALID:
-                self._valid_step(inp, trg)
-        
-        self.arch_optimizers.all_print_epoch_summary(phase)
+        if phase == ExecPhase.VALID:
+            self._valid(inp, trg)

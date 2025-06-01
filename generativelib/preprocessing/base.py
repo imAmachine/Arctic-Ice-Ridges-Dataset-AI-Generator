@@ -14,5 +14,5 @@ class Processor(ABC):
     def process(self, image: Any, metadata: Dict[str, Any]) -> Any:
         pass
 
-    def get_metadata_value(self) -> str:
+    def metadata_status_value(self) -> str:
         return "True"

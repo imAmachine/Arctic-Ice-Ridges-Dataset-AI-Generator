@@ -62,5 +62,5 @@ class ConfigModelSerializer(ABC, ConfigReader):
         super().__init__(config_folder, phase)
     
     @abstractmethod
-    def model_serialize(self, device: torch.device, model_type: ModelTypes):
+    def serialize_model(self, device: torch.device, model_type: ModelTypes):
         pass

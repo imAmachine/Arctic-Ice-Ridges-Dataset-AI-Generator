@@ -32,7 +32,7 @@ class DataPreprocessor:
                     raise RuntimeError(f"Processor '{processor.name}' requires '{dep.__name__}' to be applied first.")
 
             image = processor.process(image)
-            metadata[processor.name] = processor.get_metadata_value()
+            metadata[processor.name] = processor.metadata_status_value()
 
         metadata["path"] = file_output_path
         if filename:
