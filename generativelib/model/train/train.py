@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict
 
+import os
 import torch
 from tqdm import tqdm
 
@@ -86,4 +87,3 @@ class TrainManager:
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
             self.checkpoint_man(epoch_id, self.optim_template) # вызывает сохранение чекпоинта
-                

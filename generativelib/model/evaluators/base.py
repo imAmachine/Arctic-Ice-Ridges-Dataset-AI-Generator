@@ -16,6 +16,7 @@ from generativelib.model.evaluators.enums import EvaluatorType, LossName, Metric
 LOSSES = {
     LossName.BCE_Logits.name: nn.BCEWithLogitsLoss,
     LossName.BCE.name: nn.BCELoss,
+    LossName.MSE.name: nn.MSELoss,
     LossName.L1.name: nn.L1Loss,
     LossName.EDGE.name: EdgeLoss,
     LossName.FOCAL.name: FocalLoss,

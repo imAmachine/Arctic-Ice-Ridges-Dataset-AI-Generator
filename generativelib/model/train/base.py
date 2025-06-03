@@ -3,10 +3,11 @@ import torch
 from typing import Dict, List, Self, Tuple
 from abc import ABC, abstractmethod
 from tabulate import tabulate
+from collections import defaultdict
+
 
 from generativelib.model.arch.base import ArchModule
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
-from generativelib.model.enums import ExecPhase
 from generativelib.model.enums import ExecPhase
 
 from generativelib.model.evaluators.base import EvalItem, EvalsCollector
@@ -140,7 +141,6 @@ class ModuleOptimizersCollection(list[ModuleOptimizer]):
     def mode_to(self, phase: ExecPhase) -> Self:
         for optimizer in self:
             optimizer.mode_to(phase)
-        
         return self
 
 

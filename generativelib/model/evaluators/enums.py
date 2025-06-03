@@ -11,6 +11,7 @@ class LossName(Enum):
     ADVERSARIAL = auto()
     BCE_Logits = auto()
     BCE = auto()
+    MSE = auto()
     L1 = auto()
     EDGE = auto()
     FOCAL = auto()

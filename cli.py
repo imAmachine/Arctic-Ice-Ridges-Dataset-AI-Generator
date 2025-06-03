@@ -58,10 +58,6 @@ if __name__ == '__main__':
 # train_template.build_train_modules(model_cfg)
 # train_template._evaluators_from_config(model_cfg['evaluators_info'], device=DEVICE)
 
-# if args.load_weights:
-#     train_template.checkpoint_load(CHECKPOINT_PATH)
-# trainer.run()
-
 # if args.get_generator:
     #     checkpoint_map = {
     #         GenerativeModules.GENERATOR: {

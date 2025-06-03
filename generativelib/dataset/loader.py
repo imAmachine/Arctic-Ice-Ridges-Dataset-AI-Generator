@@ -69,8 +69,7 @@ class IceRidgeDataset(Dataset):
         return inp, trg
     
     def _get_processed_batch(self, image: torch.Tensor) -> Tuple[torch.Tensor]:
-        batch = self._process_img(image)
-        return [(el >= el.std()).float() for el in batch]
+        return self._process_img(image)
  
 
 class DatasetCreator:

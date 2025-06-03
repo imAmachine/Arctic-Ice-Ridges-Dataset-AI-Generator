@@ -30,6 +30,15 @@ class RandomRotate(nn.Module):
             return T.functional.rotate(x, angle)
         return x
 
+class BinarizeTransform(nn.Module):
+    def __init__(self, p=1.0):
+        super().__init__()
+        self.p = p
+
+    def forward(self, x):
+        if random.random() < self.p:
+            return (x >= x.std()).float()
+        return x
 
 def get_common_transforms(target_img_size: int) -> List[T.Transform]:
     max_crop = 1024
@@ -41,4 +50,5 @@ def get_common_transforms(target_img_size: int) -> List[T.Transform]:
         T.RandomVerticalFlip(p=0.8),
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
+        BinarizeTransform(p = 1.0),
     ])
