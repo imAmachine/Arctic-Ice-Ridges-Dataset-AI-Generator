@@ -62,5 +62,9 @@ class ConfigModelSerializer(ABC, ConfigReader):
         super().__init__(config_folder, phase)
     
     @abstractmethod
-    def serialize_model(self, device: torch.device, model_type: ModelTypes):
+    def serialize_optimize_collection(self, device: torch.device, model_type: ModelTypes):
+        pass
+    
+    @abstractmethod
+    def get_model_params(self, model_type: ModelTypes):
         pass

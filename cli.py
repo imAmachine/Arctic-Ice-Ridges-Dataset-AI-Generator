@@ -1,4 +1,5 @@
 import argparse
+from generativelib.model.arch.enums import ModelTypes
 from src.config_wrappers import TrainConfigSerializer
 from generativelib.dataset.mask_processors import *
 
@@ -25,9 +26,11 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 def main():
-    args = parse_arguments()    
+    args = parse_arguments()
+    model_type = ModelTypes[args.model.upper()]
+    
     train_context = GanTrainContext(train_config_serializer)
-    train_manager = train_context.init_train(args.model)
+    train_manager = train_context.init_train()
     train_manager.run()
 
 if __name__ == '__main__':

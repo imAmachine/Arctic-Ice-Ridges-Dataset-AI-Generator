@@ -86,7 +86,7 @@ class ParamGridTester:
 
         self.dataset.__init__(
             metadata=self.dataset.metadata,
-            mask_processor=self.dataset.mask_processor,
+            mask_processors=self.dataset.mask_processor,
             transforms=self.dataset.transforms,
             augs_per_img=params['Dataset']['augs_per_img'],
             valid_size_p=params['Dataset']['val_ratio'],

@@ -6,7 +6,7 @@ from tabulate import tabulate
 import torch
 import pandas as pd
 from tqdm import tqdm
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Enums
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
@@ -18,7 +18,7 @@ from generativelib.model.evaluators.enums import EvaluatorType
 from src.visualizer import Visualizer
 
 
-class Arch(torch.nn.Module):
+class ArchModule(torch.nn.Module):
     def __init__(
         self,
         model_type: GenerativeModules,
@@ -28,59 +28,91 @@ class Arch(torch.nn.Module):
         self.model_type = model_type
         self.module = module
 
+    @classmethod
+    def from_dict(cls, device: torch.device, module_name: str, arch_params: Dict):
+        module_cls = GenerativeModules[module_name.upper()].value
+        arch_module = module_cls(**arch_params).to(device)
+        
+        return cls(GenerativeModules[module_name.upper()], arch_module)
+    
     def forward(self, x):
         return self.module(x)
     
 
-class ArchOptimizer:
+class ModuleOptimizer:
     """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
-    def __init__(self, arch_module: Arch, evals: List[EvalItem], optimization_params: Dict):
-        self.arch_module = arch_module
+    def __init__(self, arch_module: ArchModule, evals: List[EvalItem], optimizer: torch.optim.Optimizer):
+        self.arch = arch_module
         self.evals = evals
-        self.evals_collector = EvalsCollector()
+        self.optimizer = optimizer
         
-        self.optimizer = torch.optim.Adam(
-            self.arch_module.parameters(),
-            lr=optimization_params.get('lr', .0005),
-            betas=optimization_params.get('betas', (0.9, 0.999))
+    @classmethod
+    def from_dict(cls, arch_module: ArchModule, optim_info: Dict):
+        optim_types: Dict[str, torch.optim.Optimizer] = {
+            "adam": torch.optim.Adam,
+            "rms": torch.optim.RMSprop
+        }
+        
+        optim_cls = optim_types.get(optim_info.get('type'), torch.optim.Adam)
+        optim_params = optim_info.get('params')
+        
+        optimizer = optim_cls(
+            arch_module.parameters(),
+            **optim_params
         )
+        
+        return optimizer
     
-    def loss(self, generated_sample: torch.Tensor, real_sample: torch.Tensor, exec_phase: ExecPhase) -> torch.Tensor:
-        loss_tensors = []
-        loss_vals_for_history = []
+    def loss(self, generated_sample: torch.Tensor, real_sample: torch.Tensor, exec_phase: ExecPhase) -> Tuple[torch.Tensor, List[Tuple[str, str, float]]]:
+        loss_tensor = torch.tensor(0.0, device=generated_sample.device, dtype=generated_sample.dtype)
+        losses_vals: List[Tuple[str, str, float]] = []
 
+        # подсчёт лоссов
         for item in self.evals:
             if item.exec_phase == ExecPhase.ANY or item.exec_phase == exec_phase:
                 val = item(generated_sample, real_sample)
-                loss_tensors.append(val.mean())
-                loss_vals_for_history.append((item.type, item.name, val.detach().cpu().item()))
+                loss_tensor = loss_tensor + val.mean()
+                losses_vals.append((
+                    item.type, 
+                    item.name, 
+                    val.detach().cpu().item()
+                ))
+        
+        # добавление общего loss
+        losses_vals.append((
+            EvaluatorType.LOSS,
+            "total",
+            loss_tensor.mean().item()
+        ))
+        
+        return loss_tensor, losses_vals
 
-        self.evals_collector.collect(loss_vals_for_history, exec_phase)
-
-        return torch.stack(loss_tensors).sum()
-
-    def optimize(self, generated_sample: torch.Tensor, real_sample: torch.Tensor) -> None:
+    def optimize(self, generated_sample: torch.Tensor, real_sample: torch.Tensor) -> List[Tuple[str, str, float]]:
         self.optimizer.zero_grad()
-        loss_tensor = self.loss(
+        
+        loss_tensor, loss_vals = self.loss(
             generated_sample,
             real_sample,
             exec_phase=ExecPhase.TRAIN
         )
+        
         loss_tensor.backward()
         self.optimizer.step()
+        
+        return loss_vals
 
     def mode_to(self, phase: ExecPhase) -> None:
         if phase == ExecPhase.TRAIN:
-            self.arch_module.train()
+            self.arch.train()
         
         if phase == ExecPhase.VALID:
-            self.arch_module.eval()
-    
+            self.arch.eval()
 
-class ArchOptimizersCollection(list[ArchOptimizer]):
-    def by_type(self, model_type: GenerativeModules) -> ArchOptimizer:
+
+class ArchOptimizersCollection(list[ModuleOptimizer]):
+    def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
         for arch_optimizer in self:
-            if arch_optimizer.arch_module.model_type == model_type:
+            if arch_optimizer.arch.model_type == model_type:
                 return arch_optimizer
     
     def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]) -> None:
@@ -92,9 +124,9 @@ class ArchOptimizersCollection(list[ArchOptimizer]):
         for optimizer in self:
             optimizer.mode_to(phase)
     
-    def all_clear_history(self) -> None:
-        for optimizer in self:
-            optimizer.evals_collector.reset_history()
+    # def all_clear_history(self) -> None:
+    #     for optimizer in self:
+    #         optimizer.evals_collector.reset_history()
     
     def all_print_phase_summary(self, phase: ExecPhase) -> None:
         # [METHOD AI GENERATED]

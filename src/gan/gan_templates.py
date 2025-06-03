@@ -26,15 +26,15 @@ class GAN_OptimizationTemplate(BaseOptimizationTemplate):
     def _train(self, inp: torch.Tensor, target: torch.Tensor) -> None:
         for _ in range(self.n_critic):
             with torch.no_grad():
-                fake = self.gen_optim.arch_module(inp)
+                fake = self.gen_optim.arch(inp)
             self.discr_optim.optimize(fake, target)
         
-        fake = self.gen_optim.arch_module(inp)
+        fake = self.gen_optim.arch(inp)
         self.gen_optim.optimize(fake, target)
 
     def _valid(self, inp: torch.Tensor, target: torch.Tensor) -> None:
         with torch.no_grad():
-            fake = self.gen_optim.arch_module(inp)
+            fake = self.gen_optim.arch(inp)
             for optimizer in self.arch_optimizers:
                 _ = optimizer.loss(fake, target, ExecPhase.VALID)
 

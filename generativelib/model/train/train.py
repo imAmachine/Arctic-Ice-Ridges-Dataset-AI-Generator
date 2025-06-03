@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dataclasses import dataclass
 from typing import Dict
 
 import torch
@@ -8,22 +9,13 @@ from generativelib.model.enums import ExecPhase
 from generativelib.model.train.base import BaseHook, BaseOptimizationTemplate
 from torch.utils.data import DataLoader
 
-
+@dataclass
 class TrainConfigurator:
-    def __init__(
-        self,
-        device: torch.device,
-        epochs: int=1000,
-        checkpoint_ratio: int=25,
-        vizualizations: str='',
-        weights: str='',
-    ):
-        self.device = device
-        self.epochs= epochs
-        self.checkpoint_ratio = checkpoint_ratio
-        
-        self.visualizations_path = vizualizations
-        self.weights_path = weights
+    device: torch.device
+    epochs: int=1000
+    checkpoint_ratio: int=25
+    vizualizations: str=''
+    weights: str=''
 
 
 class TrainManager:
@@ -45,7 +37,7 @@ class TrainManager:
         arch_optimizers = self.train_strategy.arch_optimizers
         
         for epoch_id in range(epochs):
-            arch_optimizers.all_clear_history()
+            # arch_optimizers.all_clear_history()
             
             for phase, loader in self.dataloaders.items():
                 print(f"\n=== Epoch {epoch_id + 1}/{epochs} === ЭТАП: {phase.name}\n")
@@ -58,4 +50,4 @@ class TrainManager:
                 
                 self.hook.on_phase_end(epoch_id, phase, loader)
                 
-                arch_optimizers.all_print_phase_summary(phase)
+                # arch_optimizers.all_print_phase_summary(phase)

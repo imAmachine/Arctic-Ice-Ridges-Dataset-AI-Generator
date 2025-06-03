@@ -5,7 +5,7 @@ from generativelib.model.evaluators.enums import MetricName
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
 
-from generativelib.model.train.base import Arch
+from generativelib.model.train.base import ArchModule
 from src.visualizer import Visualizer
 from generativelib.preprocessing.processors import *
 from generativelib.dataset.mask_processors import *
@@ -17,35 +17,34 @@ MODELS_KEY = "models"
 GLOBAL_PARAMS_KEY = "global_params"
 ENABLED_KEY = "enabled"
 PARAMS_KEY = "params"
-OPTIMIZATION_PARAMS_KEY = "optimization_params"
+OPTIMIZER_KEY = "optimizer"
 MODEL_PARAMS_KEY = "model_params"
 MODULES_KEY = "modules"
+DATASET_KEY = "dataset"
+ARCH_PARAMS_KEY = "arch"
 EVALS_KEY = "evals"
 EXEC_PHASE_KEY = "exec_phase"
 WEIGHT_KEY = "weight"
+PATH_KEY = "path"
 EXECUTION_KEY = "execution"
 INIT_KEY = "init"
 
 
 def get_default_train_conf():
     global_params = {
-        Arch.__class__.__name__.lower(): {
-            "img_size": 256,
-            "in_ch": 1,
-            "f_base": 32,
-        },
         ExecPhase.TRAIN.name.lower(): {
             "epochs": 1000,
             "checkpoint_ratio": 25,
         },
-        "dataset": {
+        DATASET_KEY: {
+            "img_size": 256,
             "batch_size": 9,
             "augs": 30,
             "validation_size": 0.2,
             "shuffle": True,
             "workers": 4
         },
-        "path": {
+        PATH_KEY: {
             "masks": "./data/masks",
             "dataset": "./data/preprocessed",
             "processed": "./data/processed",
@@ -83,31 +82,38 @@ def get_default_train_conf():
     }
     models = {}
     
-    models[ModelTypes.GAN.name] = {
+    models[ModelTypes.GAN.name.lower()] = {
         MODEL_PARAMS_KEY: {
             "n_critic": 5,
         },
-        OPTIMIZATION_PARAMS_KEY: {
-            "evaluator": MetricName.IOU.name,
-            "mode": "max",
-            "lr": 0.0005,
-            "betas": [0.0, 0.9],
-        },
         MODULES_KEY: {}
     }
-        
+    
+    losses = {
+        loss_name: {
+            EXECUTION_KEY: {
+                WEIGHT_KEY: 0.0,
+                EXEC_PHASE_KEY: ExecPhase.TRAIN.name
+            },
+            INIT_KEY: {}
+        }
+        for loss_name in LOSSES
+    }
+    
     for module in GenerativeModules:
-        models[ModelTypes.GAN.name][MODULES_KEY][module.name] = {
-            EVALS_KEY: {
-                loss_name: {
-                    EXECUTION_KEY: {
-                        WEIGHT_KEY: 0.0,
-                        EXEC_PHASE_KEY: ExecPhase.TRAIN.name
-                    },
-                    INIT_KEY: {}
+        models[ModelTypes.GAN.name.lower()][MODULES_KEY][module.name.lower()] = {
+            ARCH_PARAMS_KEY: {
+                "in_ch": 1,
+                "f_base": 32,
+            },
+            EVALS_KEY: losses,
+            OPTIMIZER_KEY: {
+                "type": "adam",
+                "params": {
+                    "lr": 0.0005,
+                    "betas": [0.0, 0.9]
                 }
-                for loss_name in LOSSES
-            }
+            },
         }
     return {
         GLOBAL_PARAMS_KEY: global_params,

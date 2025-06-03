@@ -1,9 +1,11 @@
-from typing import Dict
+from typing import Dict, List
 import torch
+from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY, WEIGHT_KEY
+from generativelib.dataset.base import BaseMaskProcessor
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
-from generativelib.model.train.base import Arch, ArchOptimizersCollection, BaseHook
+from generativelib.model.train.base import ArchModule, ArchOptimizersCollection, BaseHook
 from src.config_wrappers import TrainConfigSerializer
 from src.gan.gan_templates import GAN_OptimizationTemplate
 from generativelib.dataset.loader import DatasetCreator, DatasetMaskingProcessor
@@ -16,7 +18,7 @@ from src.visualizer import Visualizer
 
 
 class VisualizeHook(BaseHook):
-    def __init__(self, device: torch.device, generator: Arch, output_path: str, interval: int):
+    def __init__(self, device: torch.device, generator: ArchModule, output_path: str, interval: int):
         super().__init__(interval)
         self.visualizer = Visualizer(output_path)
         self.generator = generator
@@ -51,20 +53,19 @@ class GanTrainContext:
         )
         return dataset_preprocessor.get_metadata()
     
-    def _model_template(self, model_type: str, img_size: int) -> tuple:
-        if ModelTypes[model_type.upper()] == ModelTypes.GAN:
-            transforms = GAN_OptimizationTemplate.get_transforms(img_size)
-            arch_collection, model_params = self.config_serializer.serialize_model(self.device, ModelTypes.GAN)
-            
-            self._model_specific_evals(arch_collection)
-            
-            train_template = GAN_OptimizationTemplate(model_params, arch_collection)
+    def _model_template(self) -> tuple:
+        arch_collection = self.config_serializer.serialize_optimize_collection(self.device, ModelTypes.GAN)
+        model_params = self.config_serializer.get_model_params(ModelTypes.GAN)
         
-        return train_template, transforms
+        self._model_specific_evals(arch_collection)
+        
+        train_template = GAN_OptimizationTemplate(model_params, arch_collection)
+        
+        return train_template
     
     # Временное решение WIP
     def _model_specific_evals(self, optimizers_collection: ArchOptimizersCollection):
-        discriminator = optimizers_collection.by_type(GenerativeModules.GAN_DISCRIMINATOR).arch_module
+        discriminator = optimizers_collection.by_type(GenerativeModules.GAN_DISCRIMINATOR).arch
         
         optimizers_collection.add_evals({
             GenerativeModules.GAN_GENERATOR:
@@ -93,26 +94,30 @@ class GanTrainContext:
         })        
     
     def _dataset_creator(self, dataset_metadata: Dict, transforms) -> DatasetCreator:
+        mask_processors: List[BaseMaskProcessor] = self.config_serializer.serialize_all_masks()
         dataset_params = self.config_serializer.get_global_section("dataset")
-        masking_processor = DatasetMaskingProcessor(self.config_serializer.serialize_mask_processors())
         
         return DatasetCreator(
             metadata=dataset_metadata,
-            mask_processor=masking_processor,
+            mask_processors=mask_processors,
             transforms=transforms,
             dataset_params=dataset_params
         )
     
-    def _train_manager(self, train_template: GAN_OptimizationTemplate, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
-        train_configurator = TrainConfigurator(
+    def _train_configurator(self):
+        train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+        
+        return TrainConfigurator(
             device=self.device, 
-            **self.config_serializer.get_global_section('train'),
-            **self.config_serializer.params_by_section(section='path', keys=['vizualizations', 'weights'])
+            **train_params,
+            weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
         )
+    
+    def _train_manager(self, train_template: GAN_OptimizationTemplate, train_configurator: TrainConfigurator, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
         
         # ВРЕМЕННОЕ РЕШЕНИЕ
-        generator = train_template.gen_optim.arch_module
-        visualizer_path = train_configurator.visualizations_path
+        generator = train_template.gen_optim.arch
+        visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())
         interval = 5
         hook = VisualizeHook(self.device, generator, visualizer_path, interval)
         
@@ -123,20 +128,22 @@ class GanTrainContext:
             dataloaders=dataloaders,
         )
     
-    def init_train(self, model_type: str):
+    def init_train(self):
         # предобработка и подгрузка метаданных
         metadata = self._preprocessor_metadata()
+        img_size = self.config_serializer.params_by_section(section=DATASET_KEY, keys='img_size')
         
         # получение текущего шаблона для обучения
-        template, transforms = self._model_template(
-            model_type, 
-            self.config_serializer.params_by_section(section="arch", keys='img_size')
-        )
+        template = self._model_template()
+        transforms = GAN_OptimizationTemplate.get_transforms(img_size)
+        train_configurator = self._train_configurator()
         
         # создание менеджера датасета
         ds_creator = self._dataset_creator(metadata, transforms)
+        dataloaders = ds_creator.create_loaders()
         
         return self._train_manager(
-            template, 
-            ds_creator.create_loaders()
+            template,
+            train_configurator,
+            dataloaders
         )

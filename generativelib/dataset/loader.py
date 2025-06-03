@@ -72,19 +72,14 @@ class DatasetCreator:
     def __init__(
         self, 
         metadata: Dict, 
-        mask_processor: DatasetMaskingProcessor, 
+        mask_processors: List[BaseMaskProcessor], 
         transforms: torchvision.transforms.v2, 
-        dataset_params: Dict):
-        
+        dataset_params: Dict
+    ):
         self.metadata = metadata
-        self.mask_processor = mask_processor
+        self.mask_processor = DatasetMaskingProcessor(mask_processors)
         self.transforms = transforms
-       
-        self.augs_per_img = dataset_params.get("augs", 1)
-        self.valid_size_p = dataset_params.get("validation_size", 0.2)
-        self.shuffle = dataset_params.get("shuffle", True)
-        self.batch_size = dataset_params.get("batch_size", 3)
-        self.workers = dataset_params.get("workers", 4)
+        self.dataset_params = dataset_params
     
     def create_loader(self, metadata):
         loader = None
@@ -94,20 +89,20 @@ class DatasetCreator:
                 metadata=metadata,
                 masking_processor=self.mask_processor,
                 model_transforms=self.transforms,
-                augmentations_per_image=self.augs_per_img
+                augmentations_per_image=self.dataset_params.get("augs", 1)
             )
             
             loader = DataLoader(
                 dataset=dataset,
-                batch_size=self.batch_size,
-                shuffle=self.shuffle,
-                num_workers=self.workers
+                batch_size=self.dataset_params.get("batch_size", 3),
+                shuffle=self.dataset_params.get("shuffle", True),
+                num_workers=self.dataset_params.get("workers", 4)
             )
             
         return loader
     
     def create_loaders(self) -> Dict[ExecPhase, Dict]:        
-        splitted = DatasetCreator.split_dataset_legacy(self.metadata, valid_size_p=self.valid_size_p)
+        splitted = DatasetCreator.split_dataset_legacy(self.metadata, valid_size_p=self.dataset_params.get("validation_size", 0.2))
         train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN), splitted.get(ExecPhase.VALID)
         
         # print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
