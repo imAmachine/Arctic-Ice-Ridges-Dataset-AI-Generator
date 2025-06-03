@@ -82,6 +82,13 @@ def get_default_train_conf():
         },
         MODULES_KEY: {}
     }
+
+    models[ModelTypes.DIFFUSION.name.lower()] = {
+        MODEL_PARAMS_KEY: {
+            "num_timesteps": 1000
+        },
+        MODULES_KEY: {}
+    }
     
     losses = {
         loss_name: {
@@ -95,20 +102,37 @@ def get_default_train_conf():
     }
     
     for module in GenerativeModules:
-        models[ModelTypes.GAN.name.lower()][MODULES_KEY][module.name.lower()] = {
-            ARCH_PARAMS_KEY: {
-                "in_ch": 1,
-                "f_base": 32,
-            },
-            EVALS_KEY: losses,
-            OPTIMIZER_KEY: {
-                "type": "adam",
-                "params": {
-                    "lr": 0.0005,
-                    "betas": [0.0, 0.9]
-                }
-            },
-        }
+        if "gan" in module.name.lower():
+            models[ModelTypes.GAN.name.lower()][MODULES_KEY][module.name.lower()] = {
+                ARCH_PARAMS_KEY: {
+                    "in_ch": 1,
+                    "f_base": 32,
+                },
+                EVALS_KEY: losses,
+                OPTIMIZER_KEY: {
+                    "type": "adam",
+                    "params": {
+                        "lr": 0.0005,
+                        "betas": [0.0, 0.9]
+                    }
+                },
+            }
+
+        if "diffusion" in module.name.lower():
+            models[ModelTypes.DIFFUSION.name.lower()][MODULES_KEY][module.name.lower()] = {
+                ARCH_PARAMS_KEY: {
+                    "in_ch": 1,
+                    "f_base": 32,
+                },
+                EVALS_KEY: losses,
+                OPTIMIZER_KEY: {
+                    "type": "adam",
+                    "params": {
+                        "lr": 0.0005,
+                        "betas": [0.0, 0.9]
+                    }
+                },
+            }
     return {
         GLOBAL_PARAMS_KEY: global_params,
         MASK_PROCESSORS_KEY: mask_processors,

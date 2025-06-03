@@ -67,6 +67,12 @@ class IceRidgeDataset(Dataset):
             trg = self.masking_processor.apply_mask(trg, mask, True)
         
         return inp, trg
+<<<<<<< HEAD
+=======
+    
+    def _get_processed_batch(self, image: torch.Tensor) -> Tuple[torch.Tensor]:
+        return self._process_img(image)
+>>>>>>> 433eae1 (add load_weights)
  
 
 class DatasetCreator:

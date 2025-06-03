@@ -3,7 +3,11 @@ from dataclasses import dataclass
 import os
 from typing import Callable, Dict
 
+<<<<<<< HEAD
 from matplotlib import pyplot as plt
+=======
+import os
+>>>>>>> 433eae1 (add load_weights)
 import torch
 from tqdm import tqdm
 
@@ -121,5 +125,9 @@ class TrainManager:
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
+<<<<<<< HEAD
             checkpoint(checkpoint_folder, epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта
                 
+=======
+            self.checkpoint_man(epoch_id, self.optim_template) # вызывает сохранение чекпоинта
+>>>>>>> 433eae1 (add load_weights)
