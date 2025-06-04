@@ -1,12 +1,11 @@
 from typing import Dict, List
-import torch
 from generativelib.config_tools.base import ConfigReader
 from generativelib.config_tools.default_values import ARCH_PARAMS_KEY, EVALS_KEY, MASK_PROCESSORS_KEY, MODEL_PARAMS_KEY, MODELS_KEY, MODULES_KEY, OPTIMIZER_KEY
 from generativelib.dataset.base import BaseMaskProcessor
 from generativelib.model.arch.enums import ModelTypes, GenerativeModules
 from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.base import EvalItem
-from generativelib.model.train.base import ArchModule, ModuleOptimizer, ArchOptimizersCollection
+from generativelib.model.train.base import ArchModule, ModuleOptimizer, ModuleOptimizersCollection
 
 
 class TrainConfigDeserializer(ConfigReader):
@@ -24,25 +23,25 @@ class TrainConfigDeserializer(ConfigReader):
         
         return processors
     
-    def all_eval_items(self, device: torch.device, eval_info: Dict) -> List[EvalItem]:
+    def all_eval_items(self, eval_info: Dict) -> List[EvalItem]:
         evals: List[EvalItem] = []
         
         for eval_name, eval_params in eval_info.items():
-            eval_it = EvalItem.from_dict(device, eval_name, eval_params)
+            eval_it = EvalItem.from_dict(eval_name, eval_params)
             
             if eval_it: evals.append(eval_it)
             
         return evals
     
-    def module_optimizer(self, device: torch.device, module_name: str, arch_info: Dict, evals_info: Dict, optim_info: Dict) -> ModuleOptimizer:
-        arch_module = ArchModule.from_dict(device, module_name, arch_info)
-        evals = self.all_eval_items(device, evals_info)
+    def module_optimizer(self, module_name: str, arch_info: Dict, evals_info: Dict, optim_info: Dict) -> ModuleOptimizer:
+        arch_module = ArchModule.from_dict(module_name, arch_info)
+        evals = self.all_eval_items(evals_info)
         module_optimizer = ModuleOptimizer.create(arch_module, evals, optim_info)
         
         return module_optimizer
     
-    def optimize_collection(self, device: torch.device, model_type: ModelTypes) -> ArchOptimizersCollection:
-        arch_collect = ArchOptimizersCollection()
+    def optimize_collection(self, model_type: ModelTypes) -> ModuleOptimizersCollection:
+        arch_collect = ModuleOptimizersCollection()
         
         modules = self._models.get(model_type.name.lower()).get(MODULES_KEY)
         
@@ -51,7 +50,7 @@ class TrainConfigDeserializer(ConfigReader):
             evals_info = module_info.get(EVALS_KEY, {})
             optim_info = module_info.get(OPTIMIZER_KEY, {})
             
-            module_optimizer = self.module_optimizer(device, module_name, arch_info, evals_info, optim_info)
+            module_optimizer = self.module_optimizer(module_name, arch_info, evals_info, optim_info)
             arch_collect.append(module_optimizer)
         
         return arch_collect

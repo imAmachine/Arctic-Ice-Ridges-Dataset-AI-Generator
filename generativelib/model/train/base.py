@@ -15,10 +15,10 @@ from generativelib.model.enums import ExecPhase
 
 from generativelib.model.evaluators.base import EvalItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType
-from generativelib.common.visualizer import Visualizer
 
 
 class ArchModule(torch.nn.Module):
+    """Обёртка над torch.nn.Module, позволяет легко инициализировать и идентифицировать нужный модуль по model_type"""
     def __init__(
         self,
         model_type: GenerativeModules,
@@ -29,24 +29,33 @@ class ArchModule(torch.nn.Module):
         self.module = module
 
     @classmethod
-    def from_dict(cls, device: torch.device, module_name: str, arch_params: Dict):
+    def from_dict(cls, module_name: str, arch_params: Dict):
         module_cls = GenerativeModules[module_name.upper()].value
-        arch_module = module_cls(**arch_params).to(device)
+        arch_module = module_cls(**arch_params)
         
         return cls(GenerativeModules[module_name.upper()], arch_module)
+    
+    def to(self, device: torch.device):
+        self.module.to(device)
     
     def forward(self, x):
         return self.module(x)
     
 
 class ModuleOptimizer:
-    """Обёртка над ArchModule для обучения. Подсчёт лоссов и метрик, расчёт градиентов"""
+    """Обёртка над ArchModule для обучения. Подсчёт и хранение лоссов и метрик, расчёт градиентов"""
     def __init__(self, arch_module: ArchModule, evals: List[EvalItem], optimizer: torch.optim.Optimizer):
-        self.arch = arch_module
+        self.module = arch_module
         self.evals = evals
         self.optimizer = optimizer
         self.evals_collector = EvalsCollector()
+    
+    def to(self, device: torch.device):
+        self.module.to(device)
         
+        for eval in self.evals:
+            eval.to(device)
+    
     @classmethod
     def create(cls, arch_module: ArchModule, evals: List[EvalItem], optim_info: Dict):
         """Создает объект ModuleOptimizer на основе информации для оптимизатора из optim_info (Dict)"""
@@ -105,18 +114,23 @@ class ModuleOptimizer:
 
     def mode_to(self, phase: ExecPhase) -> None:
         if phase == ExecPhase.TRAIN:
-            self.arch.train()
+            self.module.train()
         
         if phase == ExecPhase.VALID:
-            self.arch.eval()
+            self.module.eval()
         
         self.evals_collector.reset_history()
 
 
-class ArchOptimizersCollection(list[ModuleOptimizer]):
+class ModuleOptimizersCollection(list[ModuleOptimizer]):
+    """Обёртка для управления коллекцией ModuleOptimizer"""
+    def to(self, device: torch.device):
+        for optim in self:
+            optim.module.to(device)
+    
     def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
         for arch_optimizer in self:
-            if arch_optimizer.arch.model_type == model_type:
+            if arch_optimizer.module.model_type == model_type:
                 return arch_optimizer
     
     def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]) -> None:
@@ -155,7 +169,7 @@ class ArchOptimizersCollection(list[ModuleOptimizer]):
         phase_name = phase.name.capitalize()
 
         for optimizer in self:
-            opt_name = optimizer.arch.model_type.name
+            opt_name = optimizer.module.model_type.name
             summary = optimizer.evals_collector.compute_epoch_summary()
             rows = self._print_phase_summary(phase_name, headers, opt_name, summary)
             
@@ -163,26 +177,28 @@ class ArchOptimizersCollection(list[ModuleOptimizer]):
                 print(f"\n=== Optimizer: {opt_name} ===\n")
                 print(tabulate(rows, headers=headers, tablefmt="github"))
                 print()
-            
 
 
 class BaseHook:
     def __init__(self, interval: int):
         self.interval = interval
     
-    def on_phase_begin(self, epoch_id: int, phase: ExecPhase, loader):
+    def on_phase_begin(self, device: torch.device, epoch_id: int, phase: ExecPhase, loader):
         pass
     
-    def on_phase_end(self, epoch_id: int, phase: ExecPhase, loader):
+    def on_phase_end(self, device: torch.device, epoch_id: int, phase: ExecPhase, loader):
         pass
 
 
-class BaseOptimizationTemplate(ABC):
-    def __init__(self, model_params: Dict, arch_optimizers: ArchOptimizersCollection):
+class OptimizationTemplate(ABC):
+    def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
         super().__init__()
         self.arch_optimizers = arch_optimizers
         self.model_params = model_params
-        
+    
+    def to(self, device: torch.device):
+        self.arch_optimizers.to(device)
+    
     @abstractmethod
     def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass

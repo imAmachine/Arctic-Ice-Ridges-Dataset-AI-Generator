@@ -11,7 +11,7 @@ from generativelib.preprocessing.processors import *
 from src.gan.gan_context import GanTrainContext
 
 configs_folder = './configs'
-train_config_serializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
+t_conf_deserializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -23,10 +23,11 @@ def parse_arguments() -> argparse.Namespace:
 def main():
     args = parse_arguments()
     model_type = ModelTypes[args.model.upper()]
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     if model_type is ModelTypes.GAN:
-        train_context = GanTrainContext(train_config_serializer)
-        train_manager = train_context.init_train()
+        train_context = GanTrainContext(t_conf_deserializer)
+        train_manager = train_context.init_train(device)
         train_manager.run()
 
 if __name__ == '__main__':

@@ -1,11 +1,13 @@
 import torch
 
-from generativelib.model.train.base import ArchOptimizersCollection
+from generativelib.model.train.base import ModuleOptimizersCollection
     
-
+# ================
+# НУЖНО ПЕРЕРАБОТАТЬ В ХУК ДЛЯ ЧЕКПОИНТА [WIP]
+# ================
 class Checkpoint:
     """Сlass for saving and loading a model."""
-    def __init__(self, optimizers: ArchOptimizersCollection):
+    def __init__(self, optimizers: ModuleOptimizersCollection):
         self.optimizers = optimizers
 
     def _traverse_path(self, path: tuple):

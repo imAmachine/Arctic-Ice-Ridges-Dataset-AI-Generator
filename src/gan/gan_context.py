@@ -6,7 +6,7 @@ from generativelib.model.arch.common_transforms import get_common_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
-from generativelib.model.train.base import ArchModule, ArchOptimizersCollection, BaseHook
+from generativelib.model.train.base import ArchModule, OptimizationTemplate, ModuleOptimizersCollection, BaseHook
 from src.config_deserializer import TrainConfigDeserializer
 from src.gan.gan_templates import GAN_OptimizationTemplate
 from generativelib.common.visualizer import Visualizer
@@ -19,17 +19,16 @@ from generativelib.preprocessing.processors import *
 
 
 class VisualizeHook(BaseHook):
-    def __init__(self, device: torch.device, generator: ArchModule, output_path: str, interval: int):
+    def __init__(self, generator: ArchModule, output_path: str, interval: int):
         super().__init__(interval)
         self.visualizer = Visualizer(output_path)
         self.generator = generator
-        self.device = device
         
-    def on_phase_end(self, epoch_id, phase, loader):
+    def on_phase_end(self, device, epoch_id, phase, loader):
         if (epoch_id + 1) % self.interval == 0:
             with torch.no_grad():
                 inp, trg = next(iter(loader))
-                generated = self.generator(inp.to(self.device))
+                generated = self.generator(inp.to(device))
                 
                 self.visualizer.save(inp, trg, generated, phase)
 
@@ -37,7 +36,6 @@ class VisualizeHook(BaseHook):
 # ВРЕМЕННОЕ РЕШЕНИЕ [WIP] НУЖНО РАЗГРЕБАТЬ И УНИФИЦИРОВАТЬ!!!!!!!!!!!!!!!
 class GanTrainContext:
     def __init__(self, config_serializer: TrainConfigDeserializer):
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.config_serializer = config_serializer
     
     def _preprocessor_metadata(self) -> Dict:
@@ -54,10 +52,10 @@ class GanTrainContext:
         )
         return dataset_preprocessor.get_metadata()
     
-    def _model_template(self) -> tuple:
-        arch_collection = self.config_serializer.optimize_collection(self.device, ModelTypes.GAN)
+    def _model_template(self) -> OptimizationTemplate:
         model_params = self.config_serializer.model_params(ModelTypes.GAN)
         
+        arch_collection = self.config_serializer.optimize_collection(ModelTypes.GAN)
         self._model_specific_evals(arch_collection)
         
         train_template = GAN_OptimizationTemplate(model_params, arch_collection)
@@ -65,8 +63,8 @@ class GanTrainContext:
         return train_template
     
     # Временное решение WIP
-    def _model_specific_evals(self, optimizers_collection: ArchOptimizersCollection):
-        discriminator = optimizers_collection.by_type(GenerativeModules.GAN_DISCRIMINATOR).arch
+    def _model_specific_evals(self, optimizers_collection: ModuleOptimizersCollection):
+        discriminator = optimizers_collection.by_type(GenerativeModules.GAN_DISCRIMINATOR).module
         
         optimizers_collection.add_evals({
             GenerativeModules.GAN_GENERATOR:
@@ -105,22 +103,21 @@ class GanTrainContext:
             dataset_params=dataset_params
         )
     
-    def _train_configurator(self):
+    def _train_configurator(self, device: torch.device):
         train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
         
         return TrainConfigurator(
-            device=self.device, 
+            device=device, 
             **train_params,
             weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
         )
     
     def _train_manager(self, train_template: GAN_OptimizationTemplate, train_configurator: TrainConfigurator, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
-        
         # ВРЕМЕННОЕ РЕШЕНИЕ
-        generator = train_template.gen_optim.arch
+        generator = train_template.gen_optim.module
         visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())
         interval = 5
-        hook = VisualizeHook(self.device, generator, visualizer_path, interval)
+        hook = VisualizeHook(generator, visualizer_path, interval)
         
         return TrainManager(
             train_template=train_template,
@@ -129,15 +126,16 @@ class GanTrainContext:
             dataloaders=dataloaders,
         )
     
-    def init_train(self):
+    def init_train(self, device: torch.device):
         # предобработка и подгрузка метаданных
         metadata = self._preprocessor_metadata()
         img_size = self.config_serializer.params_by_section(section=DATASET_KEY, keys='img_size')
         
         # получение текущего шаблона для обучения
         template = self._model_template()
+        
         transforms = get_common_transforms(img_size)
-        train_configurator = self._train_configurator()
+        train_configurator = self._train_configurator(device)
         
         # создание менеджера датасета
         ds_creator = self._dataset_creator(metadata, transforms)

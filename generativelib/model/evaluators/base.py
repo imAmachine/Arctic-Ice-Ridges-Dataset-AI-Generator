@@ -40,7 +40,7 @@ class EvalItem:
     exec_phase: ExecPhase = ExecPhase.ANY
     
     @classmethod
-    def from_dict(cls, device: torch.device, eval_name: str, eval_info: Dict):
+    def from_dict(cls, eval_name: str, eval_info: Dict):
         from generativelib.config_tools.default_values import EXEC_PHASE_KEY, EXECUTION_KEY, INIT_KEY, WEIGHT_KEY
         exec_params = eval_info[EXECUTION_KEY]
         init_params = eval_info[INIT_KEY]
@@ -52,7 +52,7 @@ class EvalItem:
         if exec_params[WEIGHT_KEY] > 0.0:
             cls = LOSSES.get(eval_name)
             
-            eval_func = cls(**init_params).to(device)
+            eval_func = cls(**init_params)
             exec_phase = ExecPhase[exec_params[EXEC_PHASE_KEY]]
             eval_weight = exec_params[WEIGHT_KEY]
             
@@ -66,6 +66,9 @@ class EvalItem:
     
     def __call__(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> 'torch.Tensor':
         return self.callable_fn(generated_sample, real_sample) * self.weight
+
+    def to(self, device: torch.device):
+        self.callable_fn.to(device)
 
 
 class EvalsCollector:
