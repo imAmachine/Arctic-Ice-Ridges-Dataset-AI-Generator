@@ -78,3 +78,23 @@ class TensorConverter(Processor):
     def process(self, image: np.ndarray) -> torch.Tensor:
         tensor = torch.from_numpy(image).float().to(self.device)
         return tensor.unsqueeze(0) if tensor.ndim == 2 else tensor
+
+
+class InferenceProcessor(Processor):
+    def __init__(self, outpaint_ratio: float = 0.2):
+        super().__init__()
+        self.outpaint_ratio = outpaint_ratio
+    
+    def process(self, image: np.ndarray) -> torch.Tensor:
+        processed_img = image.copy()
+        h, w = image.shape[-2:]
+
+        new_h = int(h * (1 + self.outpaint_ratio))
+        new_w = int(w * (1 + self.outpaint_ratio))
+
+        padded_image = np.zeros((new_h, new_w), dtype=processed_img.dtype)
+        top = (new_h - h) // 2
+        left = (new_w - w) // 2
+        padded_image[top:top + h, left:left + w] = processed_img
+        
+        return padded_image

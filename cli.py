@@ -8,6 +8,7 @@ from generativelib.model.enums import ExecPhase
 
 from generativelib.preprocessing.processors import *
 # from src.tester import ParamGridTester
+from src.gui.app_start import AppStart
 
 from src.gan.gan_context import GanTrainContext
 
@@ -19,12 +20,17 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument('--test', action='store_true')
     parser.add_argument('--model', type=str)
     parser.add_argument('--load_weights', action='store_true')
+    parser.add_argument('--gui', action='store_true', help='Launch GUI interface')
     return parser.parse_args()
 
 def main():
     args = parse_arguments()
     model_type = ModelTypes[args.model.upper()]
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    if args.gui:
+        gui_context = AppStart(t_conf_deserializer)
+        gui_context.start()
     
     train_manager = None
     
