@@ -3,8 +3,8 @@ from typing import Dict, List, Tuple
 from abc import ABC, abstractmethod
 from tabulate import tabulate
 
+from generativelib.model.arch.base import ArchModule
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
-from generativelib.model.base import ArchModule
 from generativelib.model.enums import ExecPhase
 from generativelib.model.enums import ExecPhase
 

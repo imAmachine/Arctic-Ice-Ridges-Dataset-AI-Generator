@@ -6,8 +6,9 @@ import torch
 from tqdm import tqdm
 
 from generativelib.model.enums import ExecPhase
-from generativelib.model.train.base import BaseHook, OptimizationTemplate
 from torch.utils.data import DataLoader
+
+from generativelib.model.train.base import BaseHook, OptimizationTemplate
 
 # Enable cuDNN autotuner for potential performance boost
 torch.backends.cudnn.benchmark = True
