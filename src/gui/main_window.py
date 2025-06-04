@@ -2,19 +2,19 @@ import os
 
 from PyQt5 import QtWidgets, uic
 
-from gui.inference_window import InferenceWindow
+from src.gui.inference_window import InferenceWindow
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, config, interfaces):
+    def __init__(self, config):
         super().__init__()
-        path = os.path.join(interfaces, 'main_window.ui')
+        self.interfaces = config.params_by_section(section='path', keys='interfaces')
+        path = os.path.join(self.interfaces, 'main_window.ui')
         uic.loadUi(path, self)
         
         self.config = config
-        self.interfaces = interfaces
-        self.inference_window = None
         
+        self.inference_window = None
         self._setup_ui()
     
     def _setup_ui(self):

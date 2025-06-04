@@ -1,17 +1,17 @@
 import sys
 
 from PyQt5 import QtWidgets
-from src.config_wrappers import TrainConfigSerializer
+from src.config_deserializer import TrainConfigDeserializer
 
-from gui.main_window import MainWindow
+from src.gui.main_window import MainWindow
 
 
 class AppStart:
-    def __init__(self, config_serializer: TrainConfigSerializer):
+    def __init__(self, config_serializer: TrainConfigDeserializer):
         self.config_serializer = config_serializer
 
     def start(self):
         app = QtWidgets.QApplication(sys.argv)
-        window = MainWindow(self.config_serializer, section='path', keys='interfaces')
+        window = MainWindow(self.config_serializer)
         window.show()
         sys.exit(app.exec())

@@ -6,12 +6,13 @@ from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtGui import QPixmap, QImage
 from io import BytesIO
 
+from generativelib.model.inference.inference import InferenceManager
 
 
 class InferenceWindow(QtWidgets.QMainWindow):
     def __init__(self, config, interfaces, parent=None):
         super().__init__(parent)
-        path = os.path.join(interfaces, 'inference.ui')
+        path = os.path.join(interfaces, 'inference_window.ui')
         uic.loadUi(path, self)
 
         self.parent_window = parent
