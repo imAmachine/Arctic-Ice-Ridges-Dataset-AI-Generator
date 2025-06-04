@@ -35,12 +35,14 @@ class IceRidgeDataset(Dataset):
                  metadata: Dict[str, Dict], 
                  masking_processor: DatasetMaskingProcessor, 
                  augmentations_per_image: int = 1,
-                 model_transforms: Optional[Callable] = None):
+                 model_transforms: Optional[Callable] = None,
+                 is_trg_masked: bool = True):
         self.metadata = metadata
         self.masking_processor = masking_processor
         self.augmentations_per_image = augmentations_per_image
         self.model_transforms: 'torchvision.transforms.Compose' = model_transforms
         self.image_keys = list(metadata.keys())
+        self.is_trg_masked = is_trg_masked
 
     def __len__(self) -> int:
         return len(self.image_keys) * self.augmentations_per_image
@@ -59,7 +61,10 @@ class IceRidgeDataset(Dataset):
         mask = self.masking_processor.create_mask(image)
         
         inp = self.masking_processor.apply_mask(image, mask)
-        trg = self.masking_processor.apply_mask(image, mask, True)
+        trg = image.clone()
+        
+        if self.is_trg_masked:
+            trg = self.masking_processor.apply_mask(trg, mask, True)
         
         return inp, trg
     
@@ -89,7 +94,8 @@ class DatasetCreator:
                 metadata=metadata,
                 masking_processor=self.mask_processor,
                 model_transforms=self.transforms,
-                augmentations_per_image=self.dataset_params.get("augs", 1)
+                augmentations_per_image=self.dataset_params.get("augs", 1),
+                is_trg_masked=self.dataset_params.get("is_trg_masked", False)
             )
             
             loader = DataLoader(

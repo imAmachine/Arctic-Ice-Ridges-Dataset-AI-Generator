@@ -42,7 +42,8 @@ def get_default_train_conf():
             "augs": 30,
             "validation_size": 0.2,
             "shuffle": True,
-            "workers": 4
+            "workers": 4,
+            "is_trg_masked": False
         },
         PATH_KEY: {
             "masks": "./data/masks",
@@ -74,9 +75,9 @@ def get_default_train_conf():
         "RandomHoles": {
             ENABLED_KEY: False,
             PARAMS_KEY: {
-                "count": 1,
-                "min_sz": 60,
-                "max_sz": 80,
+                "count": 2,
+                "min_sz": 40,
+                "max_sz": 50,
             }
         }
     }

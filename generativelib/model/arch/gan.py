@@ -66,7 +66,7 @@ class GanGenerator(nn.Module):
         # Энкодер
         self.encoders = nn.ModuleList()
         ch = in_ch
-        features_limit = 1024
+        features_limit = 2048
         
         for i in range(n_down):
             out_ch = min(f_base * (2**i), features_limit)
@@ -109,7 +109,7 @@ class GanDiscriminator(nn.Module):
     def __init__(self, in_ch, f_base, layers_count: int=6):
         super().__init__()
         out_ch = 1
-        features_limit = 1024
+        features_limit = 2048
         
         def layer(in_channels, out_channels, kernel_size=4, stride=2, padding=1):
             return nn.Sequential(
