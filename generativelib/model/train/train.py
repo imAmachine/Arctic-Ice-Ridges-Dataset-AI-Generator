@@ -38,19 +38,17 @@ class TrainManager:
     def run(self) -> None:
         device = self.train_configurator.device
         epochs = self.train_configurator.epochs
-        
-        self.train_strategy.to(device)
-        arch_optimizers = self.train_strategy.arch_optimizers # коллекция архитектурных оптимизаторов (ModuleOptimizersCollection) для управления всеми оптимизаторами
+        self.train_strategy.to(device) # установка device для модулей
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
                 print(f"\n=== Epoch {epoch_id + 1}/{epochs} === ЭТАП: {phase.name}\n")
                 
-                arch_optimizers.all_mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
+                self.train_strategy.mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
                 for inp, target in tqdm(loader):
                     inp, trg = inp.to(device), target.to(device)
                     self.train_strategy.step(phase, inp, trg) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
                 
                 self.hook.on_phase_end(device, epoch_id, phase, loader) # вызывает хук после окончания фазы (В ДАННЫЙ МОМЕНТ ВИЗУАЛИЗАЦИЯ)
                 
-                arch_optimizers.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
+                self.train_strategy.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)

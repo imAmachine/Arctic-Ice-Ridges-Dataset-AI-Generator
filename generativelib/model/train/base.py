@@ -1,5 +1,5 @@
 import torch
-from typing import Dict, List, Tuple
+from typing import Dict, List, Self, Tuple
 from abc import ABC, abstractmethod
 from tabulate import tabulate
 
@@ -20,12 +20,14 @@ class ModuleOptimizer:
         self.optimizer = optimizer
         self.evals_collector = EvalsCollector()
     
-    def to(self, device: torch.device):
-        self.module.to(device)
-        
-        for eval in self.evals:
-            eval.to(device)
-    
+    def to(self, *args, **kwargs) -> Self:
+        self.module.to(*args, **kwargs)
+
+        for ev in self.evals:
+            ev.to(*args, **kwargs)
+
+        return self
+
     @classmethod
     def create(cls, arch_module: ArchModule, evals: List[EvalItem], optim_info: Dict):
         """Создает объект ModuleOptimizer на основе информации для оптимизатора из optim_info (Dict)"""
@@ -82,7 +84,7 @@ class ModuleOptimizer:
             _, batch_evals = self._losses(generated, real, ExecPhase.VALID)
         self.evals_collector.collect(batch_evals, ExecPhase.VALID)
 
-    def mode_to(self, phase: ExecPhase) -> None:
+    def mode_to(self, phase: ExecPhase) -> Self:
         if phase == ExecPhase.TRAIN:
             self.module.train()
         
@@ -90,63 +92,34 @@ class ModuleOptimizer:
             self.module.eval()
         
         self.evals_collector.reset_history()
+        
+        return self
 
 
 class ModuleOptimizersCollection(list[ModuleOptimizer]):
     """Обёртка для управления коллекцией ModuleOptimizer"""
-    def to(self, device: torch.device):
+    def to(self, *args, **kwargs) -> Self:
         for optim in self:
-            optim.module.to(device)
+            optim.to(*args, **kwargs)
+        return self
     
     def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
         for arch_optimizer in self:
             if arch_optimizer.module.model_type == model_type:
                 return arch_optimizer
     
-    def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]) -> None:
+    def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]) -> Self:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
             cur_optimizer.evals.extend(evals_list)
+        
+        return self
     
-    def all_mode_to(self, phase: ExecPhase) -> None:
+    def mode_to(self, phase: ExecPhase) -> Self:
         for optimizer in self:
             optimizer.mode_to(phase)
-    
-    def all_clear_history(self) -> None:
-        for optimizer in self:
-            optimizer.evals_collector.reset_history()
-    
-    def _print_phase_summary(self, phase_name: str, headers: List[str], opt_name: str, summary: Dict) -> List[str]:
-        # Cтроки только по нужной фазе
-        rows = []
-        for key, mean_val in summary.items():
-            exec_phase, typ, name = key
-            
-            # Универсальное сравнение фаз
-            key_phase_name = exec_phase.name.capitalize()
-            if key_phase_name != phase_name:
-                continue
-            mean_str = f"{mean_val:.6f}" if mean_val is not None else "-"
-            row = [str(typ.name), str(name), mean_str]
-            rows.append(row)
-        return rows
-    
-    def all_print_phase_summary(self, phase: ExecPhase) -> None:
-        # [METHOD AI GENERATED]
         
-        headers = ["Type", "Name", "Mean Value"]
-        # Получаем имя фазы для вывода и сравнения
-        phase_name = phase.name.capitalize()
-
-        for optimizer in self:
-            opt_name = optimizer.module.model_type.name
-            summary = optimizer.evals_collector.compute_epoch_summary()
-            rows = self._print_phase_summary(phase_name, headers, opt_name, summary)
-            
-            if rows:
-                print(f"\n=== Optimizer: {opt_name} ===\n")
-                print(tabulate(rows, headers=headers, tablefmt="github"))
-                print()
+        return self
 
 
 class BaseHook:
@@ -166,9 +139,6 @@ class OptimizationTemplate(ABC):
         self.arch_optimizers = arch_optimizers
         self.model_params = model_params
     
-    def to(self, device: torch.device):
-        self.arch_optimizers.to(device)
-    
     @abstractmethod
     def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
@@ -177,9 +147,53 @@ class OptimizationTemplate(ABC):
     def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
     
+    def mode_to(self, phase: ExecPhase) -> Self:
+        self.arch_optimizers.mode_to(phase)
+        return self
+    
+    def to(self, device: torch.device) -> Self:
+        self.arch_optimizers.to(device)
+        return self
+    
     def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor) -> None:
         if phase == ExecPhase.TRAIN:
             self._train(inp, trg)
         
         if phase == ExecPhase.VALID:
             self._valid(inp, trg)
+    
+    def _print_phase_summary(self, phase_name: str, summary: Dict) -> List[str]:
+        # Cтроки только по нужной фазе
+        rows = []
+        for key, mean_val in summary.items():
+            exec_phase, typ, name = key
+            
+            # Универсальное сравнение фаз
+            key_phase_name = exec_phase.name.capitalize()
+            
+            if key_phase_name != phase_name:
+                continue
+            
+            mean_str = f"{mean_val:.6f}" if mean_val is not None else "-"
+            row = [str(typ.name), str(name), mean_str]
+            
+            rows.append(row)
+        
+        return rows
+    
+    def all_print_phase_summary(self, phase: ExecPhase) -> None:
+        # [METHOD AI GENERATED]
+        headers = ["Type", "Name", "Mean Value"]
+        
+        # Получаем имя фазы для вывода и сравнения
+        phase_name = phase.name.capitalize()
+
+        for optimizer in self.arch_optimizers:
+            opt_name = optimizer.module.model_type.name
+            summary = optimizer.evals_collector.compute_epoch_summary()
+            rows = self._print_phase_summary(phase_name, summary)
+            
+            if rows:
+                print(f"\n=== Optimizer: {opt_name} ===\n")
+                print(tabulate(rows, headers=headers, tablefmt="github"))
+                print()

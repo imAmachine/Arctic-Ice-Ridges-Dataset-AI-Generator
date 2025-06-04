@@ -24,8 +24,5 @@ class ArchModule(torch.nn.Module):
         
         return cls(GenerativeModules[module_name.upper()], arch_module)
     
-    def to(self, device: torch.device):
-        self.module.to(device)
-    
     def forward(self, x):
         return self.module(x)
