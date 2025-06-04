@@ -9,7 +9,7 @@ from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import ArchModule, OptimizationTemplate, ModuleOptimizersCollection, BaseHook
 from src.config_deserializer import TrainConfigDeserializer
 from src.gan.gan_templates import GAN_OptimizationTemplate
-from generativelib.common.visualizer import Visualizer
+from generativelib.model.common.visualizer import Visualizer
 from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase

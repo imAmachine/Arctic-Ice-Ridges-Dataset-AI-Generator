@@ -6,7 +6,7 @@ from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
 
 from generativelib.model.train.base import ArchModule
-from generativelib.common.visualizer import Visualizer
+from generativelib.model.common.visualizer import Visualizer
 from generativelib.preprocessing.processors import *
 from generativelib.dataset.mask_processors import *
 

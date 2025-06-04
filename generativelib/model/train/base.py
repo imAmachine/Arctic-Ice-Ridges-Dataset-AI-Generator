@@ -1,46 +1,16 @@
-from __future__ import annotations
-import os
+import torch
+from typing import Dict, List, Tuple
 from abc import ABC, abstractmethod
 from tabulate import tabulate
 
-import torch
-import pandas as pd
-from tqdm import tqdm
-from typing import Any, Dict, List, Optional, Tuple, Union
-
-# Enums
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
+from generativelib.model.base import ArchModule
 from generativelib.model.enums import ExecPhase
 from generativelib.model.enums import ExecPhase
 
 from generativelib.model.evaluators.base import EvalItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType
 
-
-class ArchModule(torch.nn.Module):
-    """Обёртка над torch.nn.Module, позволяет легко инициализировать и идентифицировать нужный модуль по model_type"""
-    def __init__(
-        self,
-        model_type: GenerativeModules,
-        module: torch.nn.Module
-    ):
-        super().__init__()
-        self.model_type = model_type
-        self.module = module
-
-    @classmethod
-    def from_dict(cls, module_name: str, arch_params: Dict):
-        module_cls = GenerativeModules[module_name.upper()].value
-        arch_module = module_cls(**arch_params)
-        
-        return cls(GenerativeModules[module_name.upper()], arch_module)
-    
-    def to(self, device: torch.device):
-        self.module.to(device)
-    
-    def forward(self, x):
-        return self.module(x)
-    
 
 class ModuleOptimizer:
     """Обёртка над ArchModule для обучения. Подсчёт и хранение лоссов и метрик, расчёт градиентов"""
