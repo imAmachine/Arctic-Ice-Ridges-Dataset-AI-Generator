@@ -15,7 +15,7 @@ from generativelib.model.enums import ExecPhase
 
 from generativelib.model.evaluators.base import EvalItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType
-from src.visualizer import Visualizer
+from generativelib.common.visualizer import Visualizer
 
 
 class ArchModule(torch.nn.Module):
@@ -40,14 +40,16 @@ class ArchModule(torch.nn.Module):
     
 
 class ModuleOptimizer:
-    """Обёртка над итерацией обучения модели. Подсчёт лоссов и метрик, расчёт градиентов"""
+    """Обёртка над ArchModule для обучения. Подсчёт лоссов и метрик, расчёт градиентов"""
     def __init__(self, arch_module: ArchModule, evals: List[EvalItem], optimizer: torch.optim.Optimizer):
         self.arch = arch_module
         self.evals = evals
         self.optimizer = optimizer
+        self.evals_collector = EvalsCollector()
         
     @classmethod
-    def from_dict(cls, arch_module: ArchModule, optim_info: Dict):
+    def create(cls, arch_module: ArchModule, evals: List[EvalItem], optim_info: Dict):
+        """Создает объект ModuleOptimizer на основе информации для оптимизатора из optim_info (Dict)"""
         optim_types: Dict[str, torch.optim.Optimizer] = {
             "adam": torch.optim.Adam,
             "rms": torch.optim.RMSprop
@@ -61,9 +63,9 @@ class ModuleOptimizer:
             **optim_params
         )
         
-        return optimizer
+        return cls(arch_module, evals, optimizer)
     
-    def loss(self, generated_sample: torch.Tensor, real_sample: torch.Tensor, exec_phase: ExecPhase) -> Tuple[torch.Tensor, List[Tuple[str, str, float]]]:
+    def _losses(self, generated_sample: torch.Tensor, real_sample: torch.Tensor, exec_phase: ExecPhase) -> Tuple[torch.Tensor, List[Tuple[str, str, float]]]:
         loss_tensor = torch.tensor(0.0, device=generated_sample.device, dtype=generated_sample.dtype)
         losses_vals: List[Tuple[str, str, float]] = []
 
@@ -87,19 +89,19 @@ class ModuleOptimizer:
         
         return loss_tensor, losses_vals
 
-    def optimize(self, generated_sample: torch.Tensor, real_sample: torch.Tensor) -> List[Tuple[str, str, float]]:
+    def optimize(self, generated: torch.Tensor, real: torch.Tensor) -> None:
         self.optimizer.zero_grad()
-        
-        loss_tensor, loss_vals = self.loss(
-            generated_sample,
-            real_sample,
-            exec_phase=ExecPhase.TRAIN
-        )
-        
-        loss_tensor.backward()
+        total_loss, batch_evals = self._losses(generated, real, ExecPhase.TRAIN)
+
+        self.evals_collector.collect(batch_evals, ExecPhase.TRAIN)
+
+        total_loss.backward()
         self.optimizer.step()
-        
-        return loss_vals
+
+    def validate(self, generated: torch.Tensor, real: torch.Tensor) -> None:
+        with torch.no_grad():
+            _, batch_evals = self._losses(generated, real, ExecPhase.VALID)
+        self.evals_collector.collect(batch_evals, ExecPhase.VALID)
 
     def mode_to(self, phase: ExecPhase) -> None:
         if phase == ExecPhase.TRAIN:
@@ -107,6 +109,8 @@ class ModuleOptimizer:
         
         if phase == ExecPhase.VALID:
             self.arch.eval()
+        
+        self.evals_collector.reset_history()
 
 
 class ArchOptimizersCollection(list[ModuleOptimizer]):
@@ -124,45 +128,42 @@ class ArchOptimizersCollection(list[ModuleOptimizer]):
         for optimizer in self:
             optimizer.mode_to(phase)
     
-    # def all_clear_history(self) -> None:
-    #     for optimizer in self:
-    #         optimizer.evals_collector.reset_history()
+    def all_clear_history(self) -> None:
+        for optimizer in self:
+            optimizer.evals_collector.reset_history()
+    
+    def _print_phase_summary(self, phase_name: str, headers: List[str], opt_name: str, summary: Dict) -> List[str]:
+        # Cтроки только по нужной фазе
+        rows = []
+        for key, mean_val in summary.items():
+            exec_phase, typ, name = key
+            
+            # Универсальное сравнение фаз
+            key_phase_name = exec_phase.name.capitalize()
+            if key_phase_name != phase_name:
+                continue
+            mean_str = f"{mean_val:.6f}" if mean_val is not None else "-"
+            row = [str(typ.name), str(name), mean_str]
+            rows.append(row)
+        return rows
     
     def all_print_phase_summary(self, phase: ExecPhase) -> None:
         # [METHOD AI GENERATED]
         
         headers = ["Type", "Name", "Mean Value"]
         # Получаем имя фазы для вывода и сравнения
-        if hasattr(phase, "name"):
-            phase_name = phase.name.capitalize()
-        else:
-            phase_name = str(phase).capitalize()
+        phase_name = phase.name.capitalize()
 
-        for i, optimizer in enumerate(self):
-            opt_name = getattr(getattr(optimizer, "arch_module", None), "model_type", None)
-            if hasattr(opt_name, "name"):
-                opt_name = opt_name.name
-            elif opt_name is None:
-                opt_name = str(i)
+        for optimizer in self:
+            opt_name = optimizer.arch.model_type.name
             summary = optimizer.evals_collector.compute_epoch_summary()
-
-            # Собираем строки только по нужной фазе
-            rows = []
-            for key, mean_val in summary.items():
-                exec_phase, typ, name = key
-                
-                # Универсальное сравнение фаз
-                key_phase_name = exec_phase.name.capitalize() if hasattr(exec_phase, "name") else str(exec_phase).capitalize()
-                if key_phase_name != phase_name:
-                    continue
-                mean_str = f"{mean_val:.6f}" if mean_val is not None else "-"
-                row = [str(typ.name), str(name), mean_str]
-                rows.append(row)
-
+            rows = self._print_phase_summary(phase_name, headers, opt_name, summary)
+            
             if rows:
                 print(f"\n=== Optimizer: {opt_name} ===\n")
                 print(tabulate(rows, headers=headers, tablefmt="github"))
                 print()
+            
 
 
 class BaseHook:

@@ -1,22 +1,17 @@
 import argparse
 from generativelib.model.arch.enums import ModelTypes
-from src.config_wrappers import TrainConfigSerializer
+from src.config_deserializer import TrainConfigDeserializer
 from generativelib.dataset.mask_processors import *
 
 from generativelib.model.enums import ExecPhase
 
 from generativelib.preprocessing.processors import *
-from src.tester import ParamGridTester
+# from src.tester import ParamGridTester
 
 from src.gan.gan_context import GanTrainContext
 
-# Enable cuDNN autotuner for potential performance boost
-torch.backends.cudnn.benchmark = True
-
-
 configs_folder = './configs'
-train_config_serializer = TrainConfigSerializer(configs_folder, ExecPhase.TRAIN)
-# test_config = ConfigReader(configs_folder_path, ExecPhase.TEST)
+train_config_serializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -29,14 +24,16 @@ def main():
     args = parse_arguments()
     model_type = ModelTypes[args.model.upper()]
     
-    train_context = GanTrainContext(train_config_serializer)
-    train_manager = train_context.init_train()
-    train_manager.run()
+    if model_type is ModelTypes.GAN:
+        train_context = GanTrainContext(train_config_serializer)
+        train_manager = train_context.init_train()
+        train_manager.run()
 
 if __name__ == '__main__':
     main()
 
 
+# test_config = ConfigReader(configs_folder_path, ExecPhase.TEST)
 # if args.test:
 #     # Testing
 #     print("Запуск тестов...")

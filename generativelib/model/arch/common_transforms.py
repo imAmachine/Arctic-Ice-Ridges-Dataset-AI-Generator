@@ -1,4 +1,6 @@
 import random
+from typing import List
+import torch
 import torch.nn as nn
 import torchvision.transforms.v2 as T
 
@@ -27,3 +29,16 @@ class RandomRotate(nn.Module):
             angle = random.choice(self.angles)
             return T.functional.rotate(x, angle)
         return x
+
+
+def get_common_transforms(target_img_size: int) -> List[T.Transform]:
+    max_crop = 1024
+    return T.Compose([
+        T.ToImage(),
+        OneOf([T.RandomCrop((size, size)) for size in range(640, max_crop, 128)], p=1.0),
+        RandomRotate(p=0.8),
+        T.RandomHorizontalFlip(p=0.8),
+        T.RandomVerticalFlip(p=0.8),
+        T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
+        T.ToDtype(torch.float32, scale=True),
+    ])

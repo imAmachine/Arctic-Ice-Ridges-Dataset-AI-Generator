@@ -3,7 +3,7 @@ from typing import  Dict, List
 import torch
 import torchvision.transforms.v2 as T
 
-from generativelib.model.arch.custom_transforms import OneOf, RandomRotate
+from generativelib.model.arch.common_transforms import OneOf, RandomRotate
 
 # enums
 from generativelib.model.arch.enums import GenerativeModules
@@ -36,19 +36,4 @@ class GAN_OptimizationTemplate(BaseOptimizationTemplate):
         with torch.no_grad():
             fake = self.gen_optim.arch(inp)
             for optimizer in self.arch_optimizers:
-                _ = optimizer.loss(fake, target, ExecPhase.VALID)
-
-    @staticmethod
-    def get_transforms(target_img_size) -> List[T.Transform]:
-        max_crop = 1024
-        return T.Compose([
-            T.ToImage(), 
-            OneOf([T.RandomCrop((size, size)) for size in range(640, max_crop, 128)], p = 1.0), 
-
-            RandomRotate(p = 0.8), 
-            T.RandomHorizontalFlip(p = 0.8), 
-            T.RandomVerticalFlip(p = 0.8), 
-
-            T.Resize((target_img_size, target_img_size), interpolation = T.InterpolationMode.BILINEAR), 
-            T.ToDtype(torch.float32, scale = True), 
-        ])
+                optimizer.validate(fake, target)

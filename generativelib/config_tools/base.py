@@ -1,13 +1,9 @@
-from abc import ABC, abstractmethod
 from collections import defaultdict
 import os
-from typing import Any, Dict, List, Optional, Union
-
-import torch
+from typing import Any, Dict, List, Union
 
 from generativelib.common.utils import Utils
 from generativelib.config_tools.default_values import get_default_conf
-from generativelib.model.arch.enums import ModelTypes
 from generativelib.model.enums import ExecPhase
 
 
@@ -55,16 +51,3 @@ class ConfigReader:
             return cur_section[keys]
         
         return {key: cur_section[key] for key in keys if key in cur_section}
-
-
-class ConfigModelSerializer(ABC, ConfigReader):
-    def __init__(self, config_folder: str, phase: ExecPhase):
-        super().__init__(config_folder, phase)
-    
-    @abstractmethod
-    def serialize_optimize_collection(self, device: torch.device, model_type: ModelTypes):
-        pass
-    
-    @abstractmethod
-    def get_model_params(self, model_type: ModelTypes):
-        pass

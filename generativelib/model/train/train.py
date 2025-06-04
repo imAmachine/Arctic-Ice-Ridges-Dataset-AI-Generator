@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict
+from typing import Dict, List
 
 import torch
 from tqdm import tqdm
@@ -8,6 +8,9 @@ from tqdm import tqdm
 from generativelib.model.enums import ExecPhase
 from generativelib.model.train.base import BaseHook, BaseOptimizationTemplate
 from torch.utils.data import DataLoader
+
+# Enable cuDNN autotuner for potential performance boost
+torch.backends.cudnn.benchmark = True
 
 @dataclass
 class TrainConfigurator:
@@ -37,11 +40,8 @@ class TrainManager:
         arch_optimizers = self.train_strategy.arch_optimizers
         
         for epoch_id in range(epochs):
-            # arch_optimizers.all_clear_history()
-            
             for phase, loader in self.dataloaders.items():
                 print(f"\n=== Epoch {epoch_id + 1}/{epochs} === ЭТАП: {phase.name}\n")
-                self.hook.on_phase_begin(epoch_id, phase, loader)
                 
                 arch_optimizers.all_mode_to(phase)
                 for inp, target in tqdm(loader):
@@ -50,4 +50,4 @@ class TrainManager:
                 
                 self.hook.on_phase_end(epoch_id, phase, loader)
                 
-                # arch_optimizers.all_print_phase_summary(phase)
+                arch_optimizers.all_print_phase_summary(phase)

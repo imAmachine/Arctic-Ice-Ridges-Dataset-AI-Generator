@@ -2,19 +2,20 @@ from typing import Dict, List
 import torch
 from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY, WEIGHT_KEY
 from generativelib.dataset.base import BaseMaskProcessor
+from generativelib.model.arch.common_transforms import get_common_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import ArchModule, ArchOptimizersCollection, BaseHook
-from src.config_wrappers import TrainConfigSerializer
+from src.config_deserializer import TrainConfigDeserializer
 from src.gan.gan_templates import GAN_OptimizationTemplate
-from generativelib.dataset.loader import DatasetCreator, DatasetMaskingProcessor
+from generativelib.common.visualizer import Visualizer
+from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
 from generativelib.model.train.train import TrainConfigurator, TrainManager
 from generativelib.preprocessing.preprocessor import DataPreprocessor
 from generativelib.preprocessing.processors import *
-from src.visualizer import Visualizer
 
 
 class VisualizeHook(BaseHook):
@@ -35,7 +36,7 @@ class VisualizeHook(BaseHook):
 
 # ВРЕМЕННОЕ РЕШЕНИЕ [WIP] НУЖНО РАЗГРЕБАТЬ И УНИФИЦИРОВАТЬ!!!!!!!!!!!!!!!
 class GanTrainContext:
-    def __init__(self, config_serializer: TrainConfigSerializer):
+    def __init__(self, config_serializer: TrainConfigDeserializer):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.config_serializer = config_serializer
     
@@ -54,8 +55,8 @@ class GanTrainContext:
         return dataset_preprocessor.get_metadata()
     
     def _model_template(self) -> tuple:
-        arch_collection = self.config_serializer.serialize_optimize_collection(self.device, ModelTypes.GAN)
-        model_params = self.config_serializer.get_model_params(ModelTypes.GAN)
+        arch_collection = self.config_serializer.optimize_collection(self.device, ModelTypes.GAN)
+        model_params = self.config_serializer.model_params(ModelTypes.GAN)
         
         self._model_specific_evals(arch_collection)
         
@@ -94,7 +95,7 @@ class GanTrainContext:
         })        
     
     def _dataset_creator(self, dataset_metadata: Dict, transforms) -> DatasetCreator:
-        mask_processors: List[BaseMaskProcessor] = self.config_serializer.serialize_all_masks()
+        mask_processors: List[BaseMaskProcessor] = self.config_serializer.all_dataset_masks()
         dataset_params = self.config_serializer.get_global_section("dataset")
         
         return DatasetCreator(
@@ -135,7 +136,7 @@ class GanTrainContext:
         
         # получение текущего шаблона для обучения
         template = self._model_template()
-        transforms = GAN_OptimizationTemplate.get_transforms(img_size)
+        transforms = get_common_transforms(img_size)
         train_configurator = self._train_configurator()
         
         # создание менеджера датасета
