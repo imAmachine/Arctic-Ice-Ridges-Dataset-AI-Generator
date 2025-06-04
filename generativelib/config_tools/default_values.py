@@ -49,6 +49,7 @@ def get_default_train_conf():
             "masks": "./data/masks",
             "dataset": "./data/preprocessed",
             "processed": "./data/processed",
+            "interfaces": "./src/gui/interfaces/",
             Visualizer.__class__.__name__.lower(): "./data/processed/vizualizations",
             WEIGHT_KEY: "./data/processed/checkpoint.pt"
         }

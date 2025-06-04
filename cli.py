@@ -25,12 +25,13 @@ def parse_arguments() -> argparse.Namespace:
 
 def main():
     args = parse_arguments()
-    model_type = ModelTypes[args.model.upper()]
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if args.gui:
         gui_context = AppStart(t_conf_deserializer)
         gui_context.start()
+
+    model_type = ModelTypes[args.model.upper()]
     
     train_manager = None
     
