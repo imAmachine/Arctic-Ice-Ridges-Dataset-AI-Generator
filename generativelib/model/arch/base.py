@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict
+from typing import Dict, Self
 import torch
 
 # Enums
@@ -18,11 +18,22 @@ class ArchModule(torch.nn.Module):
         self.module = module
 
     @classmethod
-    def from_dict(cls, module_name: str, arch_params: Dict):
+    def create_from_dict(cls, module_name: str, arch_params: Dict):
         module_cls = GenerativeModules[module_name.upper()].value
         arch_module = module_cls(**arch_params)
         
         return cls(GenerativeModules[module_name.upper()], arch_module)
+    
+    def to_state_dict(self) -> Dict:
+        return {
+            "model_type": self.model_type.name,
+            "module": self.module.state_dict()
+        }
+    
+    def load_state_dict(self, state: Dict) -> Self:
+        self.model_type = GenerativeModules[state["model_type"]]
+        self.module.load_state_dict(state["module"])
+        return self
     
     def forward(self, x):
         return self.module(x)

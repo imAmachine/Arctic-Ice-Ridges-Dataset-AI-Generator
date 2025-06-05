@@ -5,10 +5,12 @@ from typing import Dict
 import torch
 from tqdm import tqdm
 
+from generativelib.model.arch.base import ArchModule
+from generativelib.model.common.visualizer import Visualizer
 from generativelib.model.enums import ExecPhase
 from torch.utils.data import DataLoader
 
-from generativelib.model.train.base import BaseHook, OptimizationTemplate
+from generativelib.model.train.base import OptimizationTemplate
 
 # Enable cuDNN autotuner for potential performance boost
 torch.backends.cudnn.benchmark = True
@@ -22,33 +24,66 @@ class TrainConfigurator:
     weights: str=''
 
 
+class VisualizeHook:
+    def __init__(self, generator: ArchModule, output_path: str, interval: int):
+        self.interval = interval
+        self.generator = generator
+        self.visualizer = Visualizer(output_path)
+        
+    def __call__(self, device, epoch_id, phase, loader):
+        if (epoch_id + 1) % self.interval == 0:
+            with torch.no_grad():
+                inp, trg = next(iter(loader))
+                generated = self.generator(inp.to(device))
+                self.visualizer.save(inp, trg, generated, phase)
+
+
+class CheckpointHook:
+    def __init__(self, interval: int, output_path: str):
+        self.interval = interval
+        self.output_path = output_path
+        
+    def __call__(self, epoch_id: int, optim_template: OptimizationTemplate):
+        if (epoch_id + 1) % self.interval == 0:
+            optim_template.save_state(self.output_path)
+
+
 class TrainManager:
     def __init__(
         self,
-        train_template: OptimizationTemplate,
+        optim_template: OptimizationTemplate,
         train_configurator: TrainConfigurator,
-        visualizer: BaseHook,
+        visualizer: VisualizeHook,
+        checkpointer: CheckpointHook,
         dataloaders: Dict[ExecPhase, DataLoader],
     ):
-        self.hook = visualizer
+        self.visualizer = visualizer
+        self.checkpoint_man = checkpointer
+        
         self.dataloaders = dataloaders
-        self.train_strategy = train_template
+        self.optim_template = optim_template
         self.train_configurator = train_configurator
     
-    def run(self) -> None:
+    def run(self, is_load_weights=False) -> None:
         device = self.train_configurator.device
         epochs = self.train_configurator.epochs
-        self.train_strategy.to(device) # установка device для модулей
+        self.optim_template.to(device) # установка device для модулей
+        
+        if is_load_weights:
+            self.optim_template.load_state(device, self.train_configurator.weights)
+            
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
                 print(f"\n=== Epoch {epoch_id + 1}/{epochs} === ЭТАП: {phase.name}\n")
                 
-                self.train_strategy.mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
+                self.optim_template.mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
                 for inp, target in tqdm(loader):
                     inp, trg = inp.to(device), target.to(device)
-                    self.train_strategy.step(phase, inp, trg) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
+                    self.optim_template.step(phase, inp, trg) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
                 
-                self.hook.on_phase_end(device, epoch_id, phase, loader) # вызывает хук после окончания фазы (В ДАННЫЙ МОМЕНТ ВИЗУАЛИЗАЦИЯ)
+                self.visualizer(device, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
+                self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
+            
+            self.checkpoint_man(epoch_id, self.optim_template) # вызывает сохранение чекпоинта
                 
-                self.train_strategy.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)

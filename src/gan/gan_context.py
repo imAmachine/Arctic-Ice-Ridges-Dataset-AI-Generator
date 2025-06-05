@@ -6,34 +6,19 @@ from generativelib.model.arch.common_transforms import get_common_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
-from generativelib.model.train.base import ArchModule, OptimizationTemplate, ModuleOptimizersCollection, BaseHook
+from generativelib.model.train.base import OptimizationTemplate, ModuleOptimizersCollection
 from src.config_deserializer import TrainConfigDeserializer
 from src.gan.gan_templates import GAN_OptimizationTemplate
 from generativelib.model.common.visualizer import Visualizer
 from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
-from generativelib.model.train.train import TrainConfigurator, TrainManager
+from generativelib.model.train.train import CheckpointHook, TrainConfigurator, TrainManager, VisualizeHook
 from generativelib.preprocessing.preprocessor import DataPreprocessor
 from generativelib.preprocessing.processors import *
 
 
-class VisualizeHook(BaseHook):
-    def __init__(self, generator: ArchModule, output_path: str, interval: int):
-        super().__init__(interval)
-        self.visualizer = Visualizer(output_path)
-        self.generator = generator
-        
-    def on_phase_end(self, device, epoch_id, phase, loader):
-        if (epoch_id + 1) % self.interval == 0:
-            with torch.no_grad():
-                inp, trg = next(iter(loader))
-                generated = self.generator(inp.to(device))
-                
-                self.visualizer.save(inp, trg, generated, phase)
-
-
-# ВРЕМЕННОЕ РЕШЕНИЕ [WIP] НУЖНО РАЗГРЕБАТЬ И УНИФИЦИРОВАТЬ!!!!!!!!!!!!!!!
+# ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ, НУЖНО РАЗГРЕБАТЬ!!!!!!!!!!!!!!!
 class GanTrainContext:
     def __init__(self, config_serializer: TrainConfigDeserializer):
         self.config_serializer = config_serializer
@@ -113,16 +98,18 @@ class GanTrainContext:
         )
     
     def _train_manager(self, train_template: GAN_OptimizationTemplate, train_configurator: TrainConfigurator, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
-        # ВРЕМЕННОЕ РЕШЕНИЕ
+        # ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ
         generator = train_template.gen_optim.module
         visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())
         interval = 5
-        hook = VisualizeHook(generator, visualizer_path, interval)
+        visualizer = VisualizeHook(generator, visualizer_path, interval)
+        checkpointer = CheckpointHook(interval, train_configurator.weights)
         
         return TrainManager(
-            train_template=train_template,
+            optim_template=train_template,
             train_configurator=train_configurator,
-            visualizer=hook,
+            visualizer=visualizer,
+            checkpointer=checkpointer,
             dataloaders=dataloaders,
         )
     

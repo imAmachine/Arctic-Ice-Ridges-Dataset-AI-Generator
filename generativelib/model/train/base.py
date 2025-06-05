@@ -1,3 +1,4 @@
+import os
 import torch
 from typing import Dict, List, Self, Tuple
 from abc import ABC, abstractmethod
@@ -27,7 +28,19 @@ class ModuleOptimizer:
             ev.to(*args, **kwargs)
 
         return self
+    
+    def to_state_dict(self) -> Dict:
+        state = {
+            "module_state": self.module.to_state_dict(),
+            "optim_state": self.optimizer.state_dict()
+        }
+        return state
 
+    def load_state(self, optim_state_dict: Dict) -> Self:
+        self.module.load_state_dict(optim_state_dict["module_state"])
+        self.optimizer.load_state_dict(optim_state_dict["optim_state"])
+        return self
+    
     @classmethod
     def create(cls, arch_module: ArchModule, evals: List[EvalItem], optim_info: Dict):
         """Создает объект ModuleOptimizer на основе информации для оптимизатора из optim_info (Dict)"""
@@ -103,6 +116,15 @@ class ModuleOptimizersCollection(list[ModuleOptimizer]):
             optim.to(*args, **kwargs)
         return self
     
+    def to_state_dict(self) -> Dict:
+        return {optim.module.model_type.name.lower(): optim.to_state_dict() for optim in self}
+    
+    def from_state_dict(self, state: Dict) -> Self:
+        for optim in self:
+            optim.load_state(state[optim.module.model_type.name.lower()])
+        
+        return self
+    
     def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
         for arch_optimizer in self:
             if arch_optimizer.module.model_type == model_type:
@@ -122,17 +144,6 @@ class ModuleOptimizersCollection(list[ModuleOptimizer]):
         return self
 
 
-class BaseHook:
-    def __init__(self, interval: int):
-        self.interval = interval
-    
-    def on_phase_begin(self, device: torch.device, epoch_id: int, phase: ExecPhase, loader):
-        pass
-    
-    def on_phase_end(self, device: torch.device, epoch_id: int, phase: ExecPhase, loader):
-        pass
-
-
 class OptimizationTemplate(ABC):
     def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
         super().__init__()
@@ -146,6 +157,16 @@ class OptimizationTemplate(ABC):
     @abstractmethod
     def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
+    
+    def save_state(self, file_path: str) -> None:
+        state = self.arch_optimizers.to_state_dict()
+        torch.save(state, file_path)
+
+    def load_state(self, device: torch.device, file_path: str) -> None:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Файл чекпоинта коллекции не найден: {file_path}")
+        state = torch.load(file_path, map_location=device)
+        self.arch_optimizers.from_state_dict(state)
     
     def mode_to(self, phase: ExecPhase) -> Self:
         self.arch_optimizers.mode_to(phase)

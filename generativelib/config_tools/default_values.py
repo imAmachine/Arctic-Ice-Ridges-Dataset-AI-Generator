@@ -50,7 +50,7 @@ def get_default_train_conf():
             "dataset": "./data/preprocessed",
             "processed": "./data/processed",
             Visualizer.__class__.__name__.lower(): "./data/processed/vizualizations",
-            WEIGHT_KEY: "./data/processed/weights"
+            WEIGHT_KEY: "./data/processed/checkpoint.pt"
         }
     }
     mask_processors = {

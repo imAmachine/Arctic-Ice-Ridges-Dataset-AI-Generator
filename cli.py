@@ -1,4 +1,5 @@
 import argparse
+from generativelib.config_tools.default_values import PATH_KEY, WEIGHT_KEY
 from generativelib.model.arch.enums import ModelTypes
 from src.config_deserializer import TrainConfigDeserializer
 from generativelib.dataset.mask_processors import *
@@ -25,10 +26,15 @@ def main():
     model_type = ModelTypes[args.model.upper()]
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
+    train_manager = None
+    
     if model_type is ModelTypes.GAN:
         train_context = GanTrainContext(t_conf_deserializer)
-        train_manager = train_context.init_train(device)
-        train_manager.run()
+    
+    train_manager = train_context.init_train(device)
+    
+    if args.load_weights:
+        train_manager.run(is_load_weights=True)
 
 if __name__ == '__main__':
     main()
