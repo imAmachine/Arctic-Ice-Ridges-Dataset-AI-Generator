@@ -33,8 +33,7 @@ def main():
     
     train_manager = train_context.init_train(device)
     
-    if args.load_weights:
-        train_manager.run(is_load_weights=True)
+    train_manager.run(is_load_weights=args.load_weights)
 
 if __name__ == '__main__':
     main()
