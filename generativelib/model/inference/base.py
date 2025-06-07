@@ -8,14 +8,15 @@ from generativelib.model.train.base import ArchModule
 #   WIP - доработка идёт
 #
 class ModuleInference(ArchModule):
-    def __init__(self, model_type, module, inference_params: Dict):
+    def __init__(self, model_type, module):
         super().__init__(model_type, module)
-        self.output_path = inference_params.get("out_path")
-        self.weights_path = inference_params.get("weights_path")
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-        if self.weights_path:
-            self.module.load_state_dict(self.weights_path)
+    def load_weights(self, weights_path: str):
+            state = torch.load(weights_path, map_location=self.device, weights_only=False)
+            state = state["gan_generator"]["module_state"]
+            self.load_state(state)
     
     def generate(self, inp: torch.Tensor) -> None:
         with torch.no_grad():
-            self.module(inp)
+            return self.module(inp)

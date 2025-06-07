@@ -52,3 +52,11 @@ def get_common_transforms(target_img_size: int) -> List[T.Transform]:
         T.ToDtype(torch.float32, scale=True),
         BinarizeTransform(p = 1.0),
     ])
+
+def get_infer_transforms(target_img_size: int) -> List[T.Transform]:
+    return T.Compose([
+        T.ToImage(),
+        T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
+        T.ToDtype(torch.float32, scale=True),
+        BinarizeTransform(p = 1.0),
+    ])

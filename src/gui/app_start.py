@@ -1,4 +1,5 @@
 import sys
+from typing import Dict
 
 from PyQt5 import QtWidgets
 from src.config_deserializer import TrainConfigDeserializer
@@ -7,7 +8,7 @@ from src.gui.main_window import MainWindow
 
 
 class AppStart:
-    def __init__(self, config_serializer: TrainConfigDeserializer):
+    def __init__(self, config_serializer: Dict):
         self.config_serializer = config_serializer
 
     def start(self):

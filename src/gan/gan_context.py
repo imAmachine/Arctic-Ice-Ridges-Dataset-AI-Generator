@@ -1,8 +1,10 @@
 from typing import Dict, List
+from PIL import Image
 import torch
+
 from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY, WEIGHT_KEY
 from generativelib.dataset.base import BaseMaskProcessor
-from generativelib.model.arch.common_transforms import get_common_transforms
+from generativelib.model.arch.common_transforms import get_common_transforms, get_infer_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
@@ -16,6 +18,38 @@ from generativelib.model.enums import ExecPhase
 from generativelib.model.train.train import CheckpointHook, TrainConfigurator, TrainManager, VisualizeHook
 from generativelib.preprocessing.preprocessor import DataPreprocessor
 from generativelib.preprocessing.processors import *
+from generativelib.model.inference.base import ModuleInference
+from src.gui.inference_context import InferenceContext
+
+
+class GanInferenceContext(InferenceContext):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.generator = None
+        self.image_size = None
+        self.outpainting_ratio = None
+
+        self._load_params()
+        self._load_model()
+
+    def _load_model(self):
+        arch_module = self.config.create_arch_module(
+            model_type=ModelTypes.GAN,
+            module_name="gan_generator"
+        )
+        self.generator = ModuleInference(GenerativeModules.GAN_GENERATOR, arch_module.module)
+        self.generator.to(self.device)
+
+    def load_weights(self, path: str):
+        self.generator.load_weights(path)
+
+    def generate_from_mask(self, image: torch.Tensor) -> Image.Image:
+        tensor = self._prepare_input_image(image)
+        with torch.no_grad():
+            generated = self.generator.generate(tensor.unsqueeze(0))
+        return self._postprocess(generated, image)
 
 
 # ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ, НУЖНО РАЗГРЕБАТЬ!!!!!!!!!!!!!!!
@@ -101,9 +135,8 @@ class GanTrainContext:
         # ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ
         generator = train_template.gen_optim.module
         visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())
-        interval = 5
-        visualizer = VisualizeHook(generator, visualizer_path, interval)
-        checkpointer = CheckpointHook(interval, train_configurator.weights)
+        visualizer = VisualizeHook(generator, visualizer_path, train_configurator.checkpoint_ratio)
+        checkpointer = CheckpointHook(train_configurator.checkpoint_ratio, train_configurator.weights)
         
         return TrainManager(
             optim_template=train_template,

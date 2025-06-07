@@ -161,12 +161,14 @@ class OptimizationTemplate(ABC):
     def save_state(self, file_path: str) -> None:
         state = self.arch_optimizers.to_state_dict()
         torch.save(state, file_path)
+        print(f'Веса сохранены в {file_path}')
 
     def load_state(self, device: torch.device, file_path: str) -> None:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Файл чекпоинта коллекции не найден: {file_path}")
-        state = torch.load(file_path, map_location=device)
+        state = torch.load(file_path, map_location=device, weights_only=False)
         self.arch_optimizers.from_state_dict(state)
+        print(f'Веса загружены успешно из {file_path}')
     
     def mode_to(self, phase: ExecPhase) -> Self:
         self.arch_optimizers.mode_to(phase)
