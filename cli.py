@@ -1,6 +1,6 @@
 import argparse
 from src.gan.gan_templates import GanTemplate
-from src.config_deserializer import TrainConfigDeserializer
+from src.config_deserializer import TrainConfigDeserializer, InferenceConfigDeserializer
 
 from generativelib.model.arch.enums import ModelTypes
 from generativelib.dataset.mask_processors import *
@@ -13,7 +13,6 @@ from src.gui.app_start import AppStart
 from gan.gan_train_context import GanTrainContext
 
 configs_folder = './configs'
-t_conf_deserializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
 
 def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -28,17 +27,21 @@ def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if args.gui:
-        gui_context = AppStart(t_conf_deserializer)
+        i_conf_deserializer = InferenceConfigDeserializer(configs_folder)
+        gui_context = AppStart(i_conf_deserializer)
         gui_context.start()
 
-    model_type = ModelTypes[args.model.upper()]
-    
-    train_manager = None
-    
-    if model_type is ModelTypes.GAN:
-        train_context = GanTrainContext(t_conf_deserializer, ModelTypes.GAN, GanTemplate)
+    else:
+        model_type = ModelTypes[args.model.upper()]
+        t_conf_deserializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
         
-        train_manager = train_context.get_train_manager(device)
+        train_manager = None
+        
+        if model_type is ModelTypes.GAN:
+            train_context = GanTrainContext(t_conf_deserializer)
+        
+        train_manager = train_context.init_train(device)
+        
         train_manager.run(is_load_weights=args.load_weights)
 
 if __name__ == '__main__':

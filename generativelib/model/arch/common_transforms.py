@@ -58,7 +58,6 @@ def get_common_transforms(target_img_size: int) -> T.Compose:
         T.RandomVerticalFlip(p=0.8),
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
-<<<<<<< HEAD
         BinarizeTransform(),
     ])
 
@@ -68,7 +67,4 @@ def get_infer_transforms(target_img_size: int) -> T.Compose:
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
         BinarizeTransform(),
-=======
-        BinarizeTransform(p = 1.0),
->>>>>>> 433eae1 (add load_weights)
     ])
