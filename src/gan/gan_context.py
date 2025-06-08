@@ -8,7 +8,7 @@ from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import OptimizationTemplate, ModuleOptimizersCollection
 from src.config_deserializer import TrainConfigDeserializer
-from src.gan.gan_templates import GAN_OptimizationTemplate
+from src.gan.gan_templates import GanTemplate
 from generativelib.model.common.visualizer import Visualizer
 from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
@@ -43,7 +43,7 @@ class GanTrainContext:
         arch_collection = self.config_serializer.optimize_collection(ModelTypes.GAN)
         self._model_specific_evals(arch_collection)
         
-        train_template = GAN_OptimizationTemplate(model_params, arch_collection)
+        train_template = GanTemplate(model_params, arch_collection)
         
         return train_template
     
@@ -97,7 +97,7 @@ class GanTrainContext:
             weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
         )
     
-    def _train_manager(self, train_template: GAN_OptimizationTemplate, train_configurator: TrainConfigurator, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
+    def _train_manager(self, train_template: GanTemplate, train_configurator: TrainConfigurator, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
         # ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ
         generator = train_template.gen_optim.module
         visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())

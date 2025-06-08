@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict
+from typing import Callable, Dict
 
 import torch
 from tqdm import tqdm
@@ -27,16 +27,16 @@ class TrainConfigurator:
 
 
 class VisualizeHook:
-    def __init__(self, generator: ArchModule, output_path: str, interval: int):
+    def __init__(self, generate_fn: Callable, output_path: str, interval: int):
         self.interval = interval
-        self.generator = generator
+        self.gen = generate_fn
         self.visualizer = Visualizer(output_path)
         
     def __call__(self, device, epoch_id, phase, loader):
         if (epoch_id + 1) % self.interval == 0:
             with torch.no_grad():
                 inp, trg = next(iter(loader))
-                generated = self.generator(inp.to(device))
+                generated = self.gen(inp.to(device))
                 self.visualizer.save(inp, trg, generated, phase)
 
 
