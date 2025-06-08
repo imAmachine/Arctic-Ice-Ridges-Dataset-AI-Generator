@@ -19,7 +19,7 @@ class ArchModule(torch.nn.Module, ITorchState):
         self.module = module
 
     @classmethod
-    def create_from_dict(cls, module_name: str, arch_params: Dict):
+    def cls_from_dict(cls, module_name: str, arch_params: Dict):
         module_cls = GenerativeModules[module_name.upper()].value
         arch_module = module_cls(**arch_params)
         
@@ -31,7 +31,7 @@ class ArchModule(torch.nn.Module, ITorchState):
             "module": self.module.state_dict()
         }
     
-    def load_state_dict(self, state_dict: Dict) -> Self:
+    def from_state_dict(self, state_dict: Dict) -> Self:
         self.model_type = GenerativeModules[state_dict["model_type"]]
         self.module.load_state_dict(state_dict["module"])
         return self

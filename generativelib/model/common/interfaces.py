@@ -8,5 +8,5 @@ class ITorchState(ABC):
         pass
     
     @abstractmethod
-    def load_state_dict(self, state_dict: Dict) -> Self:
+    def from_state_dict(self, state_dict: Dict) -> Self:
         pass

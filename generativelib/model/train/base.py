@@ -37,8 +37,8 @@ class ModuleOptimizer(ITorchState):
         }
         return state
 
-    def load_state_dict(self, state_dict: Dict) -> Self:
-        self.module.load_state_dict(state_dict["module_state"])
+    def from_state_dict(self, state_dict: Dict) -> Self:
+        self.module.from_state_dict(state_dict["module_state"])
         self.optimizer.load_state_dict(state_dict["optim_state"])
         return self
     
@@ -120,9 +120,9 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
     def to_state_dict(self) -> Dict:
         return {optim.module.model_type.name.lower(): optim.to_state_dict() for optim in self}
     
-    def load_state_dict(self, state_dict: Dict) -> Self:
+    def from_state_dict(self, state_dict: Dict) -> Self:
         for optim in self:
-            optim.load_state_dict(state_dict[optim.module.model_type.name.lower()])
+            optim.from_state_dict(state_dict[optim.module.model_type.name.lower()])
         return self
     
     def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:

@@ -34,7 +34,7 @@ class TrainConfigDeserializer(ConfigReader):
         return evals
     
     def module_optimizer(self, module_name: str, arch_info: Dict, evals_info: Dict, optim_info: Dict) -> ModuleOptimizer:
-        arch_module = ArchModule.create_from_dict(module_name, arch_info)
+        arch_module = ArchModule.cls_from_dict(module_name, arch_info)
         evals = self.all_eval_items(evals_info)
         module_optimizer = ModuleOptimizer.create(arch_module, evals, optim_info)
         
