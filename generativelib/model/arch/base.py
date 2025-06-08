@@ -4,9 +4,10 @@ import torch
 
 # Enums
 from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.common.interfaces import ITorchState
 
 
-class ArchModule(torch.nn.Module):
+class ArchModule(torch.nn.Module, ITorchState):
     """Обёртка над torch.nn.Module, позволяет легко инициализировать и идентифицировать нужный модуль по model_type"""
     def __init__(
         self,
@@ -30,9 +31,9 @@ class ArchModule(torch.nn.Module):
             "module": self.module.state_dict()
         }
     
-    def load_state_dict(self, state: Dict) -> Self:
-        self.model_type = GenerativeModules[state["model_type"]]
-        self.module.load_state_dict(state["module"])
+    def load_state_dict(self, state_dict: Dict) -> Self:
+        self.model_type = GenerativeModules[state_dict["model_type"]]
+        self.module.load_state_dict(state_dict["module"])
         return self
     
     def forward(self, x):
