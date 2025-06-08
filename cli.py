@@ -11,6 +11,7 @@ from generativelib.preprocessing.processors import *
 from src.gui.app_start import AppStart
 
 from src.gan.gan_context import GanTrainContext
+from src.diffusion.diffusion_context import DiffusionTrainContext
 
 configs_folder = './configs'
 
@@ -39,6 +40,8 @@ def main():
         
         if model_type is ModelTypes.GAN:
             train_context = GanTrainContext(t_conf_deserializer)
+        elif model_type is ModelTypes.DIFFUSION:
+            train_context = DiffusionTrainContext(t_conf_deserializer)
         
         train_manager = train_context.init_train(device)
         

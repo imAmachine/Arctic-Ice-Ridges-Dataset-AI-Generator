@@ -1,29 +1,27 @@
-from typing import Dict, List
+from typing import Dict
 from PIL import Image
 import torch
 
-from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY, WEIGHT_KEY
-from generativelib.dataset.base import BaseMaskProcessor
+from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY
 from generativelib.model.arch.common_transforms import get_common_transforms, get_infer_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import OptimizationTemplate, ModuleOptimizersCollection
-from src.config_deserializer import TrainConfigDeserializer
-from src.gan.gan_templates import GAN_OptimizationTemplate
 from generativelib.model.common.visualizer import Visualizer
-from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
 from generativelib.model.train.train import CheckpointHook, TrainConfigurator, TrainManager, VisualizeHook
-from generativelib.preprocessing.preprocessor import DataPreprocessor
 from generativelib.preprocessing.processors import *
 from generativelib.model.inference.base import ModuleInference
-from src.gui.inference_context import InferenceContext
+
+from src.create_context import TrainContext, InferenceContext
+from src.config_deserializer import TrainConfigDeserializer, InferenceConfigDeserializer
+from src.gan.gan_templates import GAN_OptimizationTemplate
 
 
 class GanInferenceContext(InferenceContext):
-    def __init__(self, config):
+    def __init__(self, config: InferenceConfigDeserializer):
         super().__init__()
         self.config = config
 
@@ -53,23 +51,9 @@ class GanInferenceContext(InferenceContext):
 
 
 # ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ, НУЖНО РАЗГРЕБАТЬ!!!!!!!!!!!!!!!
-class GanTrainContext:
+class GanTrainContext(TrainContext):
     def __init__(self, config_serializer: TrainConfigDeserializer):
-        self.config_serializer = config_serializer
-    
-    def _preprocessor_metadata(self) -> Dict:
-        paths = self.config_serializer.params_by_section(section='path', keys=['masks', 'dataset'])
-        
-        dataset_preprocessor = DataPreprocessor(
-            *paths.values(),
-            files_extensions=['.png'],
-            processors=[
-                RotateMask(),
-                AdjustToContent(),
-                Crop(k=0.5),
-            ]
-        )
-        return dataset_preprocessor.get_metadata()
+        super().__init__(config_serializer)
     
     def _model_template(self) -> OptimizationTemplate:
         model_params = self.config_serializer.model_params(ModelTypes.GAN)
@@ -110,26 +94,6 @@ class GanTrainContext:
                 )
             ]
         })        
-    
-    def _dataset_creator(self, dataset_metadata: Dict, transforms) -> DatasetCreator:
-        mask_processors: List[BaseMaskProcessor] = self.config_serializer.all_dataset_masks()
-        dataset_params = self.config_serializer.get_global_section("dataset")
-        
-        return DatasetCreator(
-            metadata=dataset_metadata,
-            mask_processors=mask_processors,
-            transforms=transforms,
-            dataset_params=dataset_params
-        )
-    
-    def _train_configurator(self, device: torch.device):
-        train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
-        
-        return TrainConfigurator(
-            device=device, 
-            **train_params,
-            weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
-        )
     
     def _train_manager(self, train_template: GAN_OptimizationTemplate, train_configurator: TrainConfigurator, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
         # ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ

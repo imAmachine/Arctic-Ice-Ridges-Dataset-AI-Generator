@@ -30,10 +30,10 @@ class ArchModule(torch.nn.Module):
             "module": self.module.state_dict()
         }
     
-    def load_state(self, state: Dict) -> Self:
+    def load_state_dict(self, state: Dict) -> Self:
         self.model_type = GenerativeModules[state["model_type"]]
         self.module.load_state_dict(state["module"])
         return self
     
-    def forward(self, x):
-        return self.module(x)
+    def forward(self, *args, **kwargs):
+        return self.module(*args, **kwargs)

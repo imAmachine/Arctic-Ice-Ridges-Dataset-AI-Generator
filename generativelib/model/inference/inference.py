@@ -2,7 +2,7 @@ import cv2
 
 from PIL import Image
 
-from src.gui.inference_context import InferenceContext
+from src.create_context import InferenceContext
 from src.config_deserializer import InferenceConfigDeserializer
 
 
