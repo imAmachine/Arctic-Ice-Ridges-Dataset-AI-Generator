@@ -12,13 +12,14 @@ from generativelib.model.train.base import ModuleOptimizersCollection, Optimizat
 # evaluators
 from generativelib.model.evaluators.losses import *
 
-class Diffusion_OptimizationTemplate(OptimizationTemplate):
-    def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
-        super().__init__(model_params, arch_optimizers)
+
+class DiffusionTemplate(OptimizationTemplate):
+    def __init__(self, model_params: Dict, model_optimizers: ModuleOptimizersCollection):
+        super().__init__(model_params, model_optimizers)
         self.scheduler = DDPMScheduler(
             num_train_timesteps=model_params.get('num_timesteps', 1000)
         )
-        self.dif_optim = self.arch_optimizers.by_type(GenerativeModules.DIFFUSION)
+        self.dif_optim = self.model_optimizers.by_type(GenerativeModules.DIFFUSION)
 
     def _add_noise(self, target: torch.Tensor, timestamp: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         noise = torch.randn_like(target)

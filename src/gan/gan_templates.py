@@ -12,7 +12,7 @@ from generativelib.model.train.base import ModuleOptimizersCollection, Optimizat
 from generativelib.model.evaluators.losses import *
 
 
-class GAN_OptimizationTemplate(OptimizationTemplate):
+class GanTemplate(OptimizationTemplate):
     def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
         super().__init__(model_params, arch_optimizers)
         self.n_critic = model_params.get('n_critic', 5)
