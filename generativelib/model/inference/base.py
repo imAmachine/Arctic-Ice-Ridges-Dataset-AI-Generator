@@ -13,6 +13,6 @@ class ModuleInference(ArchModule):
         super().__init__(model_type, module)
         CheckpointManager.load_state(self, inference_params.get("weights_path", ''))
     
-    def generate(self, inp: torch.Tensor) -> None:
+    def generate(self, *args, **kwargs) -> None:
         with torch.no_grad():
-            return self.module(inp)
+            return self.module(*args, **kwargs)

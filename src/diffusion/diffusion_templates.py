@@ -44,9 +44,9 @@ class Diffusion_OptimizationTemplate(OptimizationTemplate):
         # [AI METHOD]
         noise = torch.randn_like(target)
         self.scheduler.set_timesteps(self.scheduler.config.num_train_timesteps)
-        timesteps = self.scheduler.timesteps
+        
         with torch.no_grad():
-            for t in tqdm(timesteps, desc="Sampling"):
+            for t in tqdm(self.scheduler.timesteps, desc="Sampling"):
                 timesteps_tensor = t.expand(target.size(0)).to(target.device)
                 noise_pred = self.dif_optim.module(noise, timesteps_tensor)
 

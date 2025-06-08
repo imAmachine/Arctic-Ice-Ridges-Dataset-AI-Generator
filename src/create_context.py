@@ -54,25 +54,31 @@ class TrainContext(ABC):
 
 
 class InferenceContext(ABC):
-    def __init__(self):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        self.generator = None
+        self.image_size = None
+        self.outpainting_ratio = None
 
     @staticmethod
     def load_model(model_name: str, config: InferenceConfigDeserializer):
         from src.gan.gan_context import GanInferenceContext
+        from src.diffusion.diffusion_context import DiffusionInferenceContext
 
         model_enum = ModelTypes[model_name.upper()]
         if model_enum == ModelTypes.GAN:
             return GanInferenceContext(config)
-        elif model_name == "Diffusion":
-            raise NotImplementedError("Diffusion модель пока не реализована.")
+        elif model_enum == ModelTypes.DIFFUSION:
+            return DiffusionInferenceContext(config)
         else:
             raise ValueError("Неизвестный тип модели")
         
     def _load_params(self):
         params = self.config.get_global_section("dataset")
-        self.image_size = params.get("outpainting_size", 256)
+        self.image_size = params.get("image_size", 256)
         self.outpainting_ratio = params.get("outpainting_size", 0.2)
         
     def _prepare_input_image(self, image: torch.Tensor) -> torch.Tensor:
