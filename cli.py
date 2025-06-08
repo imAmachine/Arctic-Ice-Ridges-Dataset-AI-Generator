@@ -1,5 +1,4 @@
 import argparse
-from generativelib.config_tools.default_values import PATH_KEY, WEIGHT_KEY
 from generativelib.model.arch.enums import ModelTypes
 from src.config_deserializer import TrainConfigDeserializer, InferenceConfigDeserializer
 from generativelib.dataset.mask_processors import *

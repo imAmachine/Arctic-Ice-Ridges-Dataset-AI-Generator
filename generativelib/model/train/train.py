@@ -7,6 +7,8 @@ import torch
 from tqdm import tqdm
 
 from generativelib.model.arch.base import ArchModule
+from generativelib.model.common.checkpoint import CheckpointManager
+from generativelib.model.common.interfaces import ITorchState
 from generativelib.model.common.visualizer import Visualizer
 from generativelib.model.enums import ExecPhase
 from torch.utils.data import DataLoader
@@ -45,9 +47,9 @@ class CheckpointHook:
         self.interval = interval
         self.output_path = output_path
         
-    def __call__(self, epoch_id: int, optim_template: OptimizationTemplate):
+    def __call__(self, epoch_id: int, obj: ITorchState):
         if (epoch_id + 1) % self.interval == 0:
-            optim_template.save_state(self.output_path)
+            CheckpointManager.save_state(obj, self.output_path)
 
 
 class TrainManager:
@@ -60,7 +62,7 @@ class TrainManager:
         dataloaders: Dict[ExecPhase, DataLoader],
     ):
         self.visualizer = visualizer
-        self.checkpoint_man = checkpointer
+        self.checkpoint = checkpointer
         
         self.dataloaders = dataloaders
         self.optim_template = optim_template
@@ -72,7 +74,7 @@ class TrainManager:
         self.optim_template.to(device) # установка device для модулей
         
         if is_load_weights:
-            self.optim_template.load_state(device, self.train_configurator.weights)
+            CheckpointManager.load_state(self.optim_template.model_optimizers, self.train_configurator.weights)
             
         
         for epoch_id in range(epochs):
@@ -87,4 +89,5 @@ class TrainManager:
                 self.visualizer(device, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
-            self.checkpoint_man(epoch_id, self.optim_template) # вызывает сохранение чекпоинта
+            self.checkpoint(epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта
+                

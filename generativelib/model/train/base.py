@@ -8,13 +8,15 @@ from collections import defaultdict
 
 from generativelib.model.arch.base import ArchModule
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
+from generativelib.model.common.interfaces import ITorchState
+from generativelib.model.enums import ExecPhase
 from generativelib.model.enums import ExecPhase
 
 from generativelib.model.evaluators.base import EvalItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType
 
 
-class ModuleOptimizer:
+class ModuleOptimizer(ITorchState):
     """Обёртка над ArchModule для обучения. Подсчёт и хранение лоссов и метрик, расчёт градиентов"""
     def __init__(self, arch_module: ArchModule, evals: List[EvalItem], optimizer: torch.optim.Optimizer):
         self.module = arch_module
@@ -37,9 +39,9 @@ class ModuleOptimizer:
         }
         return state
 
-    def load_state(self, optim_state_dict: Dict) -> Self:
-        self.module.load_state_dict(optim_state_dict["module_state"])
-        self.optimizer.load_state_dict(optim_state_dict["optim_state"])
+    def from_state_dict(self, state_dict: Dict) -> Self:
+        self.module.from_state_dict(state_dict["module_state"])
+        self.optimizer.load_state_dict(state_dict["optim_state"])
         return self
     
     @classmethod
@@ -110,7 +112,7 @@ class ModuleOptimizer:
         return self
 
 
-class ModuleOptimizersCollection(list[ModuleOptimizer]):
+class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
     """Обёртка для управления коллекцией ModuleOptimizer"""
     def to(self, *args, **kwargs) -> Self:
         for optim in self:
@@ -120,10 +122,9 @@ class ModuleOptimizersCollection(list[ModuleOptimizer]):
     def to_state_dict(self) -> Dict:
         return {optim.module.model_type.name.lower(): optim.to_state_dict() for optim in self}
     
-    def from_state_dict(self, state: Dict) -> Self:
+    def from_state_dict(self, state_dict: Dict) -> Self:
         for optim in self:
-            optim.load_state(state[optim.module.model_type.name.lower()])
-        
+            optim.from_state_dict(state_dict[optim.module.model_type.name.lower()])
         return self
     
     def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
@@ -145,9 +146,9 @@ class ModuleOptimizersCollection(list[ModuleOptimizer]):
 
 
 class OptimizationTemplate(ABC):
-    def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
+    def __init__(self, model_params: Dict, module_optimizers: ModuleOptimizersCollection):
         super().__init__()
-        self.arch_optimizers = arch_optimizers
+        self.model_optimizers = module_optimizers
         self.model_params = model_params
     
     @abstractmethod
@@ -158,24 +159,12 @@ class OptimizationTemplate(ABC):
     def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         pass
     
-    def save_state(self, file_path: str) -> None:
-        state = self.arch_optimizers.to_state_dict()
-        torch.save(state, file_path)
-        print(f'Веса сохранены в {file_path}')
-
-    def load_state(self, device: torch.device, file_path: str) -> None:
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Файл чекпоинта коллекции не найден: {file_path}")
-        state = torch.load(file_path, map_location=device, weights_only=False)
-        self.arch_optimizers.from_state_dict(state)
-        print(f'Веса загружены успешно из {file_path}')
-    
     def mode_to(self, phase: ExecPhase) -> Self:
-        self.arch_optimizers.mode_to(phase)
+        self.model_optimizers.mode_to(phase)
         return self
     
     def to(self, device: torch.device) -> Self:
-        self.arch_optimizers.to(device)
+        self.model_optimizers.to(device)
         return self
     
     def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor) -> None:
@@ -211,7 +200,7 @@ class OptimizationTemplate(ABC):
         # Получаем имя фазы для вывода и сравнения
         phase_name = phase.name.capitalize()
 
-        for optimizer in self.arch_optimizers:
+        for optimizer in self.model_optimizers:
             opt_name = optimizer.module.model_type.name
             summary = optimizer.evals_collector.compute_epoch_summary()
             rows = self._print_phase_summary(phase_name, summary)
