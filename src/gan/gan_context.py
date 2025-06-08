@@ -3,7 +3,7 @@ from PIL import Image
 import torch
 
 from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY
-from generativelib.model.arch.common_transforms import get_common_transforms, get_infer_transforms
+from generativelib.model.arch.common_transforms import get_common_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
@@ -22,12 +22,7 @@ from src.gan.gan_templates import GAN_OptimizationTemplate
 
 class GanInferenceContext(InferenceContext):
     def __init__(self, config: InferenceConfigDeserializer):
-        super().__init__()
-        self.config = config
-
-        self.generator = None
-        self.image_size = None
-        self.outpainting_ratio = None
+        super().__init__(config)
 
         self._load_params()
         self._load_model()
@@ -37,8 +32,7 @@ class GanInferenceContext(InferenceContext):
             model_type=ModelTypes.GAN,
             module_name="gan_generator"
         )
-        self.generator = ModuleInference(GenerativeModules.GAN_GENERATOR, arch_module.module)
-        self.generator.to(self.device)
+        self.generator = ModuleInference(GenerativeModules.GAN_GENERATOR, arch_module.module).to(self.device)
 
     def load_weights(self, path: str):
         self.generator.load_weights(path)

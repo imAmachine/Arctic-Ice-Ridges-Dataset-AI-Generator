@@ -14,9 +14,10 @@ class ModuleInference(ArchModule):
         
     def load_weights(self, weights_path: str):
             state = torch.load(weights_path, map_location=self.device, weights_only=False)
-            state = state["gan_generator"]["module_state"]
-            self.load_state(state)
+            model_key = self.model_type.name.lower()
+            state = state[model_key]["module_state"]
+            self.load_state_dict(state)
     
-    def generate(self, inp: torch.Tensor) -> None:
+    def generate(self, *args, **kwargs) -> None:
         with torch.no_grad():
-            return self.module(inp)
+            return self.module(*args, **kwargs)
