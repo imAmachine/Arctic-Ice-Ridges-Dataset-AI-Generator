@@ -14,7 +14,7 @@ from generativelib.model.train.base import OptimizationTemplate, ModuleOptimizer
 from generativelib.model.common.visualizer import Visualizer
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
-from generativelib.model.train.train import CheckpointHook, TrainConfigurator, TrainManager, DiffusionVisualizeHook
+from generativelib.model.train.train import CheckpointHook, TrainConfigurator, TrainManager, VisualizeHook
 from generativelib.preprocessing.processors import *
 from generativelib.model.evaluators.losses import *
 from generativelib.model.inference.base import ModuleInference
@@ -97,7 +97,11 @@ class DiffusionTrainContext(TrainContext):
                       train_configurator: TrainConfigurator, 
                       dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
         visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())
-        visualizer = DiffusionVisualizeHook(train_template, visualizer_path, train_configurator.checkpoint_ratio)
+        visualizer = VisualizeHook(
+            callable_fn=train_template._generate_from_noise, 
+            output_path=visualizer_path, 
+            interval=train_configurator.checkpoint_ratio
+        )
         checkpointer = CheckpointHook(train_configurator.checkpoint_ratio, train_configurator.weights)
         
         return TrainManager(
