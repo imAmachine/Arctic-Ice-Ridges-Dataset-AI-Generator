@@ -1,13 +1,11 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from typing import Callable, Dict
+
 import os
 from typing import Callable, Dict
 
-<<<<<<< HEAD
 from matplotlib import pyplot as plt
-=======
-import os
->>>>>>> 433eae1 (add load_weights)
 import torch
 from tqdm import tqdm
 
@@ -67,21 +65,7 @@ class VisualizeHook:
         if (epoch_id + 1) % self.interval == 0:
             with torch.no_grad():
                 inp, trg = next(iter(loader))
-                gen = self.gen(inp.to(device))
-                self.__save(folder_path, inp, trg, gen, phase)
-
-
-class DiffusionVisualizeHook:
-    def __init__(self, diffusion_template: Diffusion_OptimizationTemplate, output_path: str, interval: int):
-        self.interval = interval
-        self.template = diffusion_template
-        self.visualizer = Visualizer(output_path)
-        
-    def __call__(self, device, epoch_id, phase, loader):
-        if (epoch_id + 1) % self.interval == 0:
-            with torch.no_grad():
-                inp, trg = next(iter(loader))
-                generated = self.template._generate_from_noise(inp.to(device))
+                generated = self.callable_fn(inp.to(device))
                 self.visualizer.save(inp, trg, generated, phase)
 
 
@@ -140,9 +124,4 @@ class TrainManager:
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
-<<<<<<< HEAD
             checkpoint(checkpoint_folder, epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта
-                
-=======
-            self.checkpoint_man(epoch_id, self.optim_template) # вызывает сохранение чекпоинта
->>>>>>> 433eae1 (add load_weights)
