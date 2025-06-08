@@ -14,7 +14,7 @@ from generativelib.model.common.interfaces import ITorchState
 from generativelib.model.enums import ExecPhase
 from torch.utils.data import DataLoader
 
-from src.diffusion.diffusion_templates import Diffusion_OptimizationTemplate
+from src.diffusion.diffusion_templates import DiffusionTemplate
 from generativelib.model.train.base import OptimizationTemplate
 
 # Enable cuDNN autotuner for potential performance boost

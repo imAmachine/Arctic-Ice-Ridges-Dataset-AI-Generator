@@ -39,11 +39,11 @@ def main():
         
         if model_type is ModelTypes.GAN:
             train_context = GanTrainContext(t_conf_deserializer)
-        elif model_type is ModelTypes.DIFFUSION:
+        
+        if model_type is ModelTypes.DIFFUSION:
             train_context = DiffusionTrainContext(t_conf_deserializer)
         
         train_manager = train_context.init_train(device)
-        
         train_manager.run(is_load_weights=args.load_weights)
 
 if __name__ == '__main__':

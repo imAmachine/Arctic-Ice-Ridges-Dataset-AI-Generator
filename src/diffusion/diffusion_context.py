@@ -21,7 +21,7 @@ from generativelib.model.inference.base import ModuleInference
 
 from src.config_deserializer import TrainConfigDeserializer, InferenceConfigDeserializer
 from src.create_context import TrainContext, InferenceContext
-from src.diffusion.diffusion_templates import Diffusion_OptimizationTemplate
+from src.diffusion.diffusion_templates import DiffusionTemplate
 
 
 class DiffusionInferenceContext(InferenceContext):
@@ -76,7 +76,7 @@ class DiffusionTrainContext(TrainContext):
         arch_collection = self.config_serializer.optimize_collection(ModelTypes.DIFFUSION)
         self._model_specific_evals(arch_collection)
 
-        train_template = Diffusion_OptimizationTemplate(model_params, arch_collection)
+        train_template = DiffusionTemplate(model_params, arch_collection)
 
         return train_template
     
@@ -93,15 +93,17 @@ class DiffusionTrainContext(TrainContext):
             )]
         })
     
-    def _train_manager(self, train_template: Diffusion_OptimizationTemplate, 
+    def _train_manager(self, train_template: DiffusionTemplate, 
                       train_configurator: TrainConfigurator, 
                       dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
         visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())
+        
         visualizer = VisualizeHook(
             callable_fn=train_template._generate_from_noise, 
             output_path=visualizer_path, 
             interval=train_configurator.checkpoint_ratio
         )
+        
         checkpointer = CheckpointHook(train_configurator.checkpoint_ratio, train_configurator.weights)
         
         return TrainManager(
