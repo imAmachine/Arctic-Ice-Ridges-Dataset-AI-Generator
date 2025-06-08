@@ -39,6 +39,8 @@ def main():
         
         if model_type is ModelTypes.GAN:
             train_context = GanTrainContext(t_conf_deserializer)
+        elif model_type is ModelTypes.DIFFUSION:
+            train_context = DiffusionTrainContext(t_conf_deserializer)
         
         train_manager = train_context.init_train(device)
         

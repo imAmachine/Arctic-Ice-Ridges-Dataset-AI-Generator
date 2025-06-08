@@ -36,5 +36,5 @@ class ArchModule(torch.nn.Module, ITorchState):
         self.module.load_state_dict(state_dict["module"])
         return self
     
-    def forward(self, x):
-        return self.module(x)
+    def forward(self, *args, **kwargs):
+        return self.module(*args, **kwargs)

@@ -16,6 +16,7 @@ from generativelib.model.common.interfaces import ITorchState
 from generativelib.model.enums import ExecPhase
 from torch.utils.data import DataLoader
 
+from src.diffusion.diffusion_templates import Diffusion_OptimizationTemplate
 from generativelib.model.train.base import OptimizationTemplate
 
 # Enable cuDNN autotuner for potential performance boost
@@ -68,6 +69,20 @@ class VisualizeHook:
                 inp, trg = next(iter(loader))
                 gen = self.gen(inp.to(device))
                 self.__save(folder_path, inp, trg, gen, phase)
+
+
+class DiffusionVisualizeHook:
+    def __init__(self, diffusion_template: Diffusion_OptimizationTemplate, output_path: str, interval: int):
+        self.interval = interval
+        self.template = diffusion_template
+        self.visualizer = Visualizer(output_path)
+        
+    def __call__(self, device, epoch_id, phase, loader):
+        if (epoch_id + 1) % self.interval == 0:
+            with torch.no_grad():
+                inp, trg = next(iter(loader))
+                generated = self.template._generate_from_noise(inp.to(device))
+                self.visualizer.save(inp, trg, generated, phase)
 
 
 class CheckpointHook:

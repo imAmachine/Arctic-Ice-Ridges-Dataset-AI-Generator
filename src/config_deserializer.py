@@ -7,9 +7,10 @@ from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.train.base import ArchModule, ModuleOptimizer, ModuleOptimizersCollection
 
+# [AI] class
 class InferenceConfigDeserializer(ConfigReader):
     def __init__(self, config_folder_path: str):
-        super().__init__(config_folder_path, ExecPhase.INFER)
+        super().__init__(config_folder_path, ExecPhase.TRAIN) # должно быть ExecPhase.INFER
         self._models: Dict = self.config[MODELS_KEY]
 
     def get_module_arch_info(self, model_type: GenerativeModules, module_name: str) -> Dict:
