@@ -7,7 +7,7 @@ class Processor(ABC):
 
     dependencies: List[Type["Processor"]] = []
 
-    def __init__(self, name: str = None):
+    def __init__(self, name: str = ''):
         self.name = name or self.__class__.__name__
 
     @abstractmethod

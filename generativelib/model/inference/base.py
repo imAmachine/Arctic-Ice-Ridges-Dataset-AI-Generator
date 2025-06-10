@@ -11,7 +11,7 @@ from generativelib.model.train.base import ArchModule
 class ModuleInference(ArchModule):
     def __init__(self, model_type, module, inference_params: Dict):
         super().__init__(model_type, module)
-        CheckpointManager.load_state(self, inference_params.get("weights_path"))
+        CheckpointManager.load_state(self, inference_params.get("weights_path", ''))
     
     def generate(self, inp: torch.Tensor) -> None:
         with torch.no_grad():

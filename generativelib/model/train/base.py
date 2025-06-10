@@ -130,7 +130,7 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
             if arch_optimizer.module.model_type == model_type:
                 return arch_optimizer
     
-    def add_evals(self, evals: Dict[ModelTypes, List[EvalItem]]) -> Self:
+    def add_evals(self, evals: Dict[GenerativeModules, List[EvalItem]]) -> Self:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
             cur_optimizer.evals.extend(evals_list)

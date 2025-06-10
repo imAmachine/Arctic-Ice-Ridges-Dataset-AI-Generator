@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Any, Dict, List, Union
 from generativelib.config_tools.base import ConfigReader
 from generativelib.config_tools.default_values import ARCH_PARAMS_KEY, EVALS_KEY, MASK_PROCESSORS_KEY, MODEL_PARAMS_KEY, MODELS_KEY, MODULES_KEY, OPTIMIZER_KEY
 from generativelib.dataset.base import BaseMaskProcessor
@@ -11,50 +11,59 @@ from generativelib.model.train.base import ArchModule, ModuleOptimizer, ModuleOp
 class TrainConfigDeserializer(ConfigReader):
     def __init__(self, config_folder_path: str, phase: ExecPhase):
         super().__init__(config_folder_path, phase)
-        self._mask_processors: Dict = self.config[MASK_PROCESSORS_KEY]
-        self._models: Dict = self.config[MODELS_KEY]
-    
+        self._mask_processors: Dict[str, Any] = self.config.get(MASK_PROCESSORS_KEY, {})
+        self._models: Dict[str, Any] = self.config.get(MODELS_KEY, {})
+
     def all_dataset_masks(self) -> List[BaseMaskProcessor]:
         processors: List[BaseMaskProcessor] = []
-        
+
         for name, values in self._mask_processors.items():
             proc = BaseMaskProcessor.from_dict(name, values)
-            if proc: processors.append(proc)
-        
+            if proc:
+                processors.append(proc)
+
         return processors
-    
-    def all_eval_items(self, eval_info: Dict) -> List[EvalItem]:
+
+    def all_eval_items(self, eval_info: Dict[str, Any]) -> List[EvalItem]:
         evals: List[EvalItem] = []
-        
+
         for eval_name, eval_params in eval_info.items():
             eval_it = EvalItem.from_dict(eval_name, eval_params)
-            
-            if eval_it: evals.append(eval_it)
-            
+            if eval_it:
+                evals.append(eval_it)
+
         return evals
-    
-    def module_optimizer(self, module_name: str, arch_info: Dict, evals_info: Dict, optim_info: Dict) -> ModuleOptimizer:
+
+    def module_optimizer(
+        self,
+        module_name: str,
+        arch_info: Dict[str, Any],
+        evals_info: Dict[str, Any],
+        optim_info: Dict[str, Any]
+    ) -> ModuleOptimizer:
         arch_module = ArchModule.cls_from_dict(module_name, arch_info)
         evals = self.all_eval_items(evals_info)
-        module_optimizer = ModuleOptimizer.create(arch_module, evals, optim_info)
-        
-        return module_optimizer
-    
+        return ModuleOptimizer.create(arch_module, evals, optim_info)
+
     def optimize_collection(self, model_type: ModelTypes) -> ModuleOptimizersCollection:
         arch_collect = ModuleOptimizersCollection()
-        
-        modules = self._models.get(model_type.name.lower()).get(MODULES_KEY)
-        
+
+        model_key = model_type.name.lower()
+        model_entry = self._models.get(model_key, {})
+        modules = model_entry.get(MODULES_KEY, {})
+
         for module_name, module_info in modules.items():
             arch_info = module_info.get(ARCH_PARAMS_KEY, {})
             evals_info = module_info.get(EVALS_KEY, {})
             optim_info = module_info.get(OPTIMIZER_KEY, {})
-            
+
             module_optimizer = self.module_optimizer(module_name, arch_info, evals_info, optim_info)
             arch_collect.append(module_optimizer)
-        
+
         return arch_collect
-    
-    def model_params(self, model_type: GenerativeModules):
-        model_dict: Dict = self._models.get(model_type.name.lower())
-        return model_dict.get(MODEL_PARAMS_KEY)
+
+    def model_params(self, model_type: Union[ModelTypes, GenerativeModules]) -> Dict[str, Any]:
+        """Возвращает параметры модели (глобальные параметры инициализации, не оптимизаторы)."""
+        model_key = model_type.name.lower()
+        model_entry = self._models.get(model_key, {})
+        return model_entry.get(MODEL_PARAMS_KEY, {})

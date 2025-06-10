@@ -1,14 +1,14 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Callable, Dict
+import os
+from typing import Callable, Dict, Optional
 
+from matplotlib import pyplot as plt
 import torch
 from tqdm import tqdm
 
-from generativelib.model.arch.base import ArchModule
 from generativelib.model.common.checkpoint import CheckpointManager
 from generativelib.model.common.interfaces import ITorchState
-from generativelib.model.common.visualizer import Visualizer
 from generativelib.model.enums import ExecPhase
 from torch.utils.data import DataLoader
 
@@ -18,61 +18,95 @@ from generativelib.model.train.base import OptimizationTemplate
 torch.backends.cudnn.benchmark = True
 
 @dataclass
-class TrainConfigurator:
+class TrainData:
     device: torch.device
-    epochs: int=1000
-    checkpoint_ratio: int=25
-    vizualizations: str=''
-    weights: str=''
+    epochs: int
+    model_out_folder: str
+    visualize_hook: VisualizeHook
+    checkpoint_hook: CheckpointHook
 
 
 class VisualizeHook:
-    def __init__(self, generate_fn: Callable, output_path: str, interval: int):
+    def __init__(self, generate_fn: Callable, interval: int):
         self.interval = interval
         self.gen = generate_fn
-        self.visualizer = Visualizer(output_path)
+    
+    def __save(
+        self,
+        folder_path: str,
+        inp: torch.Tensor, 
+        trg: torch.Tensor, 
+        gen: torch.Tensor, 
+        phase: ExecPhase, 
+        samples: int = 3
+    ) -> None:
+        cols = min(samples, inp.size(0), 5)
+        plt.figure(figsize=(12, 12), dpi=300)
         
-    def __call__(self, device, epoch_id, phase, loader):
+        for row_idx, batch in enumerate((inp, gen, trg)):
+            for col_idx in range(cols):
+                img = batch[col_idx].cpu().squeeze().numpy()
+                ax = plt.subplot(3, cols, row_idx * cols + col_idx + 1)
+                ax.imshow(img, cmap='gray', vmin=0, vmax=1)
+                ax.set_title(f"{['Input', 'Gen', 'Target'][row_idx]} {col_idx+1}")
+                ax.axis('off')
+        plt.suptitle(f"Phase: {phase.name}", y=1.02)
+        plt.tight_layout(pad=3)
+
+        os.makedirs(folder_path, exist_ok=True)
+        path = os.path.join(folder_path, f"{phase.name}.png")
+        
+        plt.savefig(path)
+        plt.close()
+    
+    def __call__(self, device, folder_path: str, epoch_id, phase, loader):      
         if (epoch_id + 1) % self.interval == 0:
             with torch.no_grad():
                 inp, trg = next(iter(loader))
-                generated = self.gen(inp.to(device))
-                self.visualizer.save(inp, trg, generated, phase)
+                gen = self.gen(inp.to(device))
+                self.__save(folder_path, inp, trg, gen, phase)
 
 
 class CheckpointHook:
-    def __init__(self, interval: int, output_path: str):
+    def __init__(self, interval: int):
         self.interval = interval
-        self.output_path = output_path
         
-    def __call__(self, epoch_id: int, obj: ITorchState):
+    def __call__(self, folder_path: str, epoch_id: int, obj: ITorchState):
+        os.makedirs(folder_path, exist_ok=True)
+        file_path = os.path.join(folder_path, 'checkpoint.pt')
+        
         if (epoch_id + 1) % self.interval == 0:
-            CheckpointManager.save_state(obj, self.output_path)
+            CheckpointManager.save_state(obj, file_path)
 
 
 class TrainManager:
     def __init__(
         self,
         optim_template: OptimizationTemplate,
-        train_configurator: TrainConfigurator,
-        visualizer: VisualizeHook,
-        checkpointer: CheckpointHook,
+        train_data: TrainData,
         dataloaders: Dict[ExecPhase, DataLoader],
-    ):
-        self.visualizer = visualizer
-        self.checkpoint = checkpointer
-        
+    ):        
         self.dataloaders = dataloaders
         self.optim_template = optim_template
-        self.train_configurator = train_configurator
+        self.train_data = train_data
     
     def run(self, is_load_weights=False) -> None:
-        device = self.train_configurator.device
-        epochs = self.train_configurator.epochs
+        device = self.train_data.device
+        epochs = self.train_data.epochs
+        
+        # пути
+        model_folder_path = self.train_data.model_out_folder
+        checkpoint_folder = os.path.join(model_folder_path, 'checkpoints')
+        visualizations_folder = os.path.join(model_folder_path, 'visualizations')
+        
+        # хуки
+        checkpoint = self.train_data.checkpoint_hook
+        visualize = self.train_data.visualize_hook
+        
         self.optim_template.to(device) # установка device для модулей
         
         if is_load_weights:
-            CheckpointManager.load_state(self.optim_template.model_optimizers, self.train_configurator.weights)
+            CheckpointManager.load_state(self.optim_template.model_optimizers, checkpoint_folder)
             
         
         for epoch_id in range(epochs):
@@ -84,8 +118,8 @@ class TrainManager:
                     inp, trg = inp.to(device), target.to(device)
                     self.optim_template.step(phase, inp, trg) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
                 
-                self.visualizer(device, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
+                visualize(device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
-            self.checkpoint(epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта
+            checkpoint(checkpoint_folder, epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта
                 

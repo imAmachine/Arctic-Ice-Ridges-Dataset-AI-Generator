@@ -9,13 +9,18 @@ from generativelib.model.enums import ExecPhase
 
 class ConfigReader:
     def __init__(self, config_folder: str, phase: ExecPhase):
-        self.config = defaultdict()
         self.phase = phase
+        
+        os.makedirs(config_folder, exist_ok=True)
+        
         self.conf_path = os.path.join(config_folder, f'{self.phase.name}_config.json')
+        
+        self.config: Dict[str, Any] = {}
         self.__init_config()
         
-        self.global_params: Dict = self.config.get('global_params', {})
-        if len(self.global_params) == 0:
+        self.global_params: Dict[str, Any] = self.config.get('global_params', {})
+        
+        if not self.global_params:
             print(f'global params отсутствует в {self.conf_path}')
     
     def __create_config(self) -> None:
@@ -23,31 +28,23 @@ class ConfigReader:
         default_config = get_default_conf(self.phase)
         Utils.to_json(default_config, self.conf_path)
         
-    def __init_config(self):
+    def __init_config(self) -> None:
         if not os.path.exists(self.conf_path):
             self.__create_config()
-        
+
         self.config = Utils.from_json(self.conf_path)
 
     def get_global_section(self, section: str) -> Dict[str, Any]:
-        if not self.global_params:
-            return {}
-            
-        cur_section: Dict = self.global_params.get(section)
-        if cur_section is None:
-            return {}
-        
-        return cur_section
+        return self.global_params.get(section, {})
     
-    def params_by_section(self, section: str, keys: Union[str, List[str]]) -> Union[Dict[str, Any] | Any]:
-        if len(self.global_params) == 0:
-            return {}
-
-        cur_section: Dict = self.global_params.get(section)
-        if cur_section is None:
-            return {}
+    def params_by_section(self, section: str, keys: Union[str, List[str]]) -> Union[Any, Dict[str, Any]]:
+        cur_section: Dict[str, Any] = self.global_params.get(section, {})
 
         if isinstance(keys, str):
-            return cur_section[keys]
-        
-        return {key: cur_section[key] for key in keys if key in cur_section}
+            return cur_section.get(keys)
+
+        return {
+            key: cur_section.get(key)
+            for key in keys 
+            if key in cur_section
+        }

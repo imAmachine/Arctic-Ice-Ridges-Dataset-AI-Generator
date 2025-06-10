@@ -1,12 +1,9 @@
 from generativelib.model.evaluators.base import LOSSES
 
 # enums
-from generativelib.model.evaluators.enums import MetricName
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
 
-from generativelib.model.train.base import ArchModule
-from generativelib.model.common.visualizer import Visualizer
 from generativelib.preprocessing.processors import *
 from generativelib.dataset.mask_processors import *
 
@@ -15,8 +12,6 @@ from generativelib.dataset.mask_processors import *
 MASK_PROCESSORS_KEY = "mask_processors"
 MODELS_KEY = "models"
 GLOBAL_PARAMS_KEY = "global_params"
-ENABLED_KEY = "enabled"
-PARAMS_KEY = "params"
 OPTIMIZER_KEY = "optimizer"
 MODEL_PARAMS_KEY = "model_params"
 MODULES_KEY = "modules"
@@ -24,7 +19,6 @@ DATASET_KEY = "dataset"
 ARCH_PARAMS_KEY = "arch"
 EVALS_KEY = "evals"
 EXEC_PHASE_KEY = "exec_phase"
-WEIGHT_KEY = "weight"
 PATH_KEY = "path"
 EXECUTION_KEY = "execution"
 INIT_KEY = "init"
@@ -34,7 +28,8 @@ def get_default_train_conf():
     global_params = {
         ExecPhase.TRAIN.name.lower(): {
             "epochs": 1000,
-            "checkpoint_ratio": 25,
+            "visualize_interval": 5,
+            "checkpoint_interval": 25,
         },
         DATASET_KEY: {
             "img_size": 256,
@@ -48,33 +43,31 @@ def get_default_train_conf():
         PATH_KEY: {
             "masks": "./data/masks",
             "dataset": "./data/preprocessed",
-            "processed": "./data/processed",
-            Visualizer.__class__.__name__.lower(): "./data/processed/vizualizations",
-            WEIGHT_KEY: "./data/processed/checkpoint.pt"
+            "processed": "./data/processed/"
         }
     }
     mask_processors = {
         "Padding": {
-            ENABLED_KEY: False,
-            PARAMS_KEY: {
+            "enabled": False,
+            "params": {
                 "ratio": 0.15,
             }
         },
         "EllipsoidPadding": {
-            ENABLED_KEY: False,
-            PARAMS_KEY: {
+            "enabled": False,
+            "params": {
                 "ratio": 0.15,
             }
         },
         "RandomWindow": {
-            ENABLED_KEY: True,
-            PARAMS_KEY: {
+            "enabled": True,
+            "params": {
                 "window_size": 200,
             }
         },
         "RandomHoles": {
-            ENABLED_KEY: False,
-            PARAMS_KEY: {
+            "enabled": False,
+            "params": {
                 "count": 2,
                 "min_sz": 40,
                 "max_sz": 50,
@@ -93,7 +86,7 @@ def get_default_train_conf():
     losses = {
         loss_name: {
             EXECUTION_KEY: {
-                WEIGHT_KEY: 0.0,
+                "weight": 0.0,
                 EXEC_PHASE_KEY: ExecPhase.TRAIN.name
             },
             INIT_KEY: {}
