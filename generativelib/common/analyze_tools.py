@@ -27,7 +27,7 @@ class FractalAnalyzer:
         log_sizes = np.log(np.array(sizes))
         log_counts = np.log(np.array(counts) + epsilon)
         slope, intercept, r_value, p_value, std_err = linregress(log_sizes, log_counts)
-        return np.abs(slope)
+        return np.abs(slope) # type: ignore
 
 
 class FractalAnalyzerGPU:

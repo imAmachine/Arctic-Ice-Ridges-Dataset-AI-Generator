@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Type
+from typing import Any, List, Type
 
 
 class Processor(ABC):
@@ -11,7 +11,7 @@ class Processor(ABC):
         self.name = name or self.__class__.__name__
 
     @abstractmethod
-    def process(self, image: Any, metadata: Dict[str, Any]) -> Any:
+    def process(self, image: Any) -> Any:
         pass
 
     def metadata_status_value(self) -> str:

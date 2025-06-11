@@ -63,8 +63,8 @@ class RotateMask(Processor):
             image, M, (w, h),
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_CONSTANT,
-            borderValue=0
-        )
+            borderValue=(0,)
+        ) # type: ignore
 
     def metadata_status_value(self) -> str:
         return str(round(self._angle, 2))
