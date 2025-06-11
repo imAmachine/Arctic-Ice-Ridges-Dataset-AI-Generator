@@ -60,6 +60,9 @@ class TrainConfigDeserializer(ConfigReader):
             module_optimizer = self.module_optimizer(module_name, arch_info, evals_info, optim_info)
             arch_collect.append(module_optimizer)
 
+        if len(arch_collect) == 0:
+            raise ValueError('Коллекция оптимизаторов пуста')
+        
         return arch_collect
 
     def model_params(self, model_type: Union[ModelTypes, GenerativeModules]) -> Dict[str, Any]:

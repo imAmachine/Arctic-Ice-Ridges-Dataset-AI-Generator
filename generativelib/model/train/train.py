@@ -1,7 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import os
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict
 
 from matplotlib import pyplot as plt
 import torch
@@ -19,7 +19,6 @@ torch.backends.cudnn.benchmark = True
 
 @dataclass
 class TrainData:
-    device: torch.device
     epochs: int
     model_out_folder: str
     visualize_hook: VisualizeHook
@@ -82,16 +81,17 @@ class CheckpointHook:
 class TrainManager:
     def __init__(
         self,
+        device: torch.device,
         optim_template: OptimizationTemplate,
         train_data: TrainData,
         dataloaders: Dict[ExecPhase, DataLoader],
-    ):        
+    ):
+        self.device = device
         self.dataloaders = dataloaders
         self.optim_template = optim_template
         self.train_data = train_data
     
     def run(self, is_load_weights=False) -> None:
-        device = self.train_data.device
         epochs = self.train_data.epochs
         
         # пути
@@ -103,7 +103,7 @@ class TrainManager:
         checkpoint = self.train_data.checkpoint_hook
         visualize = self.train_data.visualize_hook
         
-        self.optim_template.to(device) # установка device для модулей
+        self.optim_template.to(self.device) # установка device для модулей
         
         if is_load_weights:
             CheckpointManager.load_state(self.optim_template.model_optimizers, checkpoint_folder)
@@ -115,10 +115,10 @@ class TrainManager:
                 
                 self.optim_template.mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
                 for inp, target in tqdm(loader):
-                    inp, trg = inp.to(device), target.to(device)
+                    inp, trg = inp.to(self.device), target.to(self.device)
                     self.optim_template.step(phase, inp, trg) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
                 
-                visualize(device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
+                visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
             checkpoint(checkpoint_folder, epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта

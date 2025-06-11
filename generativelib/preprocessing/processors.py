@@ -45,6 +45,9 @@ class RotateMask(Processor):
         self._angle = 0.0
 
     def process(self, image: np.ndarray) -> np.ndarray:
+        if image.dtype == bool:
+            image = image.astype(np.uint8)
+
         ys, xs = np.where(image > 0)
         if len(xs) < 2:
             self._angle = 0.0
@@ -58,20 +61,21 @@ class RotateMask(Processor):
         self._angle = angle
 
         h, w = image.shape
-        M = cv2.getRotationMatrix2D((cx, cy), angle, 1.0)
-        return cv2.warpAffine(
-            image, M, (w, h),
+        rotation_mat = cv2.getRotationMatrix2D((float(cx), float(cy)), float(angle), 1.0)
+        rotation_mat = np.array(rotation_mat, dtype=np.float32)
+
+        return cv2.warpAffine(# type: ignore
+            image,
+            rotation_mat,
+            (int(w), int(h)),
             flags=cv2.INTER_LINEAR,
             borderMode=cv2.BORDER_CONSTANT,
             borderValue=(0,)
-        ) # type: ignore
-
-    def metadata_status_value(self) -> str:
-        return str(round(self._angle, 2))
+        )
 
 
 class TensorConverter(Processor):
-    def __init__(self, device: str = "cpu"):
+    def __init__(self, device: torch.device):
         super().__init__()
         self.device = device
 

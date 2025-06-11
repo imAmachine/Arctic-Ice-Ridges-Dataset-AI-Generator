@@ -6,7 +6,6 @@ from generativelib.model.arch.common_transforms import get_common_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
-from generativelib.model.train.base import ModuleOptimizersCollection
 from src.config_deserializer import TrainConfigDeserializer
 from src.gan.gan_templates import GanTemplate
 from generativelib.dataset.loader import DatasetCreator
@@ -39,14 +38,13 @@ class GanTrainContext:
     def _model_template(self) -> GanTemplate:
         model_params = self.config_serializer.model_params(ModelTypes.GAN)
         arch_collection = self.config_serializer.optimize_collection(ModelTypes.GAN)
+        template = GanTemplate(model_params, arch_collection)
+        return template
 
-        self._add_model_evaluators(arch_collection)
-
-        return GanTemplate(model_params, arch_collection)
-
-    def _add_model_evaluators(self, optimizers_collection: ModuleOptimizersCollection) -> None:
+    def _add_model_evaluators(self, template: GanTemplate) -> None:
         """Добавляет лоссы для генератора и дискриминатора"""
-        discriminator = optimizers_collection.by_type(GenerativeModules.GAN_DISCRIMINATOR).module
+        discriminator = template.get_discr_optimizer().module
+        optimizers_collection = template.model_optimizers
         
         optimizers_collection.add_evals({
             GenerativeModules.GAN_GENERATOR: [
@@ -104,13 +102,16 @@ class GanTrainContext:
     
     def _train_data(
         self,
-        device: torch.device,
-        gen_func: Callable
+        template: GanTemplate
     ) -> TrainData:
         # глобальные данные обучения и путей
         glob_train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
         glob_path_params = self.config_serializer.get_global_section(PATH_KEY)
-        visualize_hook = self._visualize_hook(gen_func)
+        
+        visualize_hook = self._visualize_hook(
+            gen_callable=template.get_gen_optimizer().module
+        )
+        
         checkpoint_hook = self._checkpoint_hook()
         
         # путь для вывода
@@ -119,7 +120,6 @@ class GanTrainContext:
         final_output_path = os.path.join(processed_path, model_output_path)
         
         return TrainData(
-            device=device,
             epochs=glob_train_params.get('epochs', 1000),
             model_out_folder=final_output_path,
             visualize_hook=visualize_hook,
@@ -133,14 +133,15 @@ class GanTrainContext:
             section=DATASET_KEY, 
             keys='img_size'
         )
-        transforms = get_common_transforms(cast(int, img_size))
+        transforms = get_common_transforms(cast(int, img_size)) # определение Compose трансформаций для GAN
+        template = self._model_template() # создание шаблона обучения для GAN
+        self._add_model_evaluators(template) # добавление специальных лоссов, свойственных архитектуре GAN
         
-        template = self._model_template()
-        train_data = self._train_data(device, template.gen_optim.module)
-        
-        ds_creator = self._dataset_creator(metadata, transforms)
+        train_data = self._train_data(template) # определение данных, необходимых в TrainManager
+        ds_creator = self._dataset_creator(metadata, transforms) # создание менеджера датасета
 
         return TrainManager(
+            device=device,
             optim_template=template, 
             train_data=train_data,
             dataloaders=ds_creator.create_loaders()

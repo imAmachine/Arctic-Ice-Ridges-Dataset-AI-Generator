@@ -10,8 +10,8 @@ class Utils:
         return binary
     
     @staticmethod
-    def cv2_load_image(filename: str, cv2_read_mode: int=None):
-        if cv2_read_mode is None:
+    def cv2_load_image(filename: str, cv2_read_mode: int=-1):
+        if cv2_read_mode == -1:
             img = cv2.imread(filename)
         else:
             img = cv2.imread(filename, cv2_read_mode)

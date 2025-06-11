@@ -1,11 +1,11 @@
 import os
 import torch
-from typing import Dict, List, Self, Tuple
+from typing import Dict, List, Optional, Self, Tuple, Type
 from abc import ABC, abstractmethod
 from tabulate import tabulate
 
 from generativelib.model.arch.base import ArchModule
-from generativelib.model.arch.enums import GenerativeModules, ModelTypes
+from generativelib.model.arch.enums import GenerativeModules
 from generativelib.model.common.interfaces import ITorchState
 from generativelib.model.enums import ExecPhase
 from generativelib.model.enums import ExecPhase
@@ -45,13 +45,13 @@ class ModuleOptimizer(ITorchState):
     @classmethod
     def create(cls, arch_module: ArchModule, evals: List[EvalItem], optim_info: Dict):
         """Создает объект ModuleOptimizer на основе информации для оптимизатора из optim_info (Dict)"""
-        optim_types: Dict[str, torch.optim.Optimizer] = {
+        optim_types: Dict[str, Type[torch.optim.Optimizer]] = {
             "adam": torch.optim.Adam,
             "rms": torch.optim.RMSprop
         }
         
-        optim_cls = optim_types.get(optim_info.get('type'), torch.optim.Adam)
-        optim_params = optim_info.get('params')
+        optim_cls = optim_types.get(optim_info.get('type', ''), torch.optim.Adam)
+        optim_params = optim_info.get('params', {})
         
         optimizer = optim_cls(
             arch_module.parameters(),
@@ -60,19 +60,26 @@ class ModuleOptimizer(ITorchState):
         
         return cls(arch_module, evals, optimizer)
     
-    def _losses(self, generated_sample: torch.Tensor, real_sample: torch.Tensor, exec_phase: ExecPhase) -> Tuple[torch.Tensor, List[Tuple[str, str, float]]]:
+    def _losses(
+        self, 
+        generated_sample: torch.Tensor, 
+        real_sample: torch.Tensor, 
+        exec_phase: ExecPhase
+    ) -> Tuple[torch.Tensor, List[Tuple[EvaluatorType, str, float]]]:
         loss_tensor = torch.tensor(0.0, device=generated_sample.device, dtype=generated_sample.dtype)
-        losses_vals: List[Tuple[str, str, float]] = []
+        losses_vals: List[Tuple[EvaluatorType, str, float]] = []
 
         # подсчёт лоссов
         for item in self.evals:
             if item.exec_phase == ExecPhase.ANY or item.exec_phase == exec_phase:
                 val = item(generated_sample, real_sample)
+                val_mean = val.mean()
+                
                 loss_tensor = loss_tensor + val.mean()
                 losses_vals.append((
                     item.type, 
                     item.name, 
-                    val.detach().cpu().item()
+                    val_mean.detach().cpu().item()
                 ))
         
         # добавление общего loss
@@ -125,7 +132,7 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
             optim.from_state_dict(state_dict[optim.module.model_type.name.lower()])
         return self
     
-    def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
+    def by_type(self, model_type: GenerativeModules) -> Optional[ModuleOptimizer]:
         for arch_optimizer in self:
             if arch_optimizer.module.model_type == model_type:
                 return arch_optimizer
@@ -133,7 +140,9 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
     def add_evals(self, evals: Dict[GenerativeModules, List[EvalItem]]) -> Self:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
-            cur_optimizer.evals.extend(evals_list)
+            
+            if cur_optimizer:
+                cur_optimizer.evals.extend(evals_list)
         
         return self
     

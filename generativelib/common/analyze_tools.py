@@ -23,9 +23,13 @@ class FractalAnalyzer:
         return sizes, counts
 
     @staticmethod
-    def calculate_fractal_dimension(sizes, counts, epsilon=1e-10):
-        log_sizes = np.log(np.array(sizes))
-        log_counts = np.log(np.array(counts) + epsilon)
+    def calculate_fractal_dimension(sizes, counts, epsilon=1e-10) -> float:
+        sizes = np.asarray(sizes, dtype=np.float64)
+        counts = np.asarray(counts, dtype=np.float64)
+
+        log_sizes = np.log(sizes)
+        log_counts = np.log(counts + epsilon)
+
         slope, intercept, r_value, p_value, std_err = linregress(log_sizes, log_counts)
         return np.abs(slope) # type: ignore
 
