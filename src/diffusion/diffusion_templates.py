@@ -7,19 +7,25 @@ from typing import Dict, Tuple
 from generativelib.model.arch.enums import GenerativeModules
 
 # base
-from generativelib.model.train.base import ModuleOptimizersCollection, OptimizationTemplate
+from generativelib.model.train.base import ModuleOptimizer, ModuleOptimizersCollection, OptimizationTemplate
 
 # evaluators
 from generativelib.model.evaluators.losses import *
 
 
 class DiffusionTemplate(OptimizationTemplate):
-    def __init__(self, model_params: Dict, model_optimizers: ModuleOptimizersCollection):
-        super().__init__(model_params, model_optimizers)
+    def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
+        super().__init__(model_params, arch_optimizers)
         self.scheduler = DDPMScheduler(
             num_train_timesteps=model_params.get('num_timesteps', 1000)
         )
         self.dif_optim = self.model_optimizers.by_type(GenerativeModules.DIFFUSION)
+
+    def get_dif_optimizer(self) -> ModuleOptimizer:
+        if self.dif_optim is None:
+            raise ValueError('Оптимизатор генератора is None')
+        
+        return self.dif_optim
 
     def _add_noise(self, target: torch.Tensor, timestamp: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         noise = torch.randn_like(target)

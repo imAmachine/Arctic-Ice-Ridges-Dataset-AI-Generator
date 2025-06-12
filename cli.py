@@ -38,10 +38,10 @@ def main():
         train_manager = None
         
         if model_type is ModelTypes.GAN:
-            train_context = GanTrainContext(t_conf_deserializer)
+            train_context = GanTrainContext(t_conf_deserializer, model_type)
         
         if model_type is ModelTypes.DIFFUSION:
-            train_context = DiffusionTrainContext(t_conf_deserializer)
+            train_context = DiffusionTrainContext(t_conf_deserializer, model_type)
         
         train_manager = train_context.init_train(torch.device(device))
         train_manager.run(is_load_weights=args.load_weights)

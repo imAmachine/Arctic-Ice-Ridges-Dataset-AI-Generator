@@ -1,26 +1,30 @@
+import os
 import torch
 import torchvision.transforms as T
 import torch.nn.functional as F
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any
+from typing import Dict, Callable, Any
 from PIL import Image
 
-from generativelib.config_tools.default_values import PATH_KEY
-from src.config_deserializer import InferenceConfigDeserializer
-from generativelib.dataset.base import BaseMaskProcessor
+from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY
 from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import ModelTypes
 from generativelib.model.arch.common_transforms import get_infer_transforms
 from generativelib.model.enums import ExecPhase
+from generativelib.model.train.base import OptimizationTemplate
+from generativelib.model.train.train import CheckpointHook, TrainData, TrainManager, VisualizeHook
 from generativelib.preprocessing.processors import *
 from generativelib.preprocessing.preprocessor import DataPreprocessor
 
+from src.config_deserializer import InferenceConfigDeserializer, TrainConfigDeserializer
+
 
 class TrainContext(ABC):
-    def __init__(self, config_serializer):
+    def __init__(self, config_serializer: TrainConfigDeserializer, model_type: ModelTypes):
         super().__init__()
         self.config_serializer = config_serializer
+        self.model_type = model_type
 
     def _preprocessor_metadata(self) -> Dict[str, Any]:
         paths = self.config_serializer.params_by_section(section='path', keys=['masks', 'dataset'])
@@ -31,25 +35,94 @@ class TrainContext(ABC):
         )
         return dataset_preprocessor.get_metadata()
     
-    def _dataset_creator(self, dataset_metadata: Dict, transforms) -> DatasetCreator:
-        mask_processors: List[BaseMaskProcessor] = self.config_serializer.all_dataset_masks()
+    def _dataset_creator(self, dataset_metadata: Dict[str, Any], transforms) -> DatasetCreator:
+        mask_processors = self.config_serializer.all_dataset_masks()
         dataset_params = self.config_serializer.get_global_section("dataset")
-        
+
         return DatasetCreator(
             metadata=dataset_metadata,
             mask_processors=mask_processors,
             transforms=transforms,
             dataset_params=dataset_params
         )
-    
-    def _train_configurator(self, device: torch.device):
-        train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+
+    def _visualize_hook(
+        self,
+        gen_callable: Callable
+    ) -> VisualizeHook:
+        glob_train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+        visualize_interval = glob_train_params.get('visualize_interval', 5)
         
-        # return TrainConfigurator(
-        #     device=device, 
-        #     **train_params,
-        #     weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
-        # )
+        return VisualizeHook(
+            generate_fn=gen_callable,
+            interval=visualize_interval
+        )
+
+    def _checkpoint_hook(self) -> CheckpointHook:
+        glob_train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+        checkpoint_interval = glob_train_params.get('checkpoint_interval', 25)
+        return CheckpointHook(checkpoint_interval)
+    
+    def init_train(self, device: torch.device) -> TrainManager:
+        metadata = self._preprocessor_metadata()
+        
+        img_size = self.config_serializer.params_by_section(
+            section=DATASET_KEY, 
+            keys='img_size'
+        )
+        transforms = self._get_model_transform(img_size) # определение Compose трансформаций для модели
+        template = self._model_template() # создание шаблона обучения для модели
+        self._add_model_evaluators(template) # добавление специальных лоссов, свойственных архитектуре модели
+        
+        train_data = self._train_data(template) # определение данных, необходимых в TrainManager
+        ds_creator = self._dataset_creator(metadata, transforms) # создание менеджера датасета
+
+        return TrainManager(
+            device=device,
+            optim_template=template, 
+            train_data=train_data,
+            dataloaders=ds_creator.create_loaders()
+        )
+    
+    def _train_data(
+        self,
+        template: OptimizationTemplate
+    ) -> TrainData:
+        # глобальные данные обучения и путей
+        glob_train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+        glob_path_params = self.config_serializer.get_global_section(PATH_KEY)
+
+        visualize_hook = self._visualize_for_model(template)
+        
+        checkpoint_hook = self._checkpoint_hook()
+        
+        # путь для вывода
+        processed_path = glob_path_params.get('processed', '')
+        model_output_path = self.model_type.name.lower()
+        final_output_path = os.path.join(processed_path, model_output_path)
+        
+        return TrainData(
+            epochs=glob_train_params.get('epochs', 1000),
+            model_out_folder=final_output_path,
+            visualize_hook=visualize_hook,
+            checkpoint_hook=checkpoint_hook
+        )
+    
+    @abstractmethod
+    def _add_model_evaluators(self, template: OptimizationTemplate) -> None:
+        pass
+
+    @abstractmethod
+    def _get_model_transform(self, img_size: int) -> T.Compose:
+        pass
+
+    @abstractmethod
+    def _model_template(self) -> OptimizationTemplate:
+        pass
+
+    @abstractmethod
+    def _visualize_for_model(self, template: OptimizationTemplate) -> VisualizeHook:
+        pass
 
 
 class InferenceContext(ABC):
