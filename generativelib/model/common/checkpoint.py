@@ -23,5 +23,5 @@ class CheckpointManager:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Файл чекпоинта коллекции не найден: {file_path}")
         
-        state = torch.load(file_path)
+        state = torch.load(file_path, weights_only=False)
         obj.from_state_dict(state)

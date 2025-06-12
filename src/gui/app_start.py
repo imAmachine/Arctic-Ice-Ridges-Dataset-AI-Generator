@@ -2,7 +2,6 @@ import sys
 from typing import Dict
 
 from PyQt5 import QtWidgets
-from src.config_deserializer import TrainConfigDeserializer
 
 from src.gui.main_window import MainWindow
 
