@@ -1,6 +1,6 @@
 
 import random
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import torch
 import cv2
@@ -34,20 +34,20 @@ class IceRidgeDataset(Dataset):
     def __init__(self, 
                  metadata: Dict[str, Dict], 
                  masking_processor: DatasetMaskingProcessor, 
+                 model_transforms: torchvision.transforms.v2.Compose,
                  augmentations_per_image: int = 1,
-                 model_transforms: Optional[Callable] = None,
                  is_trg_masked: bool = True):
         self.metadata = metadata
         self.masking_processor = masking_processor
         self.augmentations_per_image = augmentations_per_image
-        self.model_transforms: 'torchvision.transforms.Compose' = model_transforms
+        self.model_transforms: torchvision.transforms.v2.Compose = model_transforms
         self.image_keys = list(metadata.keys())
         self.is_trg_masked = is_trg_masked
 
     def __len__(self) -> int:
         return len(self.image_keys) * self.augmentations_per_image
     
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor]:
+    def __getitem__(self, idx: int) -> List[torch.Tensor]:
         img_idx = (idx // self.augmentations_per_image)
         key = self.image_keys[img_idx]
         orig_path = self.metadata[key]['path']
@@ -57,7 +57,7 @@ class IceRidgeDataset(Dataset):
         
         return self._get_processed_batch(transformed)
     
-    def _process_img(self, image: torch.Tensor) -> 'List[torch.Tensor]':
+    def _process_img(self, image: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         mask = self.masking_processor.create_mask(image)
         
         inp = self.masking_processor.apply_mask(image, mask)
@@ -77,7 +77,7 @@ class DatasetCreator:
         self, 
         metadata: Dict, 
         mask_processors: List[BaseMaskProcessor], 
-        transforms: torchvision.transforms.v2, 
+        transforms: torchvision.transforms.v2.Compose, 
         dataset_params: Dict
     ):
         self.metadata = metadata
@@ -85,9 +85,7 @@ class DatasetCreator:
         self.transforms = transforms
         self.dataset_params = dataset_params
     
-    def create_loader(self, metadata):
-        loader = None
-        
+    def create_loader(self, metadata: Optional[Dict]) -> DataLoader:
         if metadata is not None:
             dataset = IceRidgeDataset(
                 metadata=metadata,
@@ -104,11 +102,17 @@ class DatasetCreator:
                 num_workers=self.dataset_params.get("workers", 4)
             )
             
-        return loader
+            return loader
+       
+        raise ValueError('Metadata is empty while creating Dataloader')
     
-    def create_loaders(self) -> Dict[ExecPhase, Dict]:        
-        splitted = DatasetCreator.split_dataset_legacy(self.metadata, valid_size_p=self.dataset_params.get("validation_size", 0.2))
-        train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN), splitted.get(ExecPhase.VALID)
+    def create_loaders(self) -> Dict[ExecPhase, DataLoader]:        
+        splitted = DatasetCreator.split_dataset_legacy(
+            self.metadata, 
+            valid_size_p=self.dataset_params.get("validation_size", 0.2)
+        )
+        
+        train_metadata, valid_metadata = splitted.get(ExecPhase.TRAIN.name.lower()), splitted.get(ExecPhase.VALID.name.lower())
         
         # print(f"Размеры датасета: обучающий – {len(train_metadata)}; валидационный – {len(valid_metadata)}")
         
@@ -118,7 +122,7 @@ class DatasetCreator:
         }
 
     @staticmethod
-    def split_dataset_legacy(metadata: Dict[str, Dict], valid_size_p: float) -> Dict[str, Optional[Dict[str, Dict]]]:
+    def split_dataset_legacy(metadata: Dict[str, Dict], valid_size_p: float) -> Dict[str, Dict[str, Dict[Any, Any]] | None]:
         """
         Разделяет метаданные на обучающую и валидационную выборки,
         так чтобы данные одного оригинального изображения не оказывались в обеих выборках.
@@ -143,4 +147,7 @@ class DatasetCreator:
         
         print(f"{len(train_origins)} обучающих, {len(val_origins)} валидационных данных")
         
-        return {ExecPhase.TRAIN: train_metadata if len(train_origins) > 0 else None, ExecPhase.VALID: val_metadata if len(val_origins) > 0 else None}
+        return {
+            ExecPhase.TRAIN.name.lower(): train_metadata if train_metadata else None,
+            ExecPhase.VALID.name.lower(): val_metadata if val_metadata else None,
+        }

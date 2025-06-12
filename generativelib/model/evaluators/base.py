@@ -34,7 +34,7 @@ METRICS = {
 @dataclass
 class EvalItem:
     """Датакласс для метрики или лосса и нужной логикой """
-    callable_fn: Callable
+    callable_fn: torch.nn.Module
     name: str
     type: EvaluatorType
     weight: float = 1.0
@@ -42,7 +42,7 @@ class EvalItem:
     
     @classmethod
     def from_dict(cls, eval_name: str, eval_info: Dict):
-        from generativelib.config_tools.default_values import EXEC_PHASE_KEY, EXECUTION_KEY, INIT_KEY, WEIGHT_KEY
+        from generativelib.config_tools.default_values import EXEC_PHASE_KEY, EXECUTION_KEY, INIT_KEY
         exec_params = eval_info[EXECUTION_KEY]
         init_params = eval_info[INIT_KEY]
         
@@ -50,12 +50,12 @@ class EvalItem:
         if eval_name in MetricName:
             eval_type = EvaluatorType.METRIC
         
-        if exec_params[WEIGHT_KEY] > 0.0:
-            cls = LOSSES.get(eval_name)
+        if exec_params["weight"] > 0.0:
+            cls = LOSSES[eval_name]
             
             eval_func = cls(**init_params)
             exec_phase = ExecPhase[exec_params[EXEC_PHASE_KEY]]
-            eval_weight = exec_params[WEIGHT_KEY]
+            eval_weight = exec_params["weight"]
             
             return cls(
                 callable_fn=eval_func,

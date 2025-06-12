@@ -3,17 +3,16 @@ import torchvision.transforms as T
 import torch.nn.functional as F
 
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, List, Any
 from PIL import Image
 
-from generativelib.config_tools.default_values import PATH_KEY, WEIGHT_KEY
+from generativelib.config_tools.default_values import PATH_KEY
 from src.config_deserializer import InferenceConfigDeserializer
 from generativelib.dataset.base import BaseMaskProcessor
 from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import ModelTypes
 from generativelib.model.arch.common_transforms import get_infer_transforms
 from generativelib.model.enums import ExecPhase
-from generativelib.model.train.train import TrainConfigurator
 from generativelib.preprocessing.processors import *
 from generativelib.preprocessing.preprocessor import DataPreprocessor
 
@@ -23,7 +22,7 @@ class TrainContext(ABC):
         super().__init__()
         self.config_serializer = config_serializer
 
-    def _preprocessor_metadata(self) -> Dict:
+    def _preprocessor_metadata(self) -> Dict[str, Any]:
         paths = self.config_serializer.params_by_section(section='path', keys=['masks', 'dataset'])
         dataset_preprocessor = DataPreprocessor(
             *paths.values(),
@@ -46,11 +45,11 @@ class TrainContext(ABC):
     def _train_configurator(self, device: torch.device):
         train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
         
-        return TrainConfigurator(
-            device=device, 
-            **train_params,
-            weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
-        )
+        # return TrainConfigurator(
+        #     device=device, 
+        #     **train_params,
+        #     weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
+        # )
 
 
 class InferenceContext(ABC):

@@ -51,11 +51,13 @@ class GeneratorLoss(nn.Module):
         super().__init__()
         self.model = model
 
-    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor = None) -> torch.Tensor:
+    def forward(self, fake_samples: torch.Tensor, real_samples: torch.Tensor) -> torch.Tensor:
         return -self.model(fake_samples).mean()
 
 
 class DiceLoss(nn.Module):
+    smooth: torch.Tensor
+    
     def __init__(self, smooth: float = 1e-6):
         super().__init__()
         self.register_buffer('smooth', torch.tensor(smooth))
@@ -100,6 +102,9 @@ class FocalLoss(nn.Module):
 
 
 class EdgeLoss(nn.Module):
+    kernel_x: torch.Tensor
+    kernel_y: torch.Tensor
+    
     def __init__(self):
         super().__init__()
         kx = torch.tensor([[[[-1,0,1],[-2,0,2],[-1,0,1]]]])

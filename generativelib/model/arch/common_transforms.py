@@ -40,7 +40,7 @@ class BinarizeTransform(nn.Module):
             return (x >= x.std()).float()
         return x
 
-def get_common_transforms(target_img_size: int) -> List[T.Transform]:
+def get_common_transforms(target_img_size: int) -> T.Compose:
     max_crop = 1024
     return T.Compose([
         T.ToImage(),

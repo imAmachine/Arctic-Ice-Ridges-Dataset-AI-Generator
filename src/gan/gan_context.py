@@ -1,17 +1,19 @@
-from typing import Dict
+import os
 from PIL import Image
+from typing import Any, Callable, Dict, cast
 import torch
-
 from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY
 from generativelib.model.arch.common_transforms import get_common_transforms
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
-from generativelib.model.train.base import OptimizationTemplate, ModuleOptimizersCollection
-from generativelib.model.common.visualizer import Visualizer
+from src.config_deserializer import TrainConfigDeserializer
+from src.gan.gan_templates import GanTemplate
+from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
-from generativelib.model.train.train import CheckpointHook, TrainConfigurator, TrainManager, VisualizeHook
+from generativelib.model.train.train import CheckpointHook, TrainData, TrainManager, VisualizeHook
+from generativelib.preprocessing.preprocessor import DataPreprocessor
 from generativelib.preprocessing.processors import *
 from generativelib.model.inference.base import ModuleInference
 
@@ -48,79 +50,117 @@ class GanInferenceContext(InferenceContext):
 class GanTrainContext(TrainContext):
     def __init__(self, config_serializer: TrainConfigDeserializer):
         super().__init__(config_serializer)
-    
-    def _model_template(self) -> OptimizationTemplate:
+
+    def _model_template(self) -> GanTemplate:
         model_params = self.config_serializer.model_params(ModelTypes.GAN)
-        
         arch_collection = self.config_serializer.optimize_collection(ModelTypes.GAN)
-        self._model_specific_evals(arch_collection)
         
-        train_template = GanTemplate(model_params, arch_collection)
+        template = GanTemplate(model_params, arch_collection)
         
-        return train_template
-    
-    # Временное решение WIP
-    def _model_specific_evals(self, optimizers_collection: ModuleOptimizersCollection):
-        discriminator = optimizers_collection.by_type(GenerativeModules.GAN_DISCRIMINATOR).module
+        return template
+
+    def _add_model_evaluators(self, template: GanTemplate) -> None:
+        """Добавляет лоссы для генератора и дискриминатора"""
+        discriminator = template.get_discr_optimizer().module
+        optimizers_collection = template.model_optimizers
         
         optimizers_collection.add_evals({
-            GenerativeModules.GAN_GENERATOR:
-            [EvalItem(
-                GeneratorLoss(discriminator), 
-                name=LossName.ADVERSARIAL.name, 
-                type=EvaluatorType.LOSS, 
-                weight=1.0
-            )],
-            GenerativeModules.GAN_DISCRIMINATOR:
-            [
+            GenerativeModules.GAN_GENERATOR: [
                 EvalItem(
-                    WassersteinLoss(discriminator), 
-                    name=LossName.WASSERSTEIN.name, 
-                    type=EvaluatorType.LOSS, 
+                    GeneratorLoss(discriminator),
+                    name=LossName.ADVERSARIAL.name,
+                    type=EvaluatorType.LOSS,
+                    weight=1.0
+                )
+            ],
+            GenerativeModules.GAN_DISCRIMINATOR: [
+                EvalItem(
+                    WassersteinLoss(discriminator),
+                    name=LossName.WASSERSTEIN.name,
+                    type=EvaluatorType.LOSS,
                     weight=1.0
                 ),
                 EvalItem(
-                    GradientPenalty(discriminator), 
-                    name=LossName.GRADIENT_PENALTY.name, 
-                    type=EvaluatorType.LOSS, 
-                    weight=10.0, 
+                    GradientPenalty(discriminator),
+                    name=LossName.GRADIENT_PENALTY.name,
+                    type=EvaluatorType.LOSS,
+                    weight=10.0,
                     exec_phase=ExecPhase.TRAIN
                 )
             ]
-        })        
-    
-    def _train_manager(self, train_template: GanTemplate, train_configurator: TrainConfigurator, dataloaders: Dict[ExecPhase, Dict]) -> TrainManager:
-        # ВРЕМЕННОЕ (видимо постоянное) РЕШЕНИЕ
-        generator = train_template.gen_optim.module
-        visualizer_path = self.config_serializer.params_by_section(section=PATH_KEY, keys=Visualizer.__class__.__name__.lower())
-        visualizer = VisualizeHook(generator, visualizer_path, train_configurator.checkpoint_ratio)
-        checkpointer = CheckpointHook(train_configurator.checkpoint_ratio, train_configurator.weights)
-        
-        return TrainManager(
-            optim_template=train_template,
-            train_configurator=train_configurator,
-            visualizer=visualizer,
-            checkpointer=checkpointer,
-            dataloaders=dataloaders,
+        })
+
+    def _dataset_creator(self, dataset_metadata: Dict[str, Any], transforms) -> DatasetCreator:
+        mask_processors = self.config_serializer.all_dataset_masks()
+        dataset_params = self.config_serializer.get_global_section("dataset")
+
+        return DatasetCreator(
+            metadata=dataset_metadata,
+            mask_processors=mask_processors,
+            transforms=transforms,
+            dataset_params=dataset_params
         )
+
+    def _visualize_hook(
+        self,
+        gen_callable: Callable
+    ) -> VisualizeHook:
+        glob_train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+        visualize_interval = glob_train_params.get('visualize_interval', 5)
+        
+        return VisualizeHook(
+            generate_fn=gen_callable,
+            interval=visualize_interval
+        )
+
+    def _checkpoint_hook(self) -> CheckpointHook:
+        glob_train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+        checkpoint_interval = glob_train_params.get('checkpoint_interval', 25)
+        return CheckpointHook(checkpoint_interval)
     
-    def init_train(self, device: torch.device):
-        # предобработка и подгрузка метаданных
+    def _train_data(
+        self,
+        template: GanTemplate
+    ) -> TrainData:
+        # глобальные данные обучения и путей
+        glob_train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
+        glob_path_params = self.config_serializer.get_global_section(PATH_KEY)
+        
+        visualize_hook = self._visualize_hook(
+            gen_callable=template.get_gen_optimizer().module
+        )
+        
+        checkpoint_hook = self._checkpoint_hook()
+        
+        # путь для вывода
+        processed_path = glob_path_params.get('processed', '')
+        model_output_path = ModelTypes.GAN.name.lower()
+        final_output_path = os.path.join(processed_path, model_output_path)
+        
+        return TrainData(
+            epochs=glob_train_params.get('epochs', 1000),
+            model_out_folder=final_output_path,
+            visualize_hook=visualize_hook,
+            checkpoint_hook=checkpoint_hook
+        )
+
+    def init_train(self, device: torch.device) -> TrainManager:
         metadata = self._preprocessor_metadata()
-        img_size = self.config_serializer.params_by_section(section=DATASET_KEY, keys='img_size')
         
-        # получение текущего шаблона для обучения
-        template = self._model_template()
+        img_size = self.config_serializer.params_by_section(
+            section=DATASET_KEY, 
+            keys='img_size'
+        )
+        transforms = get_common_transforms(cast(int, img_size)) # определение Compose трансформаций для GAN
+        template = self._model_template() # создание шаблона обучения для GAN
+        self._add_model_evaluators(template) # добавление специальных лоссов, свойственных архитектуре GAN
         
-        transforms = get_common_transforms(img_size)
-        train_configurator = self._train_configurator(device)
-        
-        # создание менеджера датасета
-        ds_creator = self._dataset_creator(metadata, transforms)
-        dataloaders = ds_creator.create_loaders()
-        
-        return self._train_manager(
-            template,
-            train_configurator,
-            dataloaders
+        train_data = self._train_data(template) # определение данных, необходимых в TrainManager
+        ds_creator = self._dataset_creator(metadata, transforms) # создание менеджера датасета
+
+        return TrainManager(
+            device=device,
+            optim_template=template, 
+            train_data=train_data,
+            dataloaders=ds_creator.create_loaders()
         )
