@@ -62,7 +62,7 @@ def get_default_train_conf():
         "RandomWindow": {
             "enabled": True,
             "params": {
-                "window_size": 200,
+                "window_scale_size": 0.5,
             }
         },
         "RandomHoles": {

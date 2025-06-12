@@ -51,8 +51,8 @@ class EllipsoidPadding(BaseMaskProcessor):
 
 
 class RandomWindow(BaseMaskProcessor):
-    def __init__(self, window_size: int=120):
-        self.window_size = window_size
+    def __init__(self, window_scale_size: float=0.5):
+        self.window_scale_size = window_scale_size
         
     def _realization(self, cloned_mask):
         h, w = cloned_mask.shape
@@ -61,10 +61,12 @@ class RandomWindow(BaseMaskProcessor):
         top, left, bh, bw = 0, 0, h, w
         window_val = 0.0
         
-        y = random.randint(top,  top + bh - self.window_size)
-        x = random.randint(left, left + bw - self.window_size)
+        wind_h, wind_w = int((self.window_scale_size) * h), int((self.window_scale_size) * w)
+        
+        y = random.randint(top, top + bh - wind_h)
+        x = random.randint(left, left + bw - wind_w)
 
-        cloned_mask[y:y + self.window_size, x:x + self.window_size] = window_val
+        cloned_mask[y:y + wind_h, x:x + wind_w] = window_val
     
 
 

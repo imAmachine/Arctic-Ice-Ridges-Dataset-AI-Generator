@@ -2,7 +2,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 from dataclasses import dataclass
-from typing import Callable, Dict, List
+from typing import Callable, Dict, List, Optional, Self
 
 # enum
 from generativelib.model.evaluators.losses import *
@@ -40,36 +40,36 @@ class EvalItem:
     exec_phase: ExecPhase = ExecPhase.ANY
     
     @classmethod
-    def from_dict(cls, eval_name: str, eval_info: Dict):
+    def from_dict(cls, eval_name: str, eval_info: Dict) -> Optional[Self]:
         from generativelib.config_tools.default_values import EXEC_PHASE_KEY, EXECUTION_KEY, INIT_KEY
         exec_params = eval_info[EXECUTION_KEY]
         init_params = eval_info[INIT_KEY]
         
-        eval_type = EvaluatorType.LOSS
-        if eval_name in MetricName:
-            eval_type = EvaluatorType.METRIC
+        # тип — метрика или лосс
+        eval_type = EvaluatorType.METRIC if eval_name in MetricName else EvaluatorType.LOSS
         
-        if exec_params["weight"] > 0.0:
-            cls = LOSSES[eval_name]
+        weight = exec_params["weight"]
+        if weight > 0.0:
+            loss_cls = LOSSES[eval_name] # класс лосса
+            eval_fn = loss_cls(**init_params) # nn.Module как callable_fn для EvalItem
+            phase = ExecPhase[exec_params[EXEC_PHASE_KEY]]
             
-            eval_func = cls(**init_params)
-            exec_phase = ExecPhase[exec_params[EXEC_PHASE_KEY]]
-            eval_weight = exec_params["weight"]
-            
+            # EvalItem
             return cls(
-                callable_fn=eval_func,
+                callable_fn=eval_fn,
                 name=eval_name,
                 type=eval_type,
-                exec_phase=exec_phase,
-                weight=eval_weight
+                weight=weight,
+                exec_phase=phase
             )
-    
+        
+        return None
+
     def __call__(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> 'torch.Tensor':
         return self.callable_fn(generated_sample, real_sample) * self.weight
 
     def to(self, device: torch.device):
         self.callable_fn.to(device)
-
 
 class EvalsCollector:
     # [CLASS AI GENERATED]
