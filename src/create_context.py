@@ -112,6 +112,10 @@ class InferenceContext(ABC):
 
         final = self._insert_original_mask(resized, original_mask)
         return T.ToPILImage()(final).resize((self.image_size, self.image_size))
+    
+    @abstractmethod
+    def _load_model(self):
+        pass
 
     @abstractmethod
     def load_weights(self, path: str):

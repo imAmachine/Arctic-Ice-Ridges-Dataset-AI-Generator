@@ -19,7 +19,7 @@ class InferenceConfigDeserializer(ConfigReader):
     
     def create_arch_module(self, model_type: GenerativeModules, module_name: str) -> ArchModule:
         arch_info = self.get_module_arch_info(model_type, module_name)
-        return ArchModule.create_from_dict(module_name, arch_info)
+        return ArchModule.cls_from_dict(module_name, arch_info)
 
 class TrainConfigDeserializer(ConfigReader):
     def __init__(self, config_folder_path: str, phase: ExecPhase):

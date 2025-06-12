@@ -1,5 +1,6 @@
 import os
 
+from PIL import Image
 from datetime import datetime
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
@@ -67,22 +68,21 @@ class InferenceWindow(QtWidgets.QMainWindow):
             self.log.append(f"❌ Ошибка загрузки весов: {str(e)}")
             QMessageBox.critical(self, "Ошибка", f"Не удалось загрузить веса:\n{str(e)}")
 
+    def _display_image(self, image: Image.Image, label: QtWidgets.QLabel):
+        buf = BytesIO()
+        image.save(buf, format='PNG')
+        buf.seek(0)
+        qimage = QImage()
+        qimage.loadFromData(buf.read(), 'PNG')
+        label.setPixmap(QPixmap.fromImage(qimage))
+
     def load_mask(self):
         path, _ = QFileDialog.getOpenFileName(self, "Выберите изображение маски", "", "(*.png *.jpg *.jpeg *.bmp);;All Files (*)")
         if not path:
             return
         try:
             pil_image = self.generator.load_mask(path)
-
-            buf = BytesIO()
-            pil_image.save(buf, format='PNG')
-            buf.seek(0)
-
-            qimage = QImage()
-            qimage.loadFromData(buf.read(), 'PNG')
-            pixmap = QPixmap.fromImage(qimage)
-
-            self.load_image.setPixmap(pixmap)
+            self._display_image(pil_image, self.load_image)
             self.log.append(f"📥 Маска успешно загружена")
 
         except Exception as e:
@@ -96,13 +96,7 @@ class InferenceWindow(QtWidgets.QMainWindow):
             
         try:
             result = self.generator.generate()
-            buf = BytesIO()
-            result.save(buf, format='PNG')
-            buf.seek(0)
-
-            qimage = QImage()
-            qimage.loadFromData(buf.read(), 'PNG')
-            self.generated_image.setPixmap(QPixmap.fromImage(qimage))
+            self._display_image(result, self.generated_image)
             self.log.append("✅ Генерация завершена")
         except Exception as e:
             self.log.append(f"❌ Ошибка генерации: {e}")
