@@ -33,14 +33,20 @@ class DiffusionTemplate(OptimizationTemplate):
         return noise_image, noise
 
     def _train(self, inp: torch.Tensor, target: torch.Tensor) -> None:
-        timesteps = torch.randint(0, self.scheduler.config.num_train_timesteps, (inp.size(0),), device=inp.device).long()
+        timesteps = torch.randint(
+                    low=0, high=self.scheduler.config.num_train_timesteps, size=(inp.size(0) // 2 + 1,)
+                ).to(inp.device)
+        timesteps = torch.cat([timesteps, self.scheduler.config.num_train_timesteps - timesteps - 1], dim=0)[:inp.size(0)]
 
         noisy_images, noise = self._add_noise(inp, timesteps)
         noise_fake = self.dif_optim.module(noisy_images, timesteps)
         self.dif_optim.optimize(noise_fake, noise)
 
     def _valid(self, inp: torch.Tensor, target: torch.Tensor) -> None:
-        timesteps = torch.randint(0, self.scheduler.config.num_train_timesteps, (inp.size(0),), device=inp.device).long()
+        timesteps = torch.randint(
+                    low=0, high=self.scheduler.config.num_train_timesteps, size=(inp.size(0) // 2 + 1,)
+                ).to(inp.device)
+        timesteps = torch.cat([timesteps, self.scheduler.config.num_train_timesteps - timesteps - 1], dim=0)[:inp.size(0)]
 
         noisy_images, noise = self._add_noise(inp, timesteps)
         with torch.no_grad():
