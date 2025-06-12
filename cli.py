@@ -10,7 +10,8 @@ from generativelib.preprocessing.processors import *
 # from src.tester import ParamGridTester
 from src.gui.app_start import AppStart
 
-from gan.gan_train_context import GanTrainContext
+from src.gan.gan_train_context import GanTrainContext
+from src.diffusion.diffusion_context import DiffusionTrainContext
 
 configs_folder = './configs'
 
@@ -38,10 +39,10 @@ def main():
         train_manager = None
         
         if model_type is ModelTypes.GAN:
-            train_context = GanTrainContext(t_conf_deserializer)
+            train_context = GanTrainContext(t_conf_deserializer, model_type)
         
         if model_type is ModelTypes.DIFFUSION:
-            train_context = DiffusionTrainContext(t_conf_deserializer)
+            train_context = DiffusionTrainContext(t_conf_deserializer, model_type)
         
         train_manager = train_context.init_train(device)
         train_manager.run(is_load_weights=args.load_weights)

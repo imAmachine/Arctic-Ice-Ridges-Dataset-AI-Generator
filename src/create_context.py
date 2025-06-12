@@ -1,56 +1,18 @@
+import os
 import torch
 import torchvision.transforms as T
 import torch.nn.functional as F
 
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, Callable, Any
 from PIL import Image
 
-from generativelib.config_tools.default_values import PATH_KEY, WEIGHT_KEY
-from src.config_deserializer import InferenceConfigDeserializer
-from generativelib.dataset.base import BaseMaskProcessor
-from generativelib.dataset.loader import DatasetCreator
 from generativelib.model.arch.enums import ModelTypes
 from generativelib.model.arch.common_transforms import get_infer_transforms
-from generativelib.model.enums import ExecPhase
-from generativelib.model.train.train import TrainConfigurator
 from generativelib.preprocessing.processors import *
 from generativelib.preprocessing.preprocessor import DataPreprocessor
 
-
-class TrainContext(ABC):
-    def __init__(self, config_serializer):
-        super().__init__()
-        self.config_serializer = config_serializer
-
-    def _preprocessor_metadata(self) -> Dict:
-        paths = self.config_serializer.params_by_section(section='path', keys=['masks', 'dataset'])
-        dataset_preprocessor = DataPreprocessor(
-            *paths.values(),
-            files_extensions=['.png'],
-            processors=[RotateMask(), AdjustToContent(), Crop(k=0.5)]
-        )
-        return dataset_preprocessor.get_metadata()
-    
-    def _dataset_creator(self, dataset_metadata: Dict, transforms) -> DatasetCreator:
-        mask_processors: List[BaseMaskProcessor] = self.config_serializer.all_dataset_masks()
-        dataset_params = self.config_serializer.get_global_section("dataset")
-        
-        return DatasetCreator(
-            metadata=dataset_metadata,
-            mask_processors=mask_processors,
-            transforms=transforms,
-            dataset_params=dataset_params
-        )
-    
-    def _train_configurator(self, device: torch.device):
-        train_params = self.config_serializer.get_global_section(ExecPhase.TRAIN.name.lower())
-        
-        return TrainConfigurator(
-            device=device, 
-            **train_params,
-            weights=self.config_serializer.params_by_section(section=PATH_KEY, keys=WEIGHT_KEY)
-        )
+from src.config_deserializer import InferenceConfigDeserializer
 
 
 class InferenceContext(ABC):
@@ -65,7 +27,7 @@ class InferenceContext(ABC):
 
     @staticmethod
     def load_model(model_name: str, config: InferenceConfigDeserializer):
-        from src.gan.gan_context import GanInferenceContext
+        from src.gan.gan_infer_context import GanInferenceContext
         from src.diffusion.diffusion_context import DiffusionInferenceContext
 
         model_enum = ModelTypes[model_name.upper()]
