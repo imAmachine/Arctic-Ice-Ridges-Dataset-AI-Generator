@@ -1,17 +1,17 @@
 import argparse
-from src.gan.gan_templates import GanTemplate
+
 from src.config_deserializer import TrainConfigDeserializer, InferenceConfigDeserializer
-
-from generativelib.model.arch.enums import ModelTypes
-from generativelib.dataset.mask_processors import *
-from generativelib.model.enums import ExecPhase
-
-from generativelib.preprocessing.processors import *
-# from src.tester import ParamGridTester
+from src.diffusion.diffusion_templates import DiffusionTemplate
+from src.diffusion.diffusion_train_context import DiffusionTrainContext
+from src.gan.gan_templates import GanTemplate
+from src.gan.gan_train_context import GanTrainContext
 from src.gui.app_start import AppStart
 
-from src.gan.gan_train_context import GanTrainContext
-from src.diffusion.diffusion_context import DiffusionTrainContext
+from generativelib.dataset.mask_processors import *
+from generativelib.model.arch.enums import ModelTypes
+from generativelib.model.enums import ExecPhase
+from generativelib.preprocessing.processors import *
+# from src.tester import ParamGridTester
 
 configs_folder = './configs'
 
@@ -39,12 +39,12 @@ def main():
         train_manager = None
         
         if model_type is ModelTypes.GAN:
-            train_context = GanTrainContext(t_conf_deserializer, model_type)
+            train_context = GanTrainContext(t_conf_deserializer, ModelTypes.GAN, GanTemplate)
         
         if model_type is ModelTypes.DIFFUSION:
-            train_context = DiffusionTrainContext(t_conf_deserializer, model_type)
+            train_context = DiffusionTrainContext(t_conf_deserializer, ModelTypes.DIFFUSION, DiffusionTemplate)
         
-        train_manager = train_context.init_train(device)
+        train_manager = train_context.get_train_manager(device)
         train_manager.run(is_load_weights=args.load_weights)
 
 if __name__ == '__main__':

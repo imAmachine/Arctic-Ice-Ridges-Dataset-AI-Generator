@@ -1,10 +1,14 @@
-from typing import Type, cast
+import torchvision.transforms.v2 as T
+
+from typing import cast
+
+from generativelib.model.arch.common_transforms import get_common_transforms
+from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import OptimizationTemplate
-from generativelib.model.arch.enums import GenerativeModules, ModelTypes
-from generativelib.model.enums import ExecPhase
 from generativelib.model.train.train import VisualizeHook
 from generativelib.preprocessing.processors import *
 
@@ -45,6 +49,10 @@ class GanTrainContext(TrainContext):
                 )
             ]
         })
+
+    def _get_model_transform(self, img_size: int) -> T.Compose:
+        transforms = get_common_transforms(cast(int, img_size))
+        return transforms
 
     def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:
         gan_template = cast(GanTemplate, template)

@@ -28,7 +28,7 @@ class InferenceContext(ABC):
     @staticmethod
     def load_model(model_name: str, config: InferenceConfigDeserializer):
         from src.gan.gan_infer_context import GanInferenceContext
-        from src.diffusion.diffusion_context import DiffusionInferenceContext
+        from src.diffusion.diffusion_infer_context import DiffusionInferenceContext
 
         model_enum = ModelTypes[model_name.upper()]
         if model_enum == ModelTypes.GAN:

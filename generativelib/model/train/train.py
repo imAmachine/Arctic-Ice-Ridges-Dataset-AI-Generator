@@ -65,18 +65,15 @@ class VisualizeHook:
         if (epoch_id + 1) % self.interval == 0:
             with torch.no_grad():
                 inp, trg = next(iter(loader))
-                generated = self.callable_fn(inp.to(device))
-                self.visualizer.save(inp, trg, generated, phase)
+                gen = self.gen(inp.to(device))
+                self.__save(folder_path, inp, trg, gen, phase)
 
 
 class CheckpointHook:
     def __init__(self, interval: int):
         self.interval = interval
         
-    def __call__(self, folder_path: str, epoch_id: int, obj: ITorchState):
-        os.makedirs(folder_path, exist_ok=True)
-        file_path = os.path.join(folder_path, 'checkpoint.pt')
-        
+    def __call__(self, file_path: str, epoch_id: int, obj: ITorchState):
         if (epoch_id + 1) % self.interval == 0:
             CheckpointManager.save_state(obj, file_path)
 

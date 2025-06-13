@@ -50,9 +50,10 @@ class BinarizeTransform(nn.Module):
 
 
 def get_common_transforms(target_img_size: int) -> T.Compose:
+    max_crop = 1024
     return T.Compose([
         T.ToImage(),
-        OneOf([T.RandomCrop((size, size)) for size in range(640, target_img_size, 128)], p=1.0),
+        OneOf([T.RandomCrop((size, size)) for size in range(640, max_crop, 128)], p=1.0),
         RandomRotate(p=0.8),
         T.RandomHorizontalFlip(p=0.8),
         T.RandomVerticalFlip(p=0.8),

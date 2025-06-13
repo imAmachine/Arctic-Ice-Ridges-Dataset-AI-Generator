@@ -116,7 +116,7 @@ class TrainContext(ABC):
         )
         
         # определение Compose трансформаций для GAN
-        transforms = get_common_transforms(cast(int, img_size))
+        transforms = self._get_model_transform(cast(int, img_size))
 
         # создание шаблона обучения для GAN
         template = self._model_template()
@@ -146,3 +146,7 @@ class TrainContext(ABC):
             train_data=train_data,
             dataloaders=dataloaders
         )
+    
+    @abstractmethod
+    def _get_model_transform(img_size: int):
+        pass
