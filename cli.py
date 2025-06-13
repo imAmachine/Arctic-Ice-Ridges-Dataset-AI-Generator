@@ -1,14 +1,15 @@
 import argparse
-from generativelib.model.arch.enums import ModelTypes
+from src.gan.gan_templates import GanTemplate
 from src.config_deserializer import TrainConfigDeserializer
-from generativelib.dataset.mask_processors import *
 
+from generativelib.model.arch.enums import ModelTypes
+from generativelib.dataset.mask_processors import *
 from generativelib.model.enums import ExecPhase
 
 from generativelib.preprocessing.processors import *
 # from src.tester import ParamGridTester
 
-from src.gan.gan_context import GanTrainContext
+from gan.gan_train_context import GanTrainContext
 
 configs_folder = './configs'
 t_conf_deserializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
@@ -23,49 +24,13 @@ def parse_arguments() -> argparse.Namespace:
 def main():
     args = parse_arguments()
     model_type = ModelTypes[args.model.upper()]
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     if model_type is ModelTypes.GAN:
-        train_context = GanTrainContext(t_conf_deserializer)
-        train_manager = train_context.init_train(torch.device(device))
+        train_context = GanTrainContext(t_conf_deserializer, ModelTypes.GAN, GanTemplate)
+        
+        train_manager = train_context.get_train_manager(device)
         train_manager.run(is_load_weights=args.load_weights)
 
 if __name__ == '__main__':
     main()
-
-
-# test_config = ConfigReader(configs_folder_path, ExecPhase.TEST)
-# if args.test:
-#     # Testing
-#     print("Запуск тестов...")
-#     tester = ParamGridTester(
-#         param_grid_config=model_cfg,
-#         trainer=trainer,
-#         dataset=ds_creator,
-#         output_folder_path=WEIGHTS_PATH,
-#         seed=42,
-#     )
-#     tester.run()
-    
-# else:
-# Training
-# print(f"Обучение модели {args.model} на {args.epochs} эпохах...")
-# train_template.build_train_modules(model_cfg)
-# train_template._evaluators_from_config(model_cfg['evaluators_info'], device=DEVICE)
-
-# if args.load_weights:
-#     train_template.checkpoint_load(CHECKPOINT_PATH)
-# trainer.run()
-
-# if args.get_generator:
-    #     checkpoint_map = {
-    #         GenerativeModules.GENERATOR: {
-    #             'model': ('trainers', GenerativeModules.GENERATOR, 'module', 'arch'),
-    #         }
-    #     }
-
-    #     model = GAN(DEVICE, n_critic=5, checkpoint_map=checkpoint_map)
-    #     model.build_train_modules(model_cfg)
-        
-    #     model.checkpoint_load(CHECKPOINT_PATH)
-    #     model.checkpoint_save(os.path.join(WEIGHTS_PATH, 'generator.pt'))

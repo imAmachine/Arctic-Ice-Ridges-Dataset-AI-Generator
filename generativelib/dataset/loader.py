@@ -47,7 +47,7 @@ class IceRidgeDataset(Dataset):
     def __len__(self) -> int:
         return len(self.image_keys) * self.augmentations_per_image
     
-    def __getitem__(self, idx: int) -> List[torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
         img_idx = (idx // self.augmentations_per_image)
         key = self.image_keys[img_idx]
         orig_path = self.metadata[key]['path']
@@ -55,7 +55,7 @@ class IceRidgeDataset(Dataset):
         
         transformed = self.model_transforms(orig_img)
         
-        return self._get_processed_batch(transformed)
+        return self._process_img(transformed)
     
     def _process_img(self, image: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         mask = self.masking_processor.create_mask(image)
@@ -67,10 +67,6 @@ class IceRidgeDataset(Dataset):
             trg = self.masking_processor.apply_mask(trg, mask, True)
         
         return inp, trg
-    
-    def _get_processed_batch(self, image: torch.Tensor) -> List[torch.Tensor]:
-        batch = self._process_img(image)
-        return [(el >= el.std()).float() for el in batch]
  
 
 class DatasetCreator:

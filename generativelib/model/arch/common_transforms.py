@@ -1,5 +1,6 @@
 import random
 from typing import List
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2 as T
@@ -31,14 +32,30 @@ class RandomRotate(nn.Module):
         return x
 
 
+class BinarizeTransform(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x: np.ndarray):
+        return (x >= x.std()).float()
+
+
 def get_common_transforms(target_img_size: int) -> T.Compose:
-    max_crop = 1024
     return T.Compose([
         T.ToImage(),
-        OneOf([T.RandomCrop((size, size)) for size in range(640, max_crop, 128)], p=1.0),
+        OneOf([T.RandomCrop((size, size)) for size in range(640, target_img_size, 128)], p=1.0),
         RandomRotate(p=0.8),
         T.RandomHorizontalFlip(p=0.8),
         T.RandomVerticalFlip(p=0.8),
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
+        BinarizeTransform(),
+    ])
+
+def get_infer_transforms(target_img_size: int) -> T.Compose:
+    return T.Compose([
+        T.ToImage(),
+        T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
+        T.ToDtype(torch.float32, scale=True),
+        BinarizeTransform(),
     ])

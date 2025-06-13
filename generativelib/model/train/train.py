@@ -91,7 +91,7 @@ class TrainManager:
         self.optim_template = optim_template
         self.train_data = train_data
     
-    def run(self, is_load_weights=False) -> None:
+    def run(self, is_load_weights: bool=False) -> None:
         epochs = self.train_data.epochs
         
         # пути
@@ -103,11 +103,11 @@ class TrainManager:
         checkpoint = self.train_data.checkpoint_hook
         visualize = self.train_data.visualize_hook
         
-        self.optim_template.to(self.device) # установка device для модулей
+        # установка device для модулей
+        self.optim_template.to(self.device)
         
         if is_load_weights:
             CheckpointManager.load_state(self.optim_template.model_optimizers, checkpoint_folder)
-            
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
