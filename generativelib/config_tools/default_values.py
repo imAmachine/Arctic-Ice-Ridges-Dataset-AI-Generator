@@ -43,7 +43,7 @@ def get_default_train_conf():
         PATH_KEY: {
             "masks": "./data/masks",
             "dataset": "./data/preprocessed",
-            "processed": "./data/processed/"
+            "processed": "./data/processed"
         }
     }
     mask_processors = {

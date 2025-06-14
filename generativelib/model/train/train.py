@@ -71,7 +71,6 @@ class CheckpointHook:
         self.interval = interval
         
     def __call__(self, folder_path: str, epoch_id: int, obj: ITorchState):
-        os.makedirs(folder_path, exist_ok=True)
         file_path = os.path.join(folder_path, 'checkpoint.pt')
         
         if (epoch_id + 1) % self.interval == 0:

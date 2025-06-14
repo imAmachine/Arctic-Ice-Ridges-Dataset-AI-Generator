@@ -7,9 +7,8 @@ from generativelib.dataset.mask_processors import *
 from generativelib.model.enums import ExecPhase
 
 from generativelib.preprocessing.processors import *
-# from src.tester import ParamGridTester
 
-from gan.gan_train_context import GanTrainContext
+from src.gan.gan_train_context import GanTrainContext
 
 configs_folder = './configs'
 t_conf_deserializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
