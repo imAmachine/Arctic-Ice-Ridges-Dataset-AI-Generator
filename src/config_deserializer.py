@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Union
 from generativelib.config_tools.base import ConfigReader
 from generativelib.config_tools.default_values import ARCH_PARAMS_KEY, EVALS_KEY, MASK_PROCESSORS_KEY, MODEL_PARAMS_KEY, MODELS_KEY, MODULES_KEY, OPTIMIZER_KEY
-from generativelib.dataset.base import BaseMaskProcessor
+from generativelib.dataset.base import MaskProcessor
 from generativelib.model.arch.enums import ModelTypes, GenerativeModules
 from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.base import EvalItem
@@ -14,11 +14,11 @@ class TrainConfigDeserializer(ConfigReader):
         self._mask_processors: Dict[str, Any] = self.config.get(MASK_PROCESSORS_KEY, {})
         self._models: Dict[str, Any] = self.config.get(MODELS_KEY, {})
 
-    def all_dataset_masks(self) -> List[BaseMaskProcessor]:
-        processors: List[BaseMaskProcessor] = []
+    def all_dataset_masks(self) -> List[MaskProcessor]:
+        processors: List[MaskProcessor] = []
 
         for name, values in self._mask_processors.items():
-            proc = BaseMaskProcessor.from_dict(name, values)
+            proc = MaskProcessor.from_dict(name, values)
             if proc:
                 processors.append(proc)
 

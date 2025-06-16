@@ -8,13 +8,13 @@ import torchvision
 from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms.v2
 
-from generativelib.dataset.base import BaseMaskProcessor
+from generativelib.dataset.base import MaskProcessor
 from generativelib.common.utils import Utils
 from generativelib.model.enums import ExecPhase
 
 
 class DatasetMaskingProcessor:
-    def __init__(self, processors: List[BaseMaskProcessor]):
+    def __init__(self, processors: List[MaskProcessor]):
         self.processors = processors
 
     def create_mask(self, image: torch.Tensor):
@@ -73,7 +73,7 @@ class DatasetCreator:
     def __init__(
         self, 
         metadata: Dict, 
-        mask_processors: List[BaseMaskProcessor], 
+        mask_processors: List[MaskProcessor], 
         transforms: torchvision.transforms.v2.Compose, 
         dataset_params: Dict
     ):
