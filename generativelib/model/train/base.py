@@ -10,13 +10,13 @@ from generativelib.model.common.interfaces import ITorchState
 from generativelib.model.enums import ExecPhase
 from generativelib.model.enums import ExecPhase
 
-from generativelib.model.evaluators.base import EvalItem, EvalsCollector
+from generativelib.model.evaluators.base import LossItem, EvalsCollector
 from generativelib.model.evaluators.enums import EvaluatorType
 
 
 class ModuleOptimizer(ITorchState):
     """Обёртка над ArchModule для обучения. Подсчёт и хранение лоссов и метрик, расчёт градиентов"""
-    def __init__(self, arch_module: ArchModule, evals: List[EvalItem], optimizer: torch.optim.Optimizer):
+    def __init__(self, arch_module: ArchModule, evals: List[LossItem], optimizer: torch.optim.Optimizer):
         self.module = arch_module
         self.evals = evals
         self.optimizer = optimizer
@@ -43,7 +43,7 @@ class ModuleOptimizer(ITorchState):
         return self
     
     @classmethod
-    def create(cls, arch_module: ArchModule, evals: List[EvalItem], optim_info: Dict):
+    def create(cls, arch_module: ArchModule, evals: List[LossItem], optim_info: Dict):
         """Создает объект ModuleOptimizer на основе информации для оптимизатора из optim_info (Dict)"""
         optim_types: Dict[str, Type[torch.optim.Optimizer]] = {
             "adam": torch.optim.Adam,
@@ -77,7 +77,7 @@ class ModuleOptimizer(ITorchState):
                 
                 loss_tensor = loss_tensor + val.mean()
                 losses_vals.append((
-                    item.type, 
+                    EvaluatorType.LOSS, 
                     item.name, 
                     val_mean.detach().cpu().item()
                 ))
@@ -137,7 +137,7 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
             if arch_optimizer.module.model_type == model_type:
                 return arch_optimizer
     
-    def add_evals(self, evals: Dict[GenerativeModules, List[EvalItem]]) -> Self:
+    def add_evals(self, evals: Dict[GenerativeModules, List[LossItem]]) -> Self:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
             
@@ -156,8 +156,8 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
 class OptimizationTemplate(ABC):
     def __init__(self, model_params: Dict, module_optimizers: ModuleOptimizersCollection):
         super().__init__()
-        self.model_optimizers = module_optimizers
-        self.model_params = model_params
+        self.optimizers = module_optimizers
+        self.params = model_params
     
     @abstractmethod
     def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
@@ -168,11 +168,11 @@ class OptimizationTemplate(ABC):
         pass
     
     def mode_to(self, phase: ExecPhase) -> Self:
-        self.model_optimizers.mode_to(phase)
+        self.optimizers.mode_to(phase)
         return self
     
     def to(self, device: torch.device) -> Self:
-        self.model_optimizers.to(device)
+        self.optimizers.to(device)
         return self
     
     def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor) -> None:
@@ -208,7 +208,7 @@ class OptimizationTemplate(ABC):
         # Получаем имя фазы для вывода и сравнения
         phase_name = phase.name.capitalize()
 
-        for optimizer in self.model_optimizers:
+        for optimizer in self.optimizers:
             opt_name = optimizer.module.model_type.name
             summary = optimizer.evals_collector.compute_epoch_summary()
             rows = self._print_phase_summary(phase_name, summary)

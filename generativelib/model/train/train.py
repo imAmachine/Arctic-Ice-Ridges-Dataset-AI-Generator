@@ -106,7 +106,7 @@ class TrainManager:
         self.optim_template.to(self.device)
         
         if is_load_weights:
-            CheckpointManager.load_state(self.optim_template.model_optimizers, checkpoint_folder)
+            CheckpointManager.load_state(self.optim_template.optimizers, checkpoint_folder)
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
@@ -120,5 +120,5 @@ class TrainManager:
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
-            checkpoint(checkpoint_folder, epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта
+            checkpoint(checkpoint_folder, epoch_id, self.optim_template.optimizers) # вызывает сохранение чекпоинта
                 

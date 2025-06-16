@@ -1,10 +1,10 @@
 from typing import Any, Dict, List, Union
 from generativelib.config_tools.base import ConfigReader
-from generativelib.config_tools.default_values import ARCH_PARAMS_KEY, EVALS_KEY, MASK_PROCESSORS_KEY, MODEL_PARAMS_KEY, MODELS_KEY, MODULES_KEY, OPTIMIZER_KEY
+from generativelib.config_tools.default_values import ARCH_PARAMS_KEY, LOSSES_KEY, MASK_PROCESSORS_KEY, MODEL_PARAMS_KEY, MODELS_KEY, MODULES_KEY, OPTIMIZER_KEY
 from generativelib.dataset.base import MaskProcessor
 from generativelib.model.arch.enums import ModelTypes, GenerativeModules
 from generativelib.model.enums import ExecPhase
-from generativelib.model.evaluators.base import EvalItem
+from generativelib.model.evaluators.base import LossItem
 from generativelib.model.train.base import ArchModule, ModuleOptimizer, ModuleOptimizersCollection
 
 
@@ -24,11 +24,11 @@ class TrainConfigDeserializer(ConfigReader):
 
         return processors
 
-    def all_eval_items(self, eval_info: Dict[str, Any]) -> List[EvalItem]:
-        evals: List[EvalItem] = []
+    def all_eval_items(self, eval_info: Dict[str, Any]) -> List[LossItem]:
+        evals: List[LossItem] = []
 
         for eval_name, eval_params in eval_info.items():
-            eval_it = EvalItem.from_dict(eval_name, eval_params)
+            eval_it = LossItem.from_dict(eval_name, eval_params)
             if eval_it:
                 evals.append(eval_it)
 
@@ -54,7 +54,7 @@ class TrainConfigDeserializer(ConfigReader):
 
         for module_name, module_info in modules.items():
             arch_info = module_info.get(ARCH_PARAMS_KEY, {})
-            evals_info = module_info.get(EVALS_KEY, {})
+            evals_info = module_info.get(LOSSES_KEY, {})
             optim_info = module_info.get(OPTIMIZER_KEY, {})
 
             module_optimizer = self.module_optimizer(module_name, arch_info, evals_info, optim_info)

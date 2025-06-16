@@ -1,15 +1,16 @@
 from abc import ABC, abstractmethod
 import os
-from typing import Any, Callable, Dict, Type, cast
+from typing import Any, Callable, Dict, List, Optional, Type, cast
 import torch
 import torchvision.transforms.v2
 from generativelib.config_tools.default_values import DATASET_KEY, PATH_KEY
 from generativelib.model.arch.common_transforms import get_common_transforms
+from generativelib.model.evaluators.base import LossItem
 from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import OptimizationTemplate
 from src.config_deserializer import TrainConfigDeserializer
 from generativelib.dataset.loader import DatasetCreator
-from generativelib.model.arch.enums import ModelTypes
+from generativelib.model.arch.enums import GenerativeModules, ModelTypes
 from generativelib.model.enums import ExecPhase
 from generativelib.model.train.train import CheckpointHook, TrainData, TrainManager, VisualizeHook
 from generativelib.preprocessing.preprocessor import DataPreprocessor
@@ -27,13 +28,48 @@ class TrainContext(ABC):
         self.model_type = model_type
         self.model_template_type = model_template_type
     
+    MODULE_LOSSES: Dict[GenerativeModules, List[Dict[str, Any]]] = {}
+    TARGET_LOSS_MODULE: Optional[GenerativeModules] = None
+    
     @abstractmethod
     def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:
         pass
     
-    @abstractmethod
     def _add_model_evaluators(self, template: OptimizationTemplate) -> None:
-        pass
+        """Добавляет лоссы для генератора и дискриминатора"""
+        optimizers_collection = template.optimizers
+        target_optimizer = None
+        target_module = None
+        
+        if self.TARGET_LOSS_MODULE:
+            target_optimizer = optimizers_collection.by_type(self.TARGET_LOSS_MODULE) if self.TARGET_LOSS_MODULE else None
+        
+        if target_optimizer:
+            target_module = target_optimizer.module
+        
+        for mod_type, losses in self.MODULE_LOSSES.items():
+            mod_losses = []
+            
+            for loss in losses:
+                callable_type = loss["callable_type"]
+                
+                callable_fn = callable_type(target_module) if target_module else callable_type()
+                loss_name = loss["name"]
+                loss_weight = loss["weight"]
+                exec_phase = loss["exec_phase"]
+                
+                loss_it = LossItem(
+                    loss_callable=callable_fn,
+                    name=loss_name,
+                    weight=loss_weight,
+                    exec_phase=exec_phase
+                )
+                
+                mod_losses.append(loss_it)
+                
+            optimizers_collection.add_evals({
+                mod_type: mod_losses
+            })
     
     def _preprocessor_metadata(self) -> Dict[str, Any]:
         paths = self.config_serializer.params_by_section(section='path', keys=['masks', 'dataset'])

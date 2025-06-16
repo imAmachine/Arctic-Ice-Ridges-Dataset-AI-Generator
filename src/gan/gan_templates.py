@@ -16,20 +16,8 @@ class GanTemplate(OptimizationTemplate):
     def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
         super().__init__(model_params, arch_optimizers)
         self.n_critic = model_params.get('n_critic', 5)
-        self.gen_optim = self.model_optimizers.by_type(GenerativeModules.GAN_GENERATOR)
-        self.discr_optim = self.model_optimizers.by_type(GenerativeModules.GAN_DISCRIMINATOR)
-    
-    def get_gen_optimizer(self) -> ModuleOptimizer:
-        if self.gen_optim is None:
-            raise ValueError('Оптимизатор генератора is None')
-        
-        return self.gen_optim
-
-    def get_discr_optimizer(self) -> ModuleOptimizer:
-        if self.discr_optim is None:
-            raise ValueError('Оптимизатор дискриминатора is None')
-        
-        return self.discr_optim
+        self.gen_optim = self.optimizers.by_type(GenerativeModules.GAN_GENERATOR)
+        self.discr_optim = self.optimizers.by_type(GenerativeModules.GAN_DISCRIMINATOR)
     
     def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         if self.gen_optim is None:
@@ -52,5 +40,5 @@ class GanTemplate(OptimizationTemplate):
         
         with torch.no_grad():
             fake = self.gen_optim.module(inp)
-            for optimizer in self.model_optimizers:
+            for optimizer in self.optimizers:
                 optimizer.validate(fake, trg)
