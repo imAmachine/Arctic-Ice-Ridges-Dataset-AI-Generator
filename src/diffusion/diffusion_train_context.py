@@ -1,5 +1,4 @@
 from typing import cast
-
 from generativelib.model.arch.enums import Modules
 from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.enums import LossName
@@ -8,19 +7,20 @@ from generativelib.model.train.base import OptimizationTemplate
 from generativelib.model.train.train import VisualizeHook
 from generativelib.preprocessing.processors import *
 
-from src.train_context import TrainContext
+from src.train_context import LossData, TrainContext
 from src.diffusion.diffusion_templates import DiffusionTemplate
 
 
 class DiffusionTrainContext(TrainContext):
     MODULE_LOSSES = {
         Modules.DIFFUSION: [
-            {
-                "callable_type": nn.MSELoss,
-                "name": LossName.MSE.name,
-                "weight": 1.0,
-                "exec_phase": ExecPhase.ANY
-            }
+            LossData(
+                callable_type=nn.MSELoss,
+                name=LossName.MSE.name,
+                weight=1.0,
+                exec_phase=ExecPhase.ANY,
+                init={"reduction": "mean"}
+            )
         ],
     }
     TARGET_LOSS_MODULE = Modules.DIFFUSION

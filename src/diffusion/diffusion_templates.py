@@ -55,9 +55,6 @@ class DiffusionTemplate(OptimizationTemplate):
         target: torch.Tensor,
         timesteps: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Добавляем гауссов шум в target на заданных timesteps.
-        """
         noise = torch.randn_like(target)
         noisy = self.scheduler.add_noise(target, noise, timesteps) # type: ignore
         return noisy, noise
@@ -79,6 +76,7 @@ class DiffusionTemplate(OptimizationTemplate):
     ) -> None:
         timesteps = self._make_timesteps(inp.size(0), inp.device)
         noisy, noise = self._add_noise(inp, timesteps)
+        
         with torch.no_grad():
             noise_pred = self.optim.module(noisy, timesteps)
             self.optim.validate(noise_pred, noise)
@@ -87,9 +85,6 @@ class DiffusionTemplate(OptimizationTemplate):
         self,
         target: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Сэмплинг из шума обратно в изображение.
-        """
         noise = torch.randn_like(target)
         num_ts = int(self.scheduler.config.num_train_timesteps) # type: ignore
         self.scheduler.set_timesteps(num_ts)

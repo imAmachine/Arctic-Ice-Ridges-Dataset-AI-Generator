@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import os
 from typing import Any, Callable, Dict, List, Optional, Type, cast
 import torch
@@ -17,6 +18,15 @@ from generativelib.preprocessing.preprocessor import DataPreprocessor
 from generativelib.preprocessing.processors import *
 
 
+@dataclass
+class LossData:
+    callable_type: Type[nn.Module]
+    name: str
+    weight: float
+    exec_phase: ExecPhase
+    init: Dict[str, Any]
+
+
 class TrainContext(ABC):
     def __init__(
         self, 
@@ -28,7 +38,7 @@ class TrainContext(ABC):
         self.model_type = model_type
         self.model_template_type = model_template_type
     
-    MODULE_LOSSES: Dict[Modules, List[Dict[str, Any]]] = {}
+    MODULE_LOSSES: Dict[Modules, List[LossData]] = {}
     TARGET_LOSS_MODULE: Optional[Modules] = None
     
     @abstractmethod
@@ -51,18 +61,13 @@ class TrainContext(ABC):
             mod_losses = []
             
             for loss in losses:
-                callable_type = loss["callable_type"]
-                
-                callable_fn = callable_type(target_module) if target_module else callable_type()
-                loss_name = loss["name"]
-                loss_weight = loss["weight"]
-                exec_phase = loss["exec_phase"]
+                callable_fn = loss.callable_type(target_module, **loss.init) if target_module else loss.callable_type(**loss.init)
                 
                 loss_it = LossItem(
                     loss_callable=callable_fn,
-                    name=loss_name,
-                    weight=loss_weight,
-                    exec_phase=exec_phase
+                    name=loss.name,
+                    weight=loss.weight,
+                    exec_phase=loss.exec_phase
                 )
                 
                 mod_losses.append(loss_it)
@@ -80,7 +85,7 @@ class TrainContext(ABC):
             processors=[
                 RotateMask(),
                 AdjustToContent(),
-                Crop(k=0.5),
+                Crop(k=1.0),
             ]
         )
         return dataset_preprocessor.get_metadata()

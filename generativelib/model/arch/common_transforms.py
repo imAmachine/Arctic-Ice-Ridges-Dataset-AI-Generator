@@ -1,5 +1,5 @@
 import random
-from typing import List
+from typing import List, Literal
 import numpy as np
 import torch
 import torch.nn as nn
@@ -33,12 +33,26 @@ class RandomRotate(nn.Module):
 
 
 class BinarizeTransform(nn.Module):
-    def __init__(self):
+    def __init__(self, threshold_type: Literal["mean_std", "bin", "byte"] = "bin"):
         super().__init__()
+        self.threshold_type = threshold_type
 
     def forward(self, x: torch.Tensor):
-        threshold = x.mean().item() + x.std().item()
-        return (x >= threshold).float()
+        threshold = None
+        
+        if self.threshold_type == "mean_std":
+            threshold = x.mean().item() + x.std().item()
+        
+        if self.threshold_type == "bin":
+            threshold = 0.5
+        
+        if self.threshold_type == "byte":
+            threshold = 255 / 2
+        
+        if threshold:
+            return (x >= threshold).float()
+        
+        raise ValueError('Threshold value is None')
 
 
 def get_common_transforms(target_img_size: int) -> T.Compose:
@@ -51,7 +65,7 @@ def get_common_transforms(target_img_size: int) -> T.Compose:
         T.RandomVerticalFlip(p=0.8),
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
-        BinarizeTransform(),
+        BinarizeTransform(threshold_type="mean_std"),
     ])
 
 def get_infer_transforms(target_img_size: int) -> T.Compose:
@@ -59,5 +73,5 @@ def get_infer_transforms(target_img_size: int) -> T.Compose:
         T.ToImage(),
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
-        BinarizeTransform(),
+        BinarizeTransform(threshold_type="mean_std"),
     ])
