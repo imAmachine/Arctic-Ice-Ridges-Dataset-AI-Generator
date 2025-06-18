@@ -7,14 +7,14 @@ from generativelib.model.train.base import OptimizationTemplate
 from generativelib.model.train.train import VisualizeHook
 from generativelib.preprocessing.processors import *
 
-from src.train_context import LossData, TrainContext
+from src.train_context import InitLossData, TrainContext
 from src.diffusion.diffusion_templates import DiffusionTemplate
 
 
 class DiffusionTrainContext(TrainContext):
     MODULE_LOSSES = {
         Modules.DIFFUSION: [
-            LossData(
+            InitLossData(
                 callable_type=nn.MSELoss,
                 name=LossName.MSE.name,
                 weight=1.0,

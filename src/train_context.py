@@ -19,7 +19,7 @@ from generativelib.preprocessing.processors import *
 
 
 @dataclass
-class LossData:
+class InitLossData:
     callable_type: Type[nn.Module]
     name: str
     weight: float
@@ -38,7 +38,7 @@ class TrainContext(ABC):
         self.model_type = model_type
         self.model_template_type = model_template_type
     
-    MODULE_LOSSES: Dict[Modules, List[LossData]] = {}
+    MODULE_LOSSES: Dict[Modules, List[InitLossData]] = {}
     TARGET_LOSS_MODULE: Optional[Modules] = None
     
     @abstractmethod

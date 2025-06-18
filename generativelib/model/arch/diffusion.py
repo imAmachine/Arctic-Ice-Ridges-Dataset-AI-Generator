@@ -3,10 +3,9 @@ from diffusers.models.unets.unet_2d import UNet2DModel
 
 
 class DiffusionUNet(nn.Module):
-    def __init__(self, in_ch=1, f_base=64):
+    def __init__(self, in_ch, f_base):
         super().__init__()
         self.model = UNet2DModel(
-            sample_size=256,
             in_channels=in_ch,
             out_channels=1,
             layers_per_block=2,

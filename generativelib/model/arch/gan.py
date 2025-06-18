@@ -84,6 +84,7 @@ class GanGenerator(nn.Module):
         # Финальный слой
         self.final = nn.Sequential(
             nn.ConvTranspose2d(f_base, 1, kernel_size=3, stride=1, padding=1, bias=True),
+            nn.Tanh()
         )
 
     def forward(self, x):
