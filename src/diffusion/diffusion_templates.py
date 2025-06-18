@@ -1,7 +1,7 @@
-from diffusers import DDPMScheduler
+from diffusers.schedulers.scheduling_ddpm import DDPMScheduler, DDPMSchedulerOutput
 import torch
 from tqdm import tqdm
-from typing import Dict, Tuple
+from typing import Any, Dict, Tuple, cast
 
 # enums
 from generativelib.model.arch.enums import GenerativeModules
@@ -14,56 +14,100 @@ from generativelib.model.evaluators.losses import *
 
 
 class DiffusionTemplate(OptimizationTemplate):
-    def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
+    scheduler: DDPMScheduler
+    optim: ModuleOptimizer
+
+    def __init__(
+        self,
+        model_params: Dict[str, Any],
+        arch_optimizers: ModuleOptimizersCollection
+    ) -> None:
         super().__init__(model_params, arch_optimizers)
-        self.scheduler = DDPMScheduler(
-            num_train_timesteps=model_params.get('num_timesteps', 1000)
+
+        num_ts = int(model_params.get('num_timesteps', 1000))
+        self.scheduler = DDPMScheduler(num_train_timesteps=num_ts)
+        self.optim = self.optimizers.by_type(GenerativeModules.DIFFUSION)
+
+    def _make_timesteps(
+        self,
+        batch_size: int,
+        device: torch.device
+    ) -> torch.Tensor:
+        """
+        Возвращает симметричный тензор timesteps dtype=int64 на нужном device.
+        """
+        half = batch_size // 2 + 1
+        num_ts = int(self.scheduler.config.num_train_timesteps) # type: ignore
+
+        t1 = torch.randint(
+            low=0,
+            high=num_ts,
+            size=(half,),
+            device=device,
+            dtype=torch.int64
         )
-        self.dif_optim = self.model_optimizers.by_type(GenerativeModules.DIFFUSION)
+        t2 = num_ts - t1 - 1
+        all_ts = torch.cat([t1, t2], dim=0)[:batch_size]
+        return all_ts
 
-    def get_dif_optimizer(self) -> ModuleOptimizer:
-        if self.dif_optim is None:
-            raise ValueError('Оптимизатор генератора is None')
-        
-        return self.dif_optim
-
-    def _add_noise(self, target: torch.Tensor, timestamp: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _add_noise(
+        self,
+        target: torch.Tensor,
+        timesteps: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Добавляем гауссов шум в target на заданных timesteps.
+        """
         noise = torch.randn_like(target)
-        noise_image = self.scheduler.add_noise(target, noise, timestamp)
-        return noise_image, noise
+        noisy = self.scheduler.add_noise(target, noise, timesteps) # type: ignore
+        return noisy, noise
 
-    def _train(self, inp: torch.Tensor, target: torch.Tensor) -> None:
-        timesteps = torch.randint(
-                    low=0, high=self.scheduler.config.num_train_timesteps, size=(inp.size(0) // 2 + 1,)
-                ).to(inp.device)
-        timesteps = torch.cat([timesteps, self.scheduler.config.num_train_timesteps - timesteps - 1], dim=0)[:inp.size(0)]
+    def _train(
+        self,
+        inp: torch.Tensor,
+        trg: torch.Tensor
+    ) -> None:
+        timesteps = self._make_timesteps(inp.size(0), inp.device)
+        noisy, noise = self._add_noise(inp, timesteps)
+        noise_pred = self.optim.module(noisy, timesteps)
+        self.optim.optimize(noise_pred, noise)
 
-        noisy_images, noise = self._add_noise(inp, timesteps)
-        noise_fake = self.dif_optim.module(noisy_images, timesteps)
-        self.dif_optim.optimize(noise_fake, noise)
-
-    def _valid(self, inp: torch.Tensor, target: torch.Tensor) -> None:
-        timesteps = torch.randint(
-                    low=0, high=self.scheduler.config.num_train_timesteps, size=(inp.size(0) // 2 + 1,)
-                ).to(inp.device)
-        timesteps = torch.cat([timesteps, self.scheduler.config.num_train_timesteps - timesteps - 1], dim=0)[:inp.size(0)]
-
-        noisy_images, noise = self._add_noise(inp, timesteps)
+    def _valid(
+        self,
+        inp: torch.Tensor,
+        trg: torch.Tensor
+    ) -> None:
+        timesteps = self._make_timesteps(inp.size(0), inp.device)
+        noisy, noise = self._add_noise(inp, timesteps)
         with torch.no_grad():
-            noise_pred = self.dif_optim.module(noisy_images, timesteps)
-            self.dif_optim.validate(noise_pred, noise)
+            noise_pred = self.optim.module(noisy, timesteps)
+            self.optim.validate(noise_pred, noise)
 
-    def _generate_from_noise(self, target: torch.Tensor) -> torch.Tensor:
-        # [AI METHOD]
+    def _generate_from_noise(
+        self,
+        target: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Сэмплинг из шума обратно в изображение.
+        """
         noise = torch.randn_like(target)
-        self.scheduler.set_timesteps(self.scheduler.config.num_train_timesteps)
-        
+        num_ts = int(self.scheduler.config.num_train_timesteps) # type: ignore
+        self.scheduler.set_timesteps(num_ts)
+
         with torch.no_grad():
             for t in tqdm(self.scheduler.timesteps, desc="Sampling"):
-                timesteps_tensor = t.expand(target.size(0)).to(target.device)
-                noise_pred = self.dif_optim.module(noise, timesteps_tensor)
-
-                scheduler_output = self.scheduler.step(noise_pred, t, noise)
-                noise = scheduler_output.prev_sample
+                step = int(t)
+                ts = torch.full(
+                    (target.size(0),),
+                    step,
+                    dtype=torch.int64,
+                    device=target.device
+                )
+                pred = self.optim.module(noise, ts)
+                
+                raw_out = self.scheduler.step(pred, step, noise, return_dict=True)
+                out = cast(DDPMSchedulerOutput, raw_out)
+                
+                noise = out.prev_sample
 
         return noise

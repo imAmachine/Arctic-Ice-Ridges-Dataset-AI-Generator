@@ -26,18 +26,17 @@ def parse_arguments() -> argparse.Namespace:
 
 def main():
     args = parse_arguments()
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    model_type = ModelTypes[args.model.upper()]
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if args.gui:
         i_conf_deserializer = InferenceConfigDeserializer(configs_folder)
         gui_context = AppStart(i_conf_deserializer)
         gui_context.start()
-
     else:
-        model_type = ModelTypes[args.model.upper()]
         t_conf_deserializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
-        
         train_manager = None
+        train_context = None
         
         if model_type is ModelTypes.GAN:
             train_context = GanTrainContext(t_conf_deserializer, ModelTypes.GAN, GanTemplate)
@@ -45,8 +44,9 @@ def main():
         if model_type is ModelTypes.DIFFUSION:
             train_context = DiffusionTrainContext(t_conf_deserializer, ModelTypes.DIFFUSION, DiffusionTemplate)
         
-        train_manager = train_context.get_train_manager(device)
-        train_manager.run(is_load_weights=args.load_weights)
+        if train_context:
+            train_manager = train_context.get_train_manager(device)
+            train_manager.run(is_load_weights=args.load_weights)
 
 if __name__ == '__main__':
     main()

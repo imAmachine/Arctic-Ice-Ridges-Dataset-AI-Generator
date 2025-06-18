@@ -5,7 +5,10 @@ from typing import Callable, Dict
 import os
 from typing import Callable, Dict
 
+import matplotlib
 from matplotlib import pyplot as plt
+matplotlib.use('Agg')
+
 import torch
 from tqdm import tqdm
 
@@ -98,8 +101,10 @@ class TrainManager:
         
         # пути
         model_folder_path = self.train_data.model_out_folder
+        
         checkpoint_folder = os.path.join(model_folder_path, 'checkpoints')
         os.makedirs(checkpoint_folder, exist_ok=True)
+        
         checkpoint_path = os.path.join(checkpoint_folder, 'checkpoint.pt')
         visualizations_folder = os.path.join(model_folder_path, 'visualizations')
         
@@ -111,7 +116,7 @@ class TrainManager:
         self.optim_template.to(self.device)
         
         if is_load_weights:
-            CheckpointManager.load_state(self.optim_template.optimizers, checkpoint_folder)
+            CheckpointManager.load_state(self.optim_template.optimizers, checkpoint_path)
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
@@ -125,5 +130,5 @@ class TrainManager:
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
-            checkpoint(checkpoint_folder, epoch_id, self.optim_template.optimizers) # вызывает сохранение чекпоинта
+            checkpoint(checkpoint_path, epoch_id, self.optim_template.optimizers) # вызывает сохранение чекпоинта
                 

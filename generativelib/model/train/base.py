@@ -133,18 +133,17 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
             optim.from_state_dict(state_dict[optim.module.model_type.name.lower()])
         return self
     
-    def by_type(self, model_type: GenerativeModules) -> Optional[ModuleOptimizer]:
-        for arch_optimizer in self:
-            if arch_optimizer.module.model_type == model_type:
-                return arch_optimizer
+    def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
+        results = list(set(arch_optimizer for arch_optimizer in self if arch_optimizer.module.model_type == model_type))
+        if len(results) > 0:
+            return results[0]
+        
+        raise ValueError(f'No optimizers found by type: {model_type.name}')
     
     def add_evals(self, evals: Dict[GenerativeModules, List[LossItem]]) -> Self:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
-            
-            if cur_optimizer:
-                cur_optimizer.evals.extend(evals_list)
-        
+            cur_optimizer.evals.extend(evals_list)
         return self
     
     def mode_to(self, phase: ExecPhase) -> Self:
