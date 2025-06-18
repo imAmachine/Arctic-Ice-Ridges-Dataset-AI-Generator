@@ -73,7 +73,9 @@ class CheckpointHook:
     def __init__(self, interval: int):
         self.interval = interval
         
-    def __call__(self, file_path: str, epoch_id: int, obj: ITorchState):
+    def __call__(self, folder_path: str, epoch_id: int, obj: ITorchState):
+        file_path = os.path.join(folder_path, 'checkpoint.pt')
+        
         if (epoch_id + 1) % self.interval == 0:
             CheckpointManager.save_state(obj, file_path)
 
@@ -109,7 +111,7 @@ class TrainManager:
         self.optim_template.to(self.device)
         
         if is_load_weights:
-            CheckpointManager.load_state(self.optim_template.model_optimizers, checkpoint_path)
+            CheckpointManager.load_state(self.optim_template.optimizers, checkpoint_folder)
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
@@ -123,5 +125,5 @@ class TrainManager:
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)
             
-            checkpoint(checkpoint_path, epoch_id, self.optim_template.model_optimizers) # вызывает сохранение чекпоинта
-            
+            checkpoint(checkpoint_folder, epoch_id, self.optim_template.optimizers) # вызывает сохранение чекпоинта
+                

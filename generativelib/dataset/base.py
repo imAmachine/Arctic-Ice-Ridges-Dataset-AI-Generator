@@ -3,7 +3,7 @@ from typing import Dict, Type
 import torch
 
 
-class BaseMaskProcessor(ABC):
+class MaskProcessor(ABC):
     @abstractmethod
     def __init__(self, **params):
         pass
@@ -22,7 +22,7 @@ class BaseMaskProcessor(ABC):
         if name not in MASK_PROCESSORS:
             raise KeyError(f"Неизвестный mask-processor с именем '{name}'")
 
-        proc_cls: Type[BaseMaskProcessor] = MASK_PROCESSORS[name]
+        proc_cls: Type[MaskProcessor] = MASK_PROCESSORS[name]
         params = values.get("params", {})
 
         return proc_cls(**params)

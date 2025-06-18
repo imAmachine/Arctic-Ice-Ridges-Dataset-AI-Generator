@@ -2,10 +2,10 @@ import random
 from typing import Tuple
 import numpy as np
 import torch
-from generativelib.dataset.base import BaseMaskProcessor
+from generativelib.dataset.base import MaskProcessor
 
 
-class Padding(BaseMaskProcessor):
+class Padding(MaskProcessor):
     def __init__(self, ratio: float = .2):
         self.ratio = ratio
     
@@ -18,7 +18,7 @@ class Padding(BaseMaskProcessor):
         cloned_mask[top : top + bh, left : left + bw] = 0.0
 
 
-class EllipsoidPadding(BaseMaskProcessor):
+class EllipsoidPadding(MaskProcessor):
     def __init__(self, ratio: float = .2):
         self.ratio = ratio
 
@@ -50,7 +50,7 @@ class EllipsoidPadding(BaseMaskProcessor):
         cloned_mask[inside] = 0.0
 
 
-class RandomWindow(BaseMaskProcessor):
+class RandomWindow(MaskProcessor):
     def __init__(self, window_scale_size: float=0.5):
         self.window_scale_size = window_scale_size
         
@@ -70,7 +70,7 @@ class RandomWindow(BaseMaskProcessor):
     
 
 
-class RandomHoles(BaseMaskProcessor):
+class RandomHoles(MaskProcessor):
     def __init__(self,
                  count: int = 1,
                  min_sz: int = 30,

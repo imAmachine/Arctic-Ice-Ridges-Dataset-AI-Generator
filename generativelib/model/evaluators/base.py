@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Self
 
 # enum
+from generativelib.model.arch.enums import GenerativeModules
 from generativelib.model.evaluators.losses import *
 from generativelib.model.evaluators.metrics import *
-from sklearn.metrics import f1_score, jaccard_score, precision_score
+# from sklearn.metrics import f1_score, jaccard_score, precision_score
 
 from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.enums import EvaluatorType, LossName, MetricName
@@ -23,20 +24,19 @@ LOSSES = {
     LossName.DICE.name: DiceLoss
 }
 
-METRICS = {
-    MetricName.PRECISION.name: precision_score,
-    MetricName.F1.name: f1_score,
-    MetricName.IOU.name: jaccard_score,
-    MetricName.FRACTAL_DIMENSION.name: FractalMetric,
-}
+# METRICS = {
+#     MetricName.PRECISION.name: precision_score,
+#     MetricName.F1.name: f1_score,
+#     MetricName.IOU.name: jaccard_score,
+#     MetricName.FRACTAL_DIMENSION.name: FractalMetric,
+# }
 
 
 @dataclass
-class EvalItem:
+class LossItem:
     """Датакласс для метрики или лосса и нужной логикой """
-    callable_fn: torch.nn.Module
+    loss_callable: torch.nn.Module
     name: str
-    type: EvaluatorType
     weight: float = 1.0
     exec_phase: ExecPhase = ExecPhase.ANY
     
@@ -46,20 +46,16 @@ class EvalItem:
         exec_params = eval_info[EXECUTION_KEY]
         init_params = eval_info[INIT_KEY]
         
-        # тип — метрика или лосс
-        eval_type = EvaluatorType.METRIC if eval_name in MetricName else EvaluatorType.LOSS
-        
         weight = exec_params["weight"]
         if weight > 0.0:
             loss_cls = LOSSES[eval_name] # класс лосса
-            eval_fn = loss_cls(**init_params) # nn.Module как callable_fn для EvalItem
+            loss_callable = loss_cls(**init_params) # nn.Module как callable_fn для LossItem
             phase = ExecPhase[exec_params[EXEC_PHASE_KEY]]
             
-            # EvalItem
+            # LossItem
             return cls(
-                callable_fn=eval_fn,
+                loss_callable=loss_callable,
                 name=eval_name,
-                type=eval_type,
                 weight=weight,
                 exec_phase=phase
             )
@@ -67,10 +63,11 @@ class EvalItem:
         return None
 
     def __call__(self, generated_sample: 'torch.Tensor', real_sample: 'torch.Tensor') -> 'torch.Tensor':
-        return self.callable_fn(generated_sample, real_sample) * self.weight
+        return self.loss_callable(generated_sample, real_sample) * self.weight
 
     def to(self, device: torch.device):
-        self.callable_fn.to(device)
+        self.loss_callable.to(device)
+
 
 class EvalsCollector:
     # [CLASS AI GENERATED]

@@ -11,7 +11,8 @@ from generativelib.dataset.mask_processors import *
 from generativelib.model.arch.enums import ModelTypes
 from generativelib.model.enums import ExecPhase
 from generativelib.preprocessing.processors import *
-# from src.tester import ParamGridTester
+
+from src.gan.gan_train_context import GanTrainContext
 
 configs_folder = './configs'
 

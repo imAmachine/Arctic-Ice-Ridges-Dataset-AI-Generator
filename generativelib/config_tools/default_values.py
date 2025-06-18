@@ -17,7 +17,7 @@ MODEL_PARAMS_KEY = "model_params"
 MODULES_KEY = "modules"
 DATASET_KEY = "dataset"
 ARCH_PARAMS_KEY = "arch"
-EVALS_KEY = "evals"
+LOSSES_KEY = "losses"
 EXEC_PHASE_KEY = "exec_phase"
 PATH_KEY = "path"
 EXECUTION_KEY = "execution"
@@ -43,7 +43,7 @@ def get_default_train_conf():
         PATH_KEY: {
             "masks": "./data/masks",
             "dataset": "./data/preprocessed",
-            "processed": "./data/processed/"
+            "processed": "./data/processed"
         }
     }
     mask_processors = {
@@ -102,13 +102,27 @@ def get_default_train_conf():
     }
     
     for module in GenerativeModules:
+        models[ModelTypes.GAN.name.lower()][MODULES_KEY][module.name.lower()] = {
+            ARCH_PARAMS_KEY: {
+                "in_ch": 1,
+                "f_base": 32,
+            },
+            LOSSES_KEY: losses,
+            OPTIMIZER_KEY: {
+                "type": "adam",
+                "params": {
+                    "lr": 0.0005,
+                    "betas": [0.0, 0.9]
+                }
+            },
+        }
         if "gan" in module.name.lower():
             models[ModelTypes.GAN.name.lower()][MODULES_KEY][module.name.lower()] = {
                 ARCH_PARAMS_KEY: {
                     "in_ch": 1,
                     "f_base": 32,
                 },
-                EVALS_KEY: losses,
+                LOSSES_KEY: losses,
                 OPTIMIZER_KEY: {
                     "type": "adam",
                     "params": {
@@ -124,7 +138,7 @@ def get_default_train_conf():
                     "in_ch": 1,
                     "f_base": 32,
                 },
-                EVALS_KEY: losses,
+                LOSSES_KEY: losses,
                 OPTIMIZER_KEY: {
                     "type": "adam",
                     "params": {
@@ -139,25 +153,6 @@ def get_default_train_conf():
         MODELS_KEY: models
     }
 
-def get_default_test_conf():
-    return {
-        "gan": {
-            "Trainer": {
-                "epochs": 30,
-                "checkpoints_ratio": 15
-            },
-            "Dataset": {
-                "augs_per_img": 5,
-                "batch_size": 3,
-                "val_ratio": 0.2,
-                "workers": 4
-            }
-        }
-    }
-    
 def get_default_conf(phase: ExecPhase):
     if phase == ExecPhase.TRAIN:
         return get_default_train_conf()
-    
-    if phase == ExecPhase.TEST:
-        return get_default_test_conf()
