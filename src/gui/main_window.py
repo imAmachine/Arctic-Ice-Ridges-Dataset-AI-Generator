@@ -8,7 +8,7 @@ from src.gui.inference_window import InferenceWindow
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, config):
         super().__init__()
-        self.interfaces = config.params_by_section(section='path', keys='interfaces')
+        self.interfaces = './src/gui/interfaces'
         path = os.path.join(self.interfaces, 'main_window.ui')
         uic.loadUi(path, self)
         

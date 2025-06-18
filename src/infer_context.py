@@ -15,14 +15,14 @@ from src.config_deserializer import InferenceConfigDeserializer
 
 
 class InferenceContext(ABC):
-    def __init__(self, config):
+    def __init__(self, config, device: torch.device):
         super().__init__()
         self.config = config
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = device
 
         self.generator = None
-        self.image_size = None
-        self.outpainting_ratio = None
+        self.image_size = 256
+        self.outpainting_ratio = 0.0
 
     @staticmethod
     def load_model(model_name: str, config: InferenceConfigDeserializer):
@@ -42,17 +42,21 @@ class InferenceContext(ABC):
         self.image_size = params.get("image_size", 256)
         self.outpainting_ratio = params.get("outpainting_size", 0.2)
         
-    def _prepare_input_image(self, image: torch.Tensor) -> torch.Tensor:
+    def _prepare_input_image(self, image: np.ndarray) -> torch.Tensor:
         infer_preprocessors = [
                 RotateMask(),
                 AdjustToContent(),
-                Crop(k=0.5),
+                Crop(k=1.0),
             ]
-        infer_preprocessors.append(InferenceProcessor(outpaint_ratio=self.outpainting_ratio))
+        
+        infer_preprocessors.append(
+            InferenceProcessor(outpaint_ratio=self.outpainting_ratio)
+        )
+        
         preprocessor = DataPreprocessor(processors=infer_preprocessors)
         preprocessed_img = preprocessor.process_image(image)
-
         transforms = get_infer_transforms(self.image_size)
+        
         return transforms(preprocessed_img).to(self.device)
         
     def _insert_original_mask(self, gen_img: torch.Tensor, orig_np) -> torch.Tensor:
