@@ -1,7 +1,7 @@
 from generativelib.model.evaluators.enums import LossName
 from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import OptimizationTemplate
-from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.arch.enums import Modules
 from generativelib.model.enums import ExecPhase
 from generativelib.model.train.train import VisualizeHook
 from generativelib.preprocessing.processors import *
@@ -11,7 +11,7 @@ from src.train_context import TrainContext
 
 class GanTrainContext(TrainContext):
     MODULE_LOSSES = {
-        GenerativeModules.GAN_GENERATOR: [
+        Modules.GAN_GENERATOR: [
             {
                 "callable_type": GeneratorLoss,
                 "name": LossName.ADVERSARIAL.name,
@@ -19,7 +19,7 @@ class GanTrainContext(TrainContext):
                 "exec_phase": ExecPhase.ANY
             }
         ],
-        GenerativeModules.GAN_DISCRIMINATOR: [
+        Modules.GAN_DISCRIMINATOR: [
             {
                 "callable_type": WassersteinLoss,
                 "name": LossName.WASSERSTEIN.name,
@@ -34,11 +34,11 @@ class GanTrainContext(TrainContext):
             }
         ]
     }
-    TARGET_LOSS_MODULE = GenerativeModules.GAN_DISCRIMINATOR
+    TARGET_LOSS_MODULE = Modules.GAN_DISCRIMINATOR
 
     def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:
         optimizers_collection = template.optimizers
-        gen_optimizer = optimizers_collection.by_type(GenerativeModules.GAN_GENERATOR)
+        gen_optimizer = optimizers_collection.by_type(Modules.GAN_GENERATOR)
         gen_func = None
         
         if gen_optimizer:

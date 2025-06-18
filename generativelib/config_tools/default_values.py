@@ -1,7 +1,7 @@
 from generativelib.model.evaluators.base import LOSSES
 
 # enums
-from generativelib.model.arch.enums import GenerativeModules, ModelTypes
+from generativelib.model.arch.enums import Modules, ModelTypes
 from generativelib.model.enums import ExecPhase
 
 from generativelib.preprocessing.processors import *
@@ -62,7 +62,7 @@ def get_default_train_conf():
         "RandomWindow": {
             "enabled": True,
             "params": {
-                "window_scale_size": 0.5,
+                "window_scale_size": 0.8,
             }
         },
         "RandomHoles": {
@@ -101,21 +101,7 @@ def get_default_train_conf():
         for loss_name in LOSSES
     }
     
-    for module in GenerativeModules:
-        models[ModelTypes.GAN.name.lower()][MODULES_KEY][module.name.lower()] = {
-            ARCH_PARAMS_KEY: {
-                "in_ch": 1,
-                "f_base": 32,
-            },
-            LOSSES_KEY: losses,
-            OPTIMIZER_KEY: {
-                "type": "adam",
-                "params": {
-                    "lr": 0.0005,
-                    "betas": [0.0, 0.9]
-                }
-            },
-        }
+    for module in Modules:
         if "gan" in module.name.lower():
             models[ModelTypes.GAN.name.lower()][MODULES_KEY][module.name.lower()] = {
                 ARCH_PARAMS_KEY: {

@@ -7,7 +7,7 @@ from collections import defaultdict
 
 
 from generativelib.model.arch.base import ArchModule
-from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.arch.enums import Modules
 from generativelib.model.common.interfaces import ITorchState
 from generativelib.model.enums import ExecPhase
 
@@ -133,14 +133,14 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
             optim.from_state_dict(state_dict[optim.module.model_type.name.lower()])
         return self
     
-    def by_type(self, model_type: GenerativeModules) -> ModuleOptimizer:
+    def by_type(self, model_type: Modules) -> ModuleOptimizer:
         results = list(set(arch_optimizer for arch_optimizer in self if arch_optimizer.module.model_type == model_type))
         if len(results) > 0:
             return results[0]
         
         raise ValueError(f'No optimizers found by type: {model_type.name}')
     
-    def add_evals(self, evals: Dict[GenerativeModules, List[LossItem]]) -> Self:
+    def add_evals(self, evals: Dict[Modules, List[LossItem]]) -> Self:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
             cur_optimizer.evals.extend(evals_list)

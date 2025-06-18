@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Union
 from generativelib.config_tools.base import ConfigReader
 from generativelib.config_tools.default_values import ARCH_PARAMS_KEY, LOSSES_KEY, MASK_PROCESSORS_KEY, MODEL_PARAMS_KEY, MODELS_KEY, MODULES_KEY, OPTIMIZER_KEY
 from generativelib.dataset.base import MaskProcessor
-from generativelib.model.arch.enums import ModelTypes, GenerativeModules
+from generativelib.model.arch.enums import ModelTypes, Modules
 from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.base import LossItem
 from generativelib.model.train.base import ArchModule, ModuleOptimizer, ModuleOptimizersCollection
@@ -14,11 +14,11 @@ class InferenceConfigDeserializer(ConfigReader):
         super().__init__(config_folder_path, ExecPhase.TRAIN)
         self._models: Dict = self.config[MODELS_KEY]
 
-    def get_module_arch_info(self, model_type: GenerativeModules, module_name: str) -> Dict:
+    def get_module_arch_info(self, model_type: Modules, module_name: str) -> Dict:
         modules = self._models[model_type.name.lower()][MODULES_KEY]
         return modules[module_name][ARCH_PARAMS_KEY]
     
-    def create_arch_module(self, model_type: GenerativeModules, module_name: str) -> ArchModule:
+    def create_arch_module(self, model_type: Modules, module_name: str) -> ArchModule:
         arch_info = self.get_module_arch_info(model_type, module_name)
         return ArchModule.cls_from_dict(module_name, arch_info)
 
@@ -80,7 +80,7 @@ class TrainConfigDeserializer(ConfigReader):
         
         return arch_collect
 
-    def model_params(self, model_type: Union[ModelTypes, GenerativeModules]) -> Dict[str, Any]:
+    def model_params(self, model_type: Union[ModelTypes, Modules]) -> Dict[str, Any]:
         """Возвращает параметры модели (глобальные параметры инициализации, не оптимизаторы)."""
         model_key = model_type.name.lower()
         model_entry = self._models.get(model_key, {})

@@ -4,7 +4,7 @@ from tqdm import tqdm
 from typing import Any, Dict, Tuple, cast
 
 # enums
-from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.arch.enums import Modules
 
 # base
 from generativelib.model.train.base import ModuleOptimizer, ModuleOptimizersCollection, OptimizationTemplate
@@ -26,7 +26,7 @@ class DiffusionTemplate(OptimizationTemplate):
 
         num_ts = int(model_params.get('num_timesteps', 1000))
         self.scheduler = DDPMScheduler(num_train_timesteps=num_ts)
-        self.optim = self.optimizers.by_type(GenerativeModules.DIFFUSION)
+        self.optim = self.optimizers.by_type(Modules.DIFFUSION)
 
     def _make_timesteps(
         self,

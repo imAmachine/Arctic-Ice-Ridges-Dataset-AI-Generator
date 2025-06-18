@@ -7,7 +7,7 @@ from tqdm import tqdm
 from typing import cast
 
 from generativelib.model.arch.common_transforms import get_common_transforms, get_infer_transforms
-from generativelib.model.arch.enums import GenerativeModules, ModelTypes
+from generativelib.model.arch.enums import Modules, ModelTypes
 from generativelib.model.evaluators.base import EvalItem
 from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
@@ -24,7 +24,7 @@ class DiffusionInferenceContext(InferenceContext):
     def __init__(self, config: InferenceConfigDeserializer):
         super().__init__(config)
 
-        params = config.get_global_section(GenerativeModules.DIFFUSION)
+        params = config.get_global_section(Modules.DIFFUSION)
         self.scheduler = DDPMScheduler(num_train_timesteps=params.get("num_timesteps", 1000))
 
         self._load_params()
@@ -35,7 +35,7 @@ class DiffusionInferenceContext(InferenceContext):
             model_type=ModelTypes.DIFFUSION,
             module_name="diffusion"
         )
-        self.generator = ModuleInference(GenerativeModules.DIFFUSION, arch_module.module).to(self.device)
+        self.generator = ModuleInference(Modules.DIFFUSION, arch_module.module).to(self.device)
 
     def load_weights(self, path: str):
         self.generator.load_weights(path)

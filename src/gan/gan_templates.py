@@ -3,7 +3,7 @@ from typing import  Dict
 import torch
 
 # enums
-from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.arch.enums import Modules
 
 # base
 from generativelib.model.train.base import ModuleOptimizer, ModuleOptimizersCollection, OptimizationTemplate
@@ -16,8 +16,8 @@ class GanTemplate(OptimizationTemplate):
     def __init__(self, model_params: Dict, arch_optimizers: ModuleOptimizersCollection):
         super().__init__(model_params, arch_optimizers)
         self.n_critic = model_params.get('n_critic', 5)
-        self.gen_optim = self.optimizers.by_type(GenerativeModules.GAN_GENERATOR)
-        self.discr_optim = self.optimizers.by_type(GenerativeModules.GAN_DISCRIMINATOR)
+        self.gen_optim = self.optimizers.by_type(Modules.GAN_GENERATOR)
+        self.discr_optim = self.optimizers.by_type(Modules.GAN_DISCRIMINATOR)
     
     def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
         if self.gen_optim is None:

@@ -1,6 +1,6 @@
 from typing import cast
 
-from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.arch.enums import Modules
 from generativelib.model.enums import ExecPhase
 from generativelib.model.evaluators.enums import LossName
 from generativelib.model.evaluators.losses import *
@@ -14,7 +14,7 @@ from src.diffusion.diffusion_templates import DiffusionTemplate
 
 class DiffusionTrainContext(TrainContext):
     MODULE_LOSSES = {
-        GenerativeModules.DIFFUSION: [
+        Modules.DIFFUSION: [
             {
                 "callable_type": nn.MSELoss,
                 "name": LossName.MSE.name,
@@ -23,7 +23,7 @@ class DiffusionTrainContext(TrainContext):
             }
         ],
     }
-    TARGET_LOSS_MODULE = GenerativeModules.DIFFUSION
+    TARGET_LOSS_MODULE = Modules.DIFFUSION
     
     def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:
         dif_template = cast(DiffusionTemplate, template)

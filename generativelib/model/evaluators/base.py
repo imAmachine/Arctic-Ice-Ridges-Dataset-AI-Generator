@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Self
 
 # enum
-from generativelib.model.arch.enums import GenerativeModules
+from generativelib.model.arch.enums import Modules
 from generativelib.model.evaluators.losses import *
 from generativelib.model.evaluators.metrics import *
 # from sklearn.metrics import f1_score, jaccard_score, precision_score

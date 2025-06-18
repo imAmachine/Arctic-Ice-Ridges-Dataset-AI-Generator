@@ -4,7 +4,7 @@ import torchvision.transforms.v2 as T
 from PIL import Image
 from typing import cast
 
-from generativelib.model.arch.enums import GenerativeModules, ModelTypes
+from generativelib.model.arch.enums import Modules, ModelTypes
 from generativelib.model.evaluators.losses import *
 from generativelib.model.inference.base import ModuleInference
 from generativelib.preprocessing.processors import *
@@ -25,7 +25,7 @@ class GanInferenceContext(InferenceContext):
             model_type=ModelTypes.GAN,
             module_name="gan_generator"
         )
-        self.generator = ModuleInference(GenerativeModules.GAN_GENERATOR, arch_module.module).to(self.device)
+        self.generator = ModuleInference(Modules.GAN_GENERATOR, arch_module.module).to(self.device)
 
     def load_weights(self, path: str):
         self.generator.load_weights(path)

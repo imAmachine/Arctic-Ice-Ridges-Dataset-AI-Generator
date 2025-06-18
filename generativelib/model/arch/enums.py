@@ -4,7 +4,7 @@ from generativelib.model.arch.gan import GanDiscriminator, GanGenerator
 from generativelib.model.arch.diffusion import DiffusionUNet
 
 
-class GenerativeModules(Enum):
+class Modules(Enum):
     GAN_GENERATOR = GanGenerator
     GAN_DISCRIMINATOR = GanDiscriminator
     DIFFUSION = DiffusionUNet

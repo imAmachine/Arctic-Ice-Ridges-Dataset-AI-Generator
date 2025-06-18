@@ -10,7 +10,7 @@ from generativelib.model.evaluators.losses import *
 from generativelib.model.train.base import OptimizationTemplate
 from src.config_deserializer import TrainConfigDeserializer
 from generativelib.dataset.loader import DatasetCreator
-from generativelib.model.arch.enums import GenerativeModules, ModelTypes
+from generativelib.model.arch.enums import Modules, ModelTypes
 from generativelib.model.enums import ExecPhase
 from generativelib.model.train.train import CheckpointHook, TrainData, TrainManager, VisualizeHook
 from generativelib.preprocessing.preprocessor import DataPreprocessor
@@ -28,8 +28,8 @@ class TrainContext(ABC):
         self.model_type = model_type
         self.model_template_type = model_template_type
     
-    MODULE_LOSSES: Dict[GenerativeModules, List[Dict[str, Any]]] = {}
-    TARGET_LOSS_MODULE: Optional[GenerativeModules] = None
+    MODULE_LOSSES: Dict[Modules, List[Dict[str, Any]]] = {}
+    TARGET_LOSS_MODULE: Optional[Modules] = None
     
     @abstractmethod
     def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:

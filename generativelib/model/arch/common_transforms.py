@@ -31,22 +31,14 @@ class RandomRotate(nn.Module):
             return T.functional.rotate(x, angle)
         return x
 
-class BinarizeTransform(nn.Module):
-    def __init__(self, p=1.0):
-        super().__init__()
-        self.p = p
-
-    def forward(self, x):
-        if random.random() < self.p:
-            return (x >= x.std()).float()
-        return x
 
 class BinarizeTransform(nn.Module):
     def __init__(self):
         super().__init__()
 
     def forward(self, x: torch.Tensor):
-        return (x >= x.std()).float()
+        threshold = x.mean().item() + x.std().item()
+        return (x >= threshold).float()
 
 
 def get_common_transforms(target_img_size: int) -> T.Compose:
