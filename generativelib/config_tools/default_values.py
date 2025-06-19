@@ -33,8 +33,8 @@ def get_default_train_conf():
         },
         DATASET_KEY: {
             "img_size": 256,
-            "batch_size": 9,
-            "augs": 30,
+            "batch_size": 5,
+            "augs": 100,
             "validation_size": 0.2,
             "shuffle": True,
             "workers": 4,

@@ -94,7 +94,6 @@ class TrainContext(ABC):
         model_params = self.config_serializer.model_params(self.model_type)
         arch_collection = self.config_serializer.optimize_collection(self.model_type)
         template = self.model_template_type(model_params, arch_collection)
-        
         return template
     
     def _dataset_creator(self, dataset_metadata: Dict[str, Any], transforms: torchvision.transforms.v2.Compose) -> DatasetCreator:

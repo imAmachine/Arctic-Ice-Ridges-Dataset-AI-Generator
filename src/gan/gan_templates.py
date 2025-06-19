@@ -6,7 +6,7 @@ import torch
 from generativelib.model.arch.enums import Modules
 
 # base
-from generativelib.model.train.base import ModuleOptimizer, ModuleOptimizersCollection, OptimizationTemplate
+from generativelib.model.train.base import ModuleOptimizersCollection, OptimizationTemplate
 
 # evaluators
 from generativelib.model.evaluators.losses import *
@@ -19,13 +19,7 @@ class GanTemplate(OptimizationTemplate):
         self.gen_optim = self.optimizers.by_type(Modules.GAN_GENERATOR)
         self.discr_optim = self.optimizers.by_type(Modules.GAN_DISCRIMINATOR)
     
-    def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
-        if self.gen_optim is None:
-            raise ValueError('Оптимизатор генератора is None')
-        
-        if self.discr_optim is None:
-            raise ValueError('Оптимизатор дискриминатора is None')
-        
+    def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:        
         for _ in range(self.n_critic):
             with torch.no_grad():
                 fake = self.gen_optim.module(inp)
@@ -34,10 +28,7 @@ class GanTemplate(OptimizationTemplate):
         fake = self.gen_optim.module(inp)
         self.gen_optim.optimize(fake, trg)
 
-    def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
-        if self.gen_optim is None:
-            raise ValueError('Оптимизатор генератора is None')
-        
+    def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:        
         with torch.no_grad():
             fake = self.gen_optim.module(inp)
             for optimizer in self.optimizers:

@@ -96,7 +96,10 @@ class DatasetCreator:
                 dataset=dataset,
                 batch_size=self.dataset_params.get("batch_size", 3),
                 shuffle=self.dataset_params.get("shuffle", True),
-                num_workers=self.dataset_params.get("workers", 4)
+                num_workers=self.dataset_params.get("workers", 4),
+                pin_memory=True, 
+                prefetch_factor=4,
+                persistent_workers=True
             )
             
             return loader

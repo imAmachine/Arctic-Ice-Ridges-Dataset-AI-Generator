@@ -124,6 +124,7 @@ class TrainManager:
                 self.optim_template.mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
                 for inp, target in tqdm(loader):
                     inp, trg = inp.to(self.device), target.to(self.device)
+                    
                     self.optim_template.step(phase, inp, trg) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
                 
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы

@@ -33,9 +33,6 @@ class DiffusionTemplate(OptimizationTemplate):
         batch_size: int,
         device: torch.device
     ) -> torch.Tensor:
-        """
-        Возвращает симметричный тензор timesteps dtype=int64 на нужном device.
-        """
         half = batch_size // 2 + 1
         num_ts = int(self.scheduler.config.num_train_timesteps) # type: ignore
 
@@ -81,28 +78,37 @@ class DiffusionTemplate(OptimizationTemplate):
             noise_pred = self.optim.module(noisy, timesteps)
             self.optim.validate(noise_pred, noise)
 
-    def _generate_from_noise(
+    def _generate_from_input(
         self,
-        target: torch.Tensor
+        inp: torch.Tensor
     ) -> torch.Tensor:
-        noise = torch.randn_like(target)
-        num_ts = int(self.scheduler.config.num_train_timesteps) # type: ignore
+        num_ts  = int(self.scheduler.config.num_train_timesteps)   # type: ignore
+        t_start = num_ts - 1
+
+        t_tensor = torch.full(
+            (inp.size(0),), t_start,
+            device=inp.device, dtype=torch.int64
+        )
+
+        noise = torch.randn_like(inp)
+        x = self.scheduler.add_noise(inp, noise, t_tensor)     # type: ignore
+
         self.scheduler.set_timesteps(num_ts)
 
-        with torch.no_grad():
-            for t in tqdm(self.scheduler.timesteps, desc="Sampling"):
-                step = int(t)
-                ts = torch.full(
-                    (target.size(0),),
-                    step,
-                    dtype=torch.int64,
-                    device=target.device
-                )
-                pred = self.optim.module(noise, ts)
-                
-                raw_out = self.scheduler.step(pred, step, noise, return_dict=True)
-                out = cast(DDPMSchedulerOutput, raw_out)
-                
-                noise = out.prev_sample
+        timesteps_iter = (
+            tqdm(self.scheduler.timesteps,
+                desc="Sampling",
+                total=len(self.scheduler.timesteps),
+                leave=False)
+        )
 
-        return noise
+        with torch.no_grad():
+            for t in timesteps_iter:
+                ts = torch.full(
+                    (inp.size(0),), int(t),
+                    device=inp.device, dtype=torch.int64
+                )
+                eps_pred = self.optim.module(x, ts)
+                x = self.scheduler.step(eps_pred, t, x, return_dict=True).prev_sample # type: ignore
+
+        return x
