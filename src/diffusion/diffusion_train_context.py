@@ -27,5 +27,5 @@ class DiffusionTrainContext(TrainContext):
     
     def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:
         dif_template = cast(DiffusionTemplate, template)
-        gen_func = dif_template._generate_from_input
+        gen_func = dif_template.generate
         return self._visualize_hook(gen_callable=gen_func)

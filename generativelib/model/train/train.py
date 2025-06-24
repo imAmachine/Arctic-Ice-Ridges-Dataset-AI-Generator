@@ -67,7 +67,7 @@ class VisualizeHook:
     def __call__(self, device, folder_path: str, epoch_id, phase, loader):      
         if (epoch_id + 1) % self.interval == 0:
             with torch.no_grad():
-                inp, trg = next(iter(loader))
+                inp, trg, mask = next(iter(loader))
                 gen = self.gen(inp.to(device))
                 self.__save(folder_path, inp, trg, gen, phase)
 
@@ -115,17 +115,18 @@ class TrainManager:
         self.optim_template.to(self.device)
         
         if is_load_weights:
-            CheckpointManager.load_state(self.optim_template.optimizers, checkpoint_folder)
+            check_path = os.path.join(checkpoint_folder, "checkpoint.pt")
+            CheckpointManager.load_state(self.optim_template.optimizers, check_path)
         
         for epoch_id in range(epochs):
             for phase, loader in self.dataloaders.items():
                 print(f"\n=== Epoch {epoch_id + 1}/{epochs} === ЭТАП: {phase.name}\n")
                 
                 self.optim_template.mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
-                for inp, target in tqdm(loader):
-                    inp, trg = inp.to(self.device), target.to(self.device)
+                for inp, target, mask in tqdm(loader):
+                    inp, trg, mask = inp.to(self.device), target.to(self.device), mask.to(self.device)
                     
-                    self.optim_template.step(phase, inp, trg) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
+                    self.optim_template.step(phase, inp, trg, mask) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
                 
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)

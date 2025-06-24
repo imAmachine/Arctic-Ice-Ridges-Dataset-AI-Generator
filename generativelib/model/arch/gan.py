@@ -29,7 +29,7 @@ class SelfAttention(nn.Module):
         return out
 
 class GanGenerator(nn.Module):
-    def __init__(self, in_ch, f_base, n_down=4, n_residual=2, max_channels=256):
+    def __init__(self, in_ch, f_base, n_down=4, n_residual=2, max_channels=512):
         super().__init__()
 
         def capped_ch(ch):
@@ -104,7 +104,7 @@ class GanGenerator(nn.Module):
 
 
 class GanDiscriminator(nn.Module):
-    def __init__(self, in_ch, f_base, max_channels=256, layers_count=6):
+    def __init__(self, in_ch, f_base, max_channels=512, layers_count=6):
         super().__init__()
         
         def layer(in_channels, out_channels, k=4, s=2, p=1):

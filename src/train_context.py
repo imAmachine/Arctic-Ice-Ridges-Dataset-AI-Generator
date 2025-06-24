@@ -72,7 +72,7 @@ class TrainContext(ABC):
                 
                 mod_losses.append(loss_it)
                 
-            optimizers_collection.add_evals({
+            optimizers_collection.add_losses({
                 mod_type: mod_losses
             })
     

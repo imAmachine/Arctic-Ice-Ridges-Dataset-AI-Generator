@@ -19,17 +19,17 @@ class GanTemplate(OptimizationTemplate):
         self.gen_optim = self.optimizers.by_type(Modules.GAN_GENERATOR)
         self.discr_optim = self.optimizers.by_type(Modules.GAN_DISCRIMINATOR)
     
-    def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:        
+    def _train(self, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:        
         for _ in range(self.n_critic):
             with torch.no_grad():
                 fake = self.gen_optim.module(inp)
-            self.discr_optim.optimize(fake, trg)
+            self.discr_optim.optimize(fake, trg, mask)
         
         fake = self.gen_optim.module(inp)
-        self.gen_optim.optimize(fake, trg)
+        self.gen_optim.optimize(fake, trg, mask)
 
-    def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:        
+    def _valid(self, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:        
         with torch.no_grad():
             fake = self.gen_optim.module(inp)
             for optimizer in self.optimizers:
-                optimizer.validate(fake, trg)
+                optimizer.validate(fake, trg, mask)

@@ -92,7 +92,7 @@ class ModuleOptimizer(ITorchState):
         
         return loss_tensor, losses_vals
 
-    def optimize(self, generated: torch.Tensor, real: torch.Tensor) -> None:
+    def optimize(self, generated: torch.Tensor, real: torch.Tensor, mask: torch.Tensor) -> None:
         self.optimizer.zero_grad()
         total_loss, batch_evals = self._losses(generated, real, ExecPhase.TRAIN)
 
@@ -101,7 +101,7 @@ class ModuleOptimizer(ITorchState):
         total_loss.backward()
         self.optimizer.step()
 
-    def validate(self, generated: torch.Tensor, real: torch.Tensor) -> None:
+    def validate(self, generated: torch.Tensor, real: torch.Tensor, mask: torch.Tensor) -> None:
         with torch.no_grad():
             _, batch_evals = self._losses(generated, real, ExecPhase.VALID)
         self.evals_collector.collect(batch_evals, ExecPhase.VALID)
@@ -140,7 +140,7 @@ class ModuleOptimizersCollection(list[ModuleOptimizer], ITorchState):
         
         raise ValueError(f'No optimizers found by type: {model_type.name}')
     
-    def add_evals(self, evals: Dict[Modules, List[LossItem]]) -> Self:
+    def add_losses(self, evals: Dict[Modules, List[LossItem]]) -> Self:
         for model_type, evals_list in evals.items():
             cur_optimizer = self.by_type(model_type)
             cur_optimizer.evals.extend(evals_list)
@@ -159,11 +159,11 @@ class OptimizationTemplate(ABC):
         self.params = model_params
     
     @abstractmethod
-    def _train(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
+    def _train(self, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:
         pass
     
     @abstractmethod
-    def _valid(self, inp: torch.Tensor, trg: torch.Tensor) -> None:
+    def _valid(self, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:
         pass
     
     def mode_to(self, phase: ExecPhase) -> Self:
@@ -174,12 +174,12 @@ class OptimizationTemplate(ABC):
         self.optimizers.to(device)
         return self
     
-    def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor) -> None:
+    def step(self, phase: ExecPhase, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:
         if phase == ExecPhase.TRAIN:
-            self._train(inp, trg)
+            self._train(inp, trg, mask)
         
         if phase == ExecPhase.VALID:
-            self._valid(inp, trg)
+            self._valid(inp, trg, mask)
     
     def _print_phase_summary(self, phase_name: str, summary: Dict) -> List[str]:
         # Cтроки только по нужной фазе

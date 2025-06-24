@@ -66,7 +66,7 @@ def get_common_transforms(target_img_size: int) -> T.Compose:
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
         BinarizeTransform(threshold_type="mean_std"),
-        T.Normalize(mean=[0.5], std=[0.5])
+        T.Normalize(mean=[.5], std=[.5])
     ])
 
 def get_infer_transforms(target_img_size: int) -> T.Compose:
@@ -75,5 +75,5 @@ def get_infer_transforms(target_img_size: int) -> T.Compose:
         T.Resize((target_img_size, target_img_size), interpolation=T.InterpolationMode.BILINEAR),
         T.ToDtype(torch.float32, scale=True),
         BinarizeTransform(threshold_type="mean_std"),
-        T.Normalize(mean=[0.5], std=[0.5])
+        T.Normalize(mean=[.5], std=[.5])
     ])
