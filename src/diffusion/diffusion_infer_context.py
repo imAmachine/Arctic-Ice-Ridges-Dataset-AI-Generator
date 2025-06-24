@@ -1,28 +1,21 @@
 import torch
-import torchvision.transforms.v2 as T
 
 from diffusers import DDPMScheduler
 from PIL import Image
 from tqdm import tqdm
-from typing import cast
 
-from generativelib.model.arch.common_transforms import get_common_transforms, get_infer_transforms
 from generativelib.model.arch.enums import Modules, ModelTypes
-from generativelib.model.evaluators.base import EvalItem
-from generativelib.model.evaluators.enums import EvaluatorType, LossName
 from generativelib.model.evaluators.losses import *
 from generativelib.model.inference.base import ModuleInference
-from generativelib.model.train.train import VisualizeHook
 from generativelib.preprocessing.processors import *
 
-from src.config_deserializer import TrainConfigDeserializer, InferenceConfigDeserializer
-from src.infer_context import TrainContext, InferenceContext
-from src.diffusion.diffusion_templates import DiffusionTemplate
+from src.config_deserializer import InferenceConfigDeserializer
+from src.infer_context import InferenceContext
 
 
 class DiffusionInferenceContext(InferenceContext):
-    def __init__(self, config: InferenceConfigDeserializer):
-        super().__init__(config)
+    def __init__(self, config: InferenceConfigDeserializer, device: torch.device):
+        super().__init__(config, device)
 
         params = config.get_global_section(Modules.DIFFUSION)
         self.scheduler = DDPMScheduler(num_train_timesteps=params.get("num_timesteps", 1000))

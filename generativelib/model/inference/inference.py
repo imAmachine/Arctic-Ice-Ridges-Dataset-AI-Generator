@@ -1,4 +1,5 @@
 import cv2
+import torch
 
 from PIL import Image
 
@@ -7,8 +8,9 @@ from src.config_deserializer import InferenceConfigDeserializer
 
 
 class InferenceManager:
-    def __init__(self, config: InferenceConfigDeserializer):
+    def __init__(self, config: InferenceConfigDeserializer, device: torch.device):
         self.config = config
+        self.device = device 
 
         self.model = None
         self.weights_loaded = False
@@ -19,7 +21,8 @@ class InferenceManager:
     def load_model(self, model_name: str):
         self.model = InferenceContext.load_model(
             model_name=model_name,
-            config=self.config
+            config=self.config,
+            device=self.device
         )
 
     def load_weights(self, path: str):

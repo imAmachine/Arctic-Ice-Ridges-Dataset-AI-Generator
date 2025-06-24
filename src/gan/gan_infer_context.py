@@ -1,5 +1,4 @@
 import torch
-import torchvision.transforms.v2 as T
 
 from PIL import Image
 from typing import cast
@@ -14,8 +13,8 @@ from src.config_deserializer import InferenceConfigDeserializer
 
 
 class GanInferenceContext(InferenceContext):
-    def __init__(self, config: InferenceConfigDeserializer):
-        super().__init__(config)
+    def __init__(self, config: InferenceConfigDeserializer, device: torch.device):
+        super().__init__(config, device)
 
         self._load_params()
         self._load_model()

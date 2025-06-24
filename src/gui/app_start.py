@@ -1,4 +1,5 @@
 import sys
+import torch
 
 from PyQt5 import QtWidgets
 
@@ -10,8 +11,8 @@ class AppStart:
     def __init__(self, config_deserializer: ConfigReader):
         self.config_serializer = config_deserializer
 
-    def start(self):
+    def start(self, device: torch.device):
         app = QtWidgets.QApplication(sys.argv)
-        window = MainWindow(self.config_serializer)
+        window = MainWindow(self.config_serializer, device)
         window.show()
         sys.exit(app.exec())

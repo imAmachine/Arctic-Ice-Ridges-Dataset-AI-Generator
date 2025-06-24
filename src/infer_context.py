@@ -1,4 +1,3 @@
-import os
 import torch
 import torchvision.transforms as T
 import torch.nn.functional as F
@@ -25,15 +24,15 @@ class InferenceContext(ABC):
         self.outpainting_ratio = 0.0
 
     @staticmethod
-    def load_model(model_name: str, config: InferenceConfigDeserializer):
+    def load_model(model_name: str, config: InferenceConfigDeserializer, device: torch.device):
         from src.gan.gan_infer_context import GanInferenceContext
         from src.diffusion.diffusion_infer_context import DiffusionInferenceContext
 
         model_enum = ModelTypes[model_name.upper()]
         if model_enum == ModelTypes.GAN:
-            return GanInferenceContext(config)
+            return GanInferenceContext(config, device)
         elif model_enum == ModelTypes.DIFFUSION:
-            return DiffusionInferenceContext(config)
+            return DiffusionInferenceContext(config, device)
         else:
             raise ValueError("Неизвестный тип модели")
         
