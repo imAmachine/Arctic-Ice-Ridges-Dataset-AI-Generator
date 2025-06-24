@@ -74,7 +74,7 @@ class ModuleOptimizer(ITorchState):
         # подсчёт лоссов
         for item in self.evals:
             if item.exec_phase == ExecPhase.ANY or item.exec_phase == exec_phase:
-                val = item(generated_sample * mask, real_sample * mask)
+                val = item(generated_sample, real_sample)
                 val_mean = val.mean()
                 
                 loss_tensor = loss_tensor + val.mean()
