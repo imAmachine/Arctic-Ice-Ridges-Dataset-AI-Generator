@@ -41,10 +41,6 @@ class TrainContext(ABC):
     MODULE_LOSSES: Dict[Modules, List[InitLossData]] = {}
     TARGET_LOSS_MODULE: Optional[Modules] = None
     
-    @abstractmethod
-    def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:
-        pass
-    
     def _add_model_evaluators(self, template: OptimizationTemplate) -> None:
         """Добавляет лоссы для генератора и дискриминатора"""
         optimizers_collection = template.optimizers
@@ -165,7 +161,7 @@ class TrainContext(ABC):
         self._add_model_evaluators(template)
         
         # создание хука визуализации
-        visualize_hook = self._init_visualize_hook(template)
+        visualize_hook = self._visualize_hook(gen_callable=template.generate)
         
         # создание хука для чекпоинта
         checkpoint_hook = self._checkpoint_hook()

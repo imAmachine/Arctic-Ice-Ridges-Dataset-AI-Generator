@@ -38,16 +38,3 @@ class GanTrainContext(TrainContext):
         ]
     }
     TARGET_LOSS_MODULE = Modules.GAN_DISCRIMINATOR
-
-    def _init_visualize_hook(self, template: OptimizationTemplate) -> VisualizeHook:
-        optimizers_collection = template.optimizers
-        gen_optimizer = optimizers_collection.by_type(Modules.GAN_GENERATOR)
-        gen_func = None
-        
-        if gen_optimizer:
-            gen_func = gen_optimizer.module
-        
-        if gen_func:
-            return self._visualize_hook(gen_callable=gen_func)
-        
-        raise ValueError('genfunc is None')

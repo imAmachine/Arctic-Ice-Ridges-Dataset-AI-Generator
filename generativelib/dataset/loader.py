@@ -19,6 +19,7 @@ class DatasetMaskingProcessor:
 
     def create_mask(self, image: torch.Tensor):
         _, h, w = image.shape
+
         mask = torch.zeros((h, w), dtype=torch.float32, device=image.device, requires_grad=False)
 
         for processor in self.processors:
@@ -66,7 +67,7 @@ class IceRidgeDataset(Dataset):
         if self.is_trg_masked:
             trg = self.masking_processor.apply_mask(trg, mask, True)
         
-        return inp, trg, mask
+        return inp, trg, mask.unsqueeze(0)
  
 
 class DatasetCreator:

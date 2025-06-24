@@ -45,15 +45,15 @@ class DiffusionTemplate(OptimizationTemplate):
         timesteps: torch.Tensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         noise = torch.randn_like(clean)
-        noisy_full = self.scheduler.add_noise(clean, noise, timesteps)
+        noisy_full = self.scheduler.add_noise(clean, noise, timesteps) # type: ignore
         return noisy_full, noise
 
     def _train(self, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:
         t = self._make_timesteps(trg.size(0), trg.device)
-        noisy, noise = self._add_noise(trg, t, mask)
+        noisy, noise = self._add_noise(trg, t)
 
         model_in   = (
-            self.scheduler.scale_model_input(noisy, t)
+            self.scheduler.scale_model_input(noisy, t)  # type: ignore
             if hasattr(self.scheduler, "scale_model_input")
             else noisy
         )
@@ -62,10 +62,10 @@ class DiffusionTemplate(OptimizationTemplate):
 
     def _valid(self, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:
         t = self._make_timesteps(trg.size(0), trg.device)
-        noisy, noise = self._add_noise(trg, t, mask)
+        noisy, noise = self._add_noise(trg, t)
 
         model_in = (
-            self.scheduler.scale_model_input(noisy, t)
+            self.scheduler.scale_model_input(noisy, t)  # type: ignore
             if hasattr(self.scheduler, "scale_model_input")
             else noisy
         )
@@ -75,7 +75,7 @@ class DiffusionTemplate(OptimizationTemplate):
             self.optim.validate(noise_pred, noise, mask)
     
     @torch.no_grad()
-    def generate(self, inp: torch.Tensor) -> torch.Tensor:
+    def generate(self, inp: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         self.optim.mode_to(ExecPhase.VALID)
         
         orig_timesteps = self.scheduler.timesteps.clone()
@@ -91,4 +91,4 @@ class DiffusionTemplate(OptimizationTemplate):
             img = self.scheduler.step(noise_pred, t, img).prev_sample # type: ignore
 
         self.scheduler.timesteps = orig_timesteps
-        return img.clamp(-1.0, 1.0)
+        return inp, img.clamp(-1.0, 1.0)

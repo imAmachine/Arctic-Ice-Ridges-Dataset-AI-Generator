@@ -34,7 +34,7 @@ class TrainData:
 class VisualizeHook:
     def __init__(self, generate_fn: Callable, interval: int):
         self.interval = interval
-        self.gen = generate_fn
+        self.generate_fn = generate_fn
     
     def __save(
         self,
@@ -68,8 +68,8 @@ class VisualizeHook:
         if (epoch_id + 1) % self.interval == 0:
             with torch.no_grad():
                 inp, trg, mask = next(iter(loader))
-                gen = self.gen(inp.to(device))
-                self.__save(folder_path, inp, trg, gen, phase)
+                proc_inp, gen = self.generate_fn(inp.to(device), mask.to(device))
+                self.__save(folder_path, proc_inp, trg, gen, phase)
 
 
 class CheckpointHook:
@@ -124,9 +124,8 @@ class TrainManager:
                 
                 self.optim_template.mode_to(phase) # переключает режим архитектурных модулей, обнуляет историю по эпохам в модулях
                 for inp, target, mask in tqdm(loader):
-                    inp, trg, mask = inp.to(self.device), target.to(self.device), mask.to(self.device)
-                    
-                    self.optim_template.step(phase, inp, trg, mask) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
+                    inp, trg, msk = inp.to(self.device), target.to(self.device), mask.to(self.device)
+                    self.optim_template.step(phase, inp, trg, msk) # Вызывает реализацию шага обучения конкретной стратегии (GAN/DIFFUSION Template...)
                 
                 visualize(self.device, visualizations_folder, epoch_id, phase, loader) # вызывает визуализацию батча по окончанию фазы
                 self.optim_template.all_print_phase_summary(phase) # выводит summary за эпоху по конкретной фазе (TRAIN/VALID)

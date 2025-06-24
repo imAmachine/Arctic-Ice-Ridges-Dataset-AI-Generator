@@ -64,7 +64,8 @@ class ModuleOptimizer(ITorchState):
     def _losses(
         self, 
         generated_sample: torch.Tensor, 
-        real_sample: torch.Tensor, 
+        real_sample: torch.Tensor,
+        mask: torch.Tensor,
         exec_phase: ExecPhase
     ) -> Tuple[torch.Tensor, List[Tuple[EvaluatorType, str, float]]]:
         loss_tensor = torch.tensor(0.0, device=generated_sample.device, dtype=generated_sample.dtype)
@@ -73,7 +74,7 @@ class ModuleOptimizer(ITorchState):
         # подсчёт лоссов
         for item in self.evals:
             if item.exec_phase == ExecPhase.ANY or item.exec_phase == exec_phase:
-                val = item(generated_sample, real_sample)
+                val = item(generated_sample * mask, real_sample * mask)
                 val_mean = val.mean()
                 
                 loss_tensor = loss_tensor + val.mean()
@@ -94,7 +95,7 @@ class ModuleOptimizer(ITorchState):
 
     def optimize(self, generated: torch.Tensor, real: torch.Tensor, mask: torch.Tensor) -> None:
         self.optimizer.zero_grad()
-        total_loss, batch_evals = self._losses(generated, real, ExecPhase.TRAIN)
+        total_loss, batch_evals = self._losses(generated, real, mask, ExecPhase.TRAIN)
 
         self.evals_collector.collect(batch_evals, ExecPhase.TRAIN)
 
@@ -103,7 +104,7 @@ class ModuleOptimizer(ITorchState):
 
     def validate(self, generated: torch.Tensor, real: torch.Tensor, mask: torch.Tensor) -> None:
         with torch.no_grad():
-            _, batch_evals = self._losses(generated, real, ExecPhase.VALID)
+            _, batch_evals = self._losses(generated, real, mask, ExecPhase.VALID)
         self.evals_collector.collect(batch_evals, ExecPhase.VALID)
 
     def mode_to(self, phase: ExecPhase) -> Self:
@@ -164,6 +165,10 @@ class OptimizationTemplate(ABC):
     
     @abstractmethod
     def _valid(self, inp: torch.Tensor, trg: torch.Tensor, mask: torch.Tensor) -> None:
+        pass
+    
+    @abstractmethod
+    def generate(self, inp: torch.Tensor, mask: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         pass
     
     def mode_to(self, phase: ExecPhase) -> Self:
