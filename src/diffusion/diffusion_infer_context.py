@@ -4,6 +4,7 @@ import numpy
 from diffusers import DDPMScheduler
 from PIL import Image
 from tqdm import tqdm
+from typing import Tuple
 
 from generativelib.model.arch.enums import Modules, ModelTypes
 from generativelib.model.evaluators.losses import *
@@ -35,22 +36,36 @@ class DiffusionInferenceContext(InferenceContext):
         self.generator.load_weights(path)
 
     def generate_from_mask(self, image: numpy.ndarray) -> Image.Image:
-        tensor = self._prepare_input_image(image)
+        inp, mask = self._prepare_input_image(image)
         with torch.no_grad():
-            generated = self._generate_from_noise(tensor.unsqueeze(0))
+            generated = self._generate_from_noise(inp.unsqueeze(0), mask.unsqueeze(0))
         return self._postprocess(generated, image)
     
-    def _generate_from_noise(self, target: torch.Tensor) -> torch.Tensor:
-        # [AI METHOD]
-        noise = torch.randn_like(target)
-        self.scheduler.set_timesteps(self.scheduler.config.num_train_timesteps)
-        
-        with torch.no_grad():
-            for t in tqdm(self.scheduler.timesteps, desc="Sampling"):
-                timesteps_tensor = t.expand(target.size(0)).to(target.device)
-                noise_pred = self.generator.generate(noise, timesteps_tensor)
+    def _add_noise(
+        self,
+        clean: torch.Tensor,
+        timesteps: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        noise = torch.randn_like(clean)
+        noisy_full = self.scheduler.add_noise(clean, noise, timesteps) # type: ignore
+        return noisy_full, noise
+    
+    def _generate_from_noise(self, inp: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        orig_timesteps = self.scheduler.timesteps.clone()
+        self.scheduler.set_timesteps(50, device=inp.device)
+        img = torch.randn_like(inp)
 
-                scheduler_output = self.scheduler.step(noise_pred, t, noise)
-                noise = scheduler_output.prev_sample
+        for t in tqdm(self.scheduler.timesteps, desc="Sampling", leave=False):
+            ts = torch.full((inp.size(0),), t, device=inp.device, dtype=torch.long) # type: ignore
+            model_in = (self.scheduler.scale_model_input(img, ts)
+                        if hasattr(self.scheduler, "scale_model_input") else img)
 
-        return noise
+            noise_pred = self.generator.generate(model_in, ts)
+            img = self.scheduler.step(noise_pred, t, img).prev_sample # type: ignore
+
+            noised_target, _ = self._add_noise(inp, ts)
+            img[~mask.bool()] = noised_target[~mask.bool()]
+
+        self.scheduler.timesteps = orig_timesteps
+
+        return img.clamp(-1.0, 1.0)

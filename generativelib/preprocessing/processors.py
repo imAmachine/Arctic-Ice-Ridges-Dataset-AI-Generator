@@ -58,6 +58,8 @@ class RotateMask(Processor):
         (cx, cy), (w_rect, h_rect), rect_angle = rect
 
         angle = rect_angle + 90 if w_rect < h_rect else rect_angle
+        if angle == 180:
+            angle = 0
         self._angle = angle
 
         h, w = image.shape
