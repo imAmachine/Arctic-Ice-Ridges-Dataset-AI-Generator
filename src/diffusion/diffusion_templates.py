@@ -80,7 +80,7 @@ class DiffusionTemplate(OptimizationTemplate):
         
         orig_timesteps = self.scheduler.timesteps.clone()
         self.scheduler.set_timesteps(50, device=inp.device)
-        img = inp + torch.randn_like(inp)
+        img = torch.randn_like(inp)
 
         for t in tqdm(self.scheduler.timesteps, desc="Sampling", leave=False):
             ts = torch.full((inp.size(0),), t, device=inp.device, dtype=torch.long) # type: ignore
@@ -89,6 +89,9 @@ class DiffusionTemplate(OptimizationTemplate):
 
             noise_pred = self.optim.module(model_in, ts)
             img = self.scheduler.step(noise_pred, t, img).prev_sample # type: ignore
+
+            noised_target, _ = self._add_noise(inp, ts)
+            img[~mask.bool()] = noised_target[~mask.bool()]
 
         self.scheduler.timesteps = orig_timesteps
         return inp, img.clamp(-1.0, 1.0)

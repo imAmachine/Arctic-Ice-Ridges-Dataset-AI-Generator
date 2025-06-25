@@ -1,4 +1,5 @@
 import torch
+import numpy
 import torchvision.transforms as T
 import torch.nn.functional as F
 
@@ -86,5 +87,5 @@ class InferenceContext(ABC):
         pass
 
     @abstractmethod
-    def generate_from_mask(self, image: torch.Tensor) -> Image.Image:
+    def generate_from_mask(self, image: numpy.ndarray) -> Image.Image:
         pass

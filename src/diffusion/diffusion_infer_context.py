@@ -1,4 +1,5 @@
 import torch
+import numpy
 
 from diffusers import DDPMScheduler
 from PIL import Image
@@ -33,7 +34,7 @@ class DiffusionInferenceContext(InferenceContext):
     def load_weights(self, path: str):
         self.generator.load_weights(path)
 
-    def generate_from_mask(self, image: torch.Tensor) -> Image.Image:
+    def generate_from_mask(self, image: numpy.ndarray) -> Image.Image:
         tensor = self._prepare_input_image(image)
         with torch.no_grad():
             generated = self._generate_from_noise(tensor.unsqueeze(0))

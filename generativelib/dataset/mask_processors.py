@@ -54,7 +54,7 @@ class RandomWindow(MaskProcessor):
     def __init__(self, window_scale_size: float=0.5):
         self.window_scale_size = window_scale_size
         
-    def _realization(self, cloned_mask):
+    def _realization(self, cloned_mask: torch.Tensor):
         h, w = cloned_mask.shape
         
         cloned_mask.fill_(1.0)

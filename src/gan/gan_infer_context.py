@@ -1,4 +1,5 @@
 import torch
+import numpy
 
 from PIL import Image
 from typing import cast
@@ -29,7 +30,7 @@ class GanInferenceContext(InferenceContext):
     def load_weights(self, path: str):
         self.generator.load_weights(path)
 
-    def generate_from_mask(self, image: torch.Tensor) -> Image.Image:
+    def generate_from_mask(self, image: numpy.ndarray) -> Image.Image:
         tensor = self._prepare_input_image(image)
         with torch.no_grad():
             generated = self.generator.generate(tensor.unsqueeze(0))
