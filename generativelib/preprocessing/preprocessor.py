@@ -9,7 +9,7 @@ from generativelib.preprocessing.base import Processor
 
 
 class DataPreprocessor:
-    def __init__(self, input_folder_path: str = '', output_folder_path: str = '', files_extensions: List[str] = None, processors: List[Processor] = None):
+    def __init__(self, input_folder_path: str = '', output_folder_path: str = '', files_extensions: List[str] = [], processors: List[Processor] = []):
         self.metadata: Dict[str, Dict[str, Any]] = {}
         self.input_path = input_folder_path
         self.output_path = output_folder_path

@@ -11,8 +11,8 @@ from src.config_deserializer import InferenceConfigDeserializer
 
 
 class GanInferenceContext(InferenceContext):
-    def __init__(self, config: InferenceConfigDeserializer):
-        super().__init__(config)
+    def __init__(self, config: InferenceConfigDeserializer, device: torch.device):
+        super().__init__(config, device)
 
         self._load_params()
         self._load_model()
@@ -27,8 +27,15 @@ class GanInferenceContext(InferenceContext):
     def load_weights(self, path: str):
         self.generator.load_weights(path)
 
-    def generate_from_mask(self, image: torch.Tensor) -> Image.Image:
-        tensor = self._prepare_input_image(image)
+    def _add_noise(self, inp: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        noisy_inp = inp.clone()
+        noise = torch.rand_like(inp) * 2 - 1
+        noisy_inp = torch.where(mask > 0.5, noise, noisy_inp)
+        return noisy_inp
+
+    def generate_from_mask(self, image: numpy.ndarray) -> Image.Image:
+        inp, mask = self._prepare_input_image(image)
+        noisy_inp = self._add_noise(inp, mask)
         with torch.no_grad():
-            generated = self.generator.generate(tensor.unsqueeze(0))
+            generated = self.generator.generate(noisy_inp.unsqueeze(0))
         return self._postprocess(generated, image)

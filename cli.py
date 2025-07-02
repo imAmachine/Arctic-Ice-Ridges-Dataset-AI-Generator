@@ -26,14 +26,14 @@ def parse_arguments() -> argparse.Namespace:
 
 def main():
     args = parse_arguments()
-    model_type = ModelTypes[args.model.upper()]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if args.gui:
         i_conf_deserializer = InferenceConfigDeserializer(configs_folder)
         gui_context = AppStart(i_conf_deserializer)
-        gui_context.start()
+        gui_context.start(device)
     else:
+        model_type = ModelTypes[args.model.upper()]
         t_conf_deserializer = TrainConfigDeserializer(configs_folder, ExecPhase.TRAIN)
         train_manager = None
         train_context = None

@@ -1,4 +1,5 @@
 import os
+import torch
 
 from PIL import Image
 from datetime import datetime
@@ -11,13 +12,13 @@ from generativelib.model.inference.inference import InferenceManager
 
 
 class InferenceWindow(QtWidgets.QMainWindow):
-    def __init__(self, config, interfaces, parent=None):
+    def __init__(self, config, interfaces, device: torch.device, parent=None):
         super().__init__(parent)
         path = os.path.join(interfaces, 'inference_window.ui')
         uic.loadUi(path, self)
 
         self.parent_window = parent
-        self.generator = InferenceManager(config)
+        self.generator = InferenceManager(config, device)
 
         self._setup_ui()
 
