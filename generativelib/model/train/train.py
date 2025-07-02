@@ -50,7 +50,7 @@ class VisualizeHook:
         
         for row_idx, batch in enumerate((inp, gen, trg)):
             for col_idx in range(cols):
-                img = batch[col_idx].cpu().squeeze().numpy()
+                img = batch[col_idx].detach().cpu().squeeze().numpy()
                 ax = plt.subplot(3, cols, row_idx * cols + col_idx + 1)
                 ax.imshow(img, cmap='gray', vmin=0, vmax=1)
                 ax.set_title(f"{['Input', 'Gen', 'Target'][row_idx]} {col_idx+1}")

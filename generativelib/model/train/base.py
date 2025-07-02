@@ -50,7 +50,6 @@ class ModuleOptimizer(ITorchState):
             "adam": torch.optim.Adam,
             "rms": torch.optim.RMSprop
         }
-        
         optim_cls = optim_types.get(optim_info.get('type', ''), torch.optim.Adam)
         optim_params = optim_info.get('params', {})
         
